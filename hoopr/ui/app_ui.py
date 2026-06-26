@@ -405,14 +405,41 @@ def _run_offseason(world: World) -> None:
     if champ is not None:
         console.print(Panel(f"[star]🏆 {world.teams[champ].full_name} win the championship![/star]",
                             border_style="accent"))
-    with console.status("[accent]Running the offseason…[/accent]"):
-        summary = offseason.run_offseason(world, champ)
+        pause("Press Enter to begin the offseason")
+    with console.status("[accent]Player development & expiring contracts…[/accent]"):
+        summary = offseason.pre_draft(world, champ)
+
+    # 1) Draft (interactive)
+    from hoopr.ui.screens.draft import draft_screen
+    draft_screen(world)
+    offseason.enforce_roster_max(world)
+
+    # 2) Free agency — the user signs first, then the AI fills out the league.
+    _offseason_free_agency(world)
+
+    # 3) Finalize and tip off the new season.
+    offseason.post_offseason(world)
     store.autosave(world)
+    clear()
     console.print(Panel(
         f"Season {world.season_year} is underway.\n"
-        f"[dim]Retired: {summary['retired']} · New free agents processed: {summary['new_fas']}[/dim]",
+        f"[dim]Retired this offseason: {summary['retired']} · "
+        f"Players who reached free agency: {summary['new_fas']}[/dim]",
         title="[good]New Season[/good]", border_style="good"))
     pause()
+
+
+def _offseason_free_agency(world: World) -> None:
+    from hoopr.systems import freeagency
+    clear()
+    header(world)
+    console.print(Panel("[title]Free Agency[/title]\n[dim]Sign players to your roster. When you're "
+                        "done, the rest of the league fills out their rosters.[/dim]",
+                        border_style="accent"))
+    pause()
+    free_agent_screen(world)
+    with console.status("[accent]Rival teams signing free agents…[/accent]"):
+        freeagency.run_free_agency(world)
 
 
 # ---------------------------------------------------------------------------

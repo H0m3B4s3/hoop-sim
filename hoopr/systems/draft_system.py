@@ -1,9 +1,133 @@
-"""Draft lottery and selection logic. (Full implementation in the draft milestone.)"""
+"""Draft class generation, lottery-weighted order, and selection logic."""
 from __future__ import annotations
 
+from typing import List
+
+from hoopr.config import ROOKIE_CONTRACT_YEARS, ROOKIE_SCALE
+from hoopr.gen.namegen import NameGenerator
+from hoopr.gen.playergen import make_player
+from hoopr.models.contract import flat_contract
+from hoopr.models.draft import DraftClass
+from hoopr.models.league import Phase
+from hoopr.models.team import auto_set_lineup
 from hoopr.models.world import World
+
+PROSPECTS = 70
+
+
+# ---------------------------------------------------------------------------
+# Generation & ordering
+# ---------------------------------------------------------------------------
+def generate_draft_class(world: World) -> List[int]:
+    names = NameGenerator(world.rng)
+    ids: List[int] = []
+    for i in range(PROSPECTS):
+        base = 75 - i * 0.34
+        target = int(max(48, min(80, round(base + world.rng.gauss(0, 3.0)))))
+        p = make_player(world.rng, world.new_pid(), names,
+                        target_overall=target, is_prospect=True)
+        p.team_id = None
+        world.add_player(p)
+        ids.append(p.pid)
+    ids.sort(key=lambda pid: prospect_rank(world.players[pid]), reverse=True)
+    return ids
+
+
+def prospect_rank(player) -> float:
+    return 0.45 * player.overall + 0.55 * player.scouted_potential()
+
+
+def _weighted_lottery(world: World, teams_worst_first: list) -> list:
+    pool = list(teams_worst_first)
+    weights = {t.tid: (len(pool) - i) ** 1.3 for i, t in enumerate(pool)}
+    result = []
+    while pool:
+        pick = world.rng.weighted_one(pool, [weights[t.tid] for t in pool])
+        result.append(pick)
+        pool.remove(pick)
+    return result
+
+
+def compute_draft_order(world: World) -> List[int]:
+    seeds = world.bracket.get("seeds", {}) if world.bracket else {}
+    playoff_tids = {int(k) for k in seeds.keys()}
+    worst_first = sorted(world.team_list(), key=lambda t: t.win_pct)
+    non_playoff = [t for t in worst_first if t.tid not in playoff_tids]
+    playoff_worst_first = [t for t in worst_first if t.tid in playoff_tids]
+    lottery = _weighted_lottery(world, non_playoff)
+    round1 = [t.tid for t in lottery] + [t.tid for t in playoff_worst_first]
+    round2 = [t.tid for t in worst_first]
+    return round1 + round2
+
+
+def setup_draft(world: World) -> DraftClass:
+    prospects = generate_draft_class(world)
+    order = compute_draft_order(world)
+    dc = DraftClass(year=world.season_year, prospect_ids=prospects, order=order, current_pick=1)
+    world.draft_class = dc
+    world.phase = Phase.DRAFT
+    return dc
+
+
+# ---------------------------------------------------------------------------
+# Selection
+# ---------------------------------------------------------------------------
+def rookie_salary(pick_no: int) -> int:
+    points = sorted(ROOKIE_SCALE.keys())
+    if pick_no <= points[0]:
+        return ROOKIE_SCALE[points[0]]
+    if pick_no >= points[-1]:
+        return ROOKIE_SCALE[points[-1]]
+    lo = max(p for p in points if p <= pick_no)
+    hi = min(p for p in points if p >= pick_no)
+    if lo == hi:
+        return ROOKIE_SCALE[lo]
+    frac = (pick_no - lo) / (hi - lo)
+    value = ROOKIE_SCALE[lo] + frac * (ROOKIE_SCALE[hi] - ROOKIE_SCALE[lo])
+    return int(round(value / 100_000) * 100_000)
+
+
+def make_pick(world: World, pid: int) -> None:
+    dc = world.draft_class
+    pick_no = dc.current_pick
+    tid = dc.team_on_clock()
+    salary = rookie_salary(pick_no)
+    contract = flat_contract(salary, ROOKIE_CONTRACT_YEARS, world.season_year, rookie_scale=True)
+    world.sign_player(pid, tid, contract)
+    dc.record_pick(pid)
+
+
+def best_available(world: World) -> int:
+    dc = world.draft_class
+    remaining = dc.remaining_prospects()
+    return max(remaining, key=lambda pid: prospect_rank(world.players[pid]))
+
+
+def ai_pick(world: World) -> int:
+    pid = best_available(world)
+    make_pick(world, pid)
+    return pid
+
+
+def auto_complete_draft(world: World) -> None:
+    dc = world.draft_class
+    while not dc.complete:
+        ai_pick(world)
+
+
+def undrafted_to_free_agents(world: World) -> None:
+    dc = world.draft_class
+    for pid in dc.remaining_prospects():
+        if pid not in world.free_agents:
+            world.free_agents.append(pid)
+    for team in world.team_list():
+        auto_set_lineup(team, world.players)
 
 
 def run_offseason_draft(world: World) -> dict:
-    """Generate a class, run the lottery + draft. Stub until the draft milestone."""
-    return {"picks": 0}
+    """Headless: build the class, auto-run all picks, send undrafted to free agency."""
+    setup_draft(world)
+    total = world.draft_class.total_picks
+    auto_complete_draft(world)
+    undrafted_to_free_agents(world)
+    return {"picks": total}

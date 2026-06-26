@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import List
 
-from hoopr.config import RETIREMENT_AGE, ROSTER_MIN, VETERAN_MINIMUM
+from hoopr.config import RETIREMENT_AGE, ROSTER_MAX, ROSTER_MIN, VETERAN_MINIMUM
 from hoopr.models.contract import flat_contract
 from hoopr.models.league import Phase, conference_standings
 from hoopr.models.world import World
@@ -67,6 +67,18 @@ def age_and_retire(world: World) -> List[int]:
     return retired
 
 
+def enforce_roster_max(world: World) -> None:
+    """Waive the lowest-rated players from any team that is over the roster maximum.
+
+    Draft picks can push a team that didn't shed salary above the limit; waived players go to
+    free agency where they can latch on elsewhere.
+    """
+    for team in world.team_list():
+        while len(team.roster) > ROSTER_MAX:
+            worst = min(team.roster, key=lambda pid: world.players[pid].overall)
+            world.release_player(worst)
+
+
 def fill_rosters(world: World) -> None:
     """Ensure every team meets the roster minimum by signing minimum-deal free agents."""
     for team in world.team_list():
@@ -76,26 +88,34 @@ def fill_rosters(world: World) -> None:
             world.sign_player(best, team.tid, contract)
 
 
-def run_offseason(world: World, champion_tid) -> dict:
-    """Run the full offseason and start the next regular season. Returns a summary."""
+def pre_draft(world: World, champion_tid) -> dict:
+    """Archive the year, develop players, expire contracts, age and retire. (Pre-draft.)"""
     archive_season(world, champion_tid)
-
-    # Development, draft, and FA bidding hooks (filled in as systems land).
     from hoopr.systems import development
     development.develop_all(world)
-
     new_fas = expire_contracts(world)
     retired = age_and_retire(world)
+    return {"new_fas": len(new_fas), "retired": len(retired)}
+
+
+def post_offseason(world: World) -> None:
+    """Fill rosters to the minimum and start the next regular season."""
+    fill_rosters(world)
+    world.season_year += 1
+    start_season(world)
+
+
+def run_offseason(world: World, champion_tid) -> dict:
+    """Headless: run the full offseason (AI for every team) and start the next season."""
+    summary = pre_draft(world, champion_tid)
 
     from hoopr.systems import draft_system
     draft_summary = draft_system.run_offseason_draft(world)
+    enforce_roster_max(world)
 
     from hoopr.systems import freeagency
     fa_summary = freeagency.run_free_agency(world)
 
-    fill_rosters(world)
-
-    world.season_year += 1
-    start_season(world)
-    return {"new_fas": len(new_fas), "retired": len(retired),
-            "draft": draft_summary, "free_agency": fa_summary}
+    post_offseason(world)
+    summary.update({"draft": draft_summary, "free_agency": fa_summary})
+    return summary
