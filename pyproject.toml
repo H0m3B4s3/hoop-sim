@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hoopr"
+version = "0.1.0"
+description = "A text-based Football-Manager-style basketball management simulation"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["rich>=13.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+hoopr = "hoopr.app:run"
+
+[tool.setuptools.packages.find]
+include = ["hoopr*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
