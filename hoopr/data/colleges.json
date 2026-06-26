@@ -1,0 +1,37 @@
+[
+  {"city": "Ashford State", "name": "Hawks", "abbrev": "ASH", "conference": "Atlantic", "color": "red3", "prestige": 5},
+  {"city": "Granite Bay", "name": "Tritons", "abbrev": "GRB", "conference": "Atlantic", "color": "deep_sky_blue1", "prestige": 3},
+  {"city": "Kingsport", "name": "Colonels", "abbrev": "KGS", "conference": "Atlantic", "color": "navy_blue", "prestige": 3},
+  {"city": "Mercer Hill", "name": "Foxes", "abbrev": "MRC", "conference": "Atlantic", "color": "dark_orange3", "prestige": 2},
+  {"city": "New Haven", "name": "Wolves", "abbrev": "NHV", "conference": "Atlantic", "color": "grey70", "prestige": 4},
+  {"city": "Portsmouth", "name": "Anchors", "abbrev": "PTS", "conference": "Atlantic", "color": "cyan", "prestige": 3},
+  {"city": "Riverton", "name": "Owls", "abbrev": "RVT", "conference": "Atlantic", "color": "gold1", "prestige": 2},
+  {"city": "Stonebridge", "name": "Saints", "abbrev": "STB", "conference": "Atlantic", "color": "purple", "prestige": 4},
+
+  {"city": "Cedar Falls", "name": "Bison", "abbrev": "CDF", "conference": "Heartland", "color": "dark_red", "prestige": 5},
+  {"city": "Drayton", "name": "Aggies", "abbrev": "DRY", "conference": "Heartland", "color": "green4", "prestige": 3},
+  {"city": "Fort Wells", "name": "Miners", "abbrev": "FTW", "conference": "Heartland", "color": "yellow3", "prestige": 3},
+  {"city": "Grand Prairie", "name": "Cyclones", "abbrev": "GRP", "conference": "Heartland", "color": "bright_red", "prestige": 4},
+  {"city": "Hillcrest", "name": "Badgers", "abbrev": "HLC", "conference": "Heartland", "color": "red1", "prestige": 2},
+  {"city": "Marshall Plains", "name": "Stallions", "abbrev": "MRP", "conference": "Heartland", "color": "dark_green", "prestige": 3},
+  {"city": "Red Rock", "name": "Outlaws", "abbrev": "RDR", "conference": "Heartland", "color": "orange1", "prestige": 2},
+  {"city": "Sutter Valley", "name": "Threshers", "abbrev": "SUT", "conference": "Heartland", "color": "gold3", "prestige": 4},
+
+  {"city": "Bayview", "name": "Sharks", "abbrev": "BAY", "conference": "Pacific", "color": "blue3", "prestige": 5},
+  {"city": "Coronado", "name": "Surfers", "abbrev": "COR", "conference": "Pacific", "color": "bright_cyan", "prestige": 3},
+  {"city": "Eldorado", "name": "Prospectors", "abbrev": "ELD", "conference": "Pacific", "color": "gold1", "prestige": 2},
+  {"city": "Harbor City", "name": "Mariners", "abbrev": "HBC", "conference": "Pacific", "color": "navy_blue", "prestige": 3},
+  {"city": "Monterey", "name": "Otters", "abbrev": "MTY", "conference": "Pacific", "color": "dark_cyan", "prestige": 3},
+  {"city": "Redwood", "name": "Lumberjacks", "abbrev": "RDW", "conference": "Pacific", "color": "dark_green", "prestige": 4},
+  {"city": "Sierra Peak", "name": "Climbers", "abbrev": "SRA", "conference": "Pacific", "color": "grey58", "prestige": 2},
+  {"city": "Westgate", "name": "Condors", "abbrev": "WSG", "conference": "Pacific", "color": "dark_orange3", "prestige": 4},
+
+  {"city": "Alpine Crest", "name": "Yetis", "abbrev": "ALP", "conference": "Summit", "color": "bright_white", "prestige": 3},
+  {"city": "Boulder Ridge", "name": "Rams", "abbrev": "BLR", "conference": "Summit", "color": "dark_goldenrod", "prestige": 5},
+  {"city": "Cascade", "name": "Pioneers", "abbrev": "CSC", "conference": "Summit", "color": "green", "prestige": 3},
+  {"city": "Denali", "name": "Huskies", "abbrev": "DNL", "conference": "Summit", "color": "deep_sky_blue3", "prestige": 4},
+  {"city": "Glacier Point", "name": "Frost", "abbrev": "GLP", "conference": "Summit", "color": "cyan1", "prestige": 2},
+  {"city": "Ironwood", "name": "Grizzlies", "abbrev": "IRW", "conference": "Summit", "color": "dark_red", "prestige": 3},
+  {"city": "Summit Lake", "name": "Loons", "abbrev": "SML", "conference": "Summit", "color": "blue1", "prestige": 2},
+  {"city": "Timberline", "name": "Elk", "abbrev": "TMB", "conference": "Summit", "color": "yellow4", "prestige": 4}
+]

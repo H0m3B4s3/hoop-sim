@@ -33,8 +33,16 @@ class World:
 
         self.user_team_id: Optional[int] = None
         self.season_games: int = 82
-        self.college_economy: str = DEFAULT_COLLEGE_ECONOMY   # dormant in Phase 1
         self.history: List[dict] = []                # champions / awards per finished season
+
+        # Mode & the college layer. ``mode`` is the league the user controls; ``other_teams``
+        # holds the *other* league (the pipeline partner) as Team objects (their players live in
+        # the shared ``players`` map). ``recruits`` are unsigned high-school prospect pids.
+        self.mode: str = "nba"                       # "nba" | "college"
+        self.college_economy: str = DEFAULT_COLLEGE_ECONOMY   # "scholarship" | "nil"
+        self.other_teams: Dict[int, Team] = {}
+        self.recruits: List[int] = []
+        self.pipeline: Optional[dict] = None         # JSON-native college->NBA draft results
 
         self._next_pid: int = 1
         self._next_gid: int = 1
@@ -66,11 +74,24 @@ class World:
     def team_list(self) -> List[Team]:
         return list(self.teams.values())
 
+    def other_team_list(self) -> List[Team]:
+        return list(self.other_teams.values())
+
+    def find_team(self, tid: int) -> Optional[Team]:
+        """Look up a team in either league (primary or pipeline partner)."""
+        return self.teams.get(tid) or self.other_teams.get(tid)
+
+    def recruit_players(self) -> List[Player]:
+        return [self.players[pid] for pid in self.recruits if pid in self.players]
+
     def add_player(self, player: Player) -> None:
         self.players[player.pid] = player
 
     def register_team(self, team: Team) -> None:
         self.teams[team.tid] = team
+
+    def register_other_team(self, team: Team) -> None:
+        self.other_teams[team.tid] = team
 
     def free_agent_players(self) -> List[Player]:
         return [self.players[pid] for pid in self.free_agents if pid in self.players]
@@ -122,7 +143,11 @@ class World:
             "bracket": self.bracket,
             "user_team_id": self.user_team_id,
             "season_games": self.season_games,
+            "mode": self.mode,
             "college_economy": self.college_economy,
+            "other_teams": {str(t): team.to_dict() for t, team in self.other_teams.items()},
+            "recruits": list(self.recruits),
+            "pipeline": self.pipeline,
             "history": list(self.history),
             "next_pid": self._next_pid,
             "next_gid": self._next_gid,
@@ -144,7 +169,11 @@ class World:
         w.bracket = d.get("bracket")
         w.user_team_id = d.get("user_team_id")
         w.season_games = d.get("season_games", 82)
+        w.mode = d.get("mode", "nba")
         w.college_economy = d.get("college_economy", DEFAULT_COLLEGE_ECONOMY)
+        w.other_teams = {int(t): Team.from_dict(td) for t, td in d.get("other_teams", {}).items()}
+        w.recruits = list(d.get("recruits", []))
+        w.pipeline = d.get("pipeline")
         w.history = list(d.get("history", []))
         w._next_pid = d.get("next_pid", max(w.players, default=0) + 1)
         w._next_gid = d.get("next_gid", 1)

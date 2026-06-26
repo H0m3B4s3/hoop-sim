@@ -41,6 +41,11 @@ class Team:
     market_size: int = 3                                   # 1 (small) .. 5 (large)
     owner_budget: int = DEFAULT_OWNER_BUDGET
 
+    # League membership and college-mode state.
+    league: str = "nba"                                    # "nba" | "college"
+    prestige: int = 3                                      # 1 (mid-major) .. 5 (blue blood)
+    nil_budget: int = 0                                    # annual NIL collective funds (college)
+
     season_stats: StatLine = field(default_factory=StatLine)
 
     # -- identity -----------------------------------------------------------
@@ -128,6 +133,9 @@ class Team:
             "streak": self.streak,
             "market_size": self.market_size,
             "owner_budget": self.owner_budget,
+            "league": self.league,
+            "prestige": self.prestige,
+            "nil_budget": self.nil_budget,
             "season_stats": self.season_stats.to_dict(),
         }
 
@@ -154,6 +162,9 @@ class Team:
             streak=d.get("streak", 0),
             market_size=d.get("market_size", 3),
             owner_budget=d.get("owner_budget", DEFAULT_OWNER_BUDGET),
+            league=d.get("league", "nba"),
+            prestige=d.get("prestige", 3),
+            nil_budget=d.get("nil_budget", 0),
             season_stats=StatLine.from_dict(d.get("season_stats", {})),
         )
 

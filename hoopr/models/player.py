@@ -46,8 +46,14 @@ class Player:
     morale: int = 70                     # 0-100
     injury: Optional[Injury] = None
 
-    # Brand/marketability (dormant in Phase 1; used by NIL phase).
+    # Brand/marketability (dormant for pros; drives recruiting/NIL in college mode).
     brand_value: int = 0
+
+    # College fields. class_year: 0 = pro/NA, 1-4 = Fr..Sr. ``college`` is the program name
+    # (a pro's alma mater, or a recruit's commitment target).
+    class_year: int = 0
+    college: str = ""
+    redshirt: bool = False
 
     # Hidden: scouting uncertainty on potential (set at generation, never shown raw).
     scout_error: int = 0
@@ -115,6 +121,9 @@ class Player:
             "morale": self.morale,
             "injury": self.injury.to_dict() if self.injury else None,
             "brand_value": self.brand_value,
+            "class_year": self.class_year,
+            "college": self.college,
+            "redshirt": self.redshirt,
             "scout_error": self.scout_error,
             "season": self.season.to_dict(),
             "playoffs": self.playoffs.to_dict(),
@@ -144,6 +153,9 @@ class Player:
             morale=d.get("morale", 70),
             injury=Injury.from_dict(d["injury"]) if d.get("injury") else None,
             brand_value=d.get("brand_value", 0),
+            class_year=d.get("class_year", 0),
+            college=d.get("college", ""),
+            redshirt=d.get("redshirt", False),
             scout_error=d.get("scout_error", 0),
             season=StatLine.from_dict(d.get("season", {})),
             playoffs=StatLine.from_dict(d.get("playoffs", {})),
