@@ -23,7 +23,7 @@ from hoopr.ui.screens.roster import show_roster
 from hoopr.ui.screens.standings import show_standings
 from hoopr.ui.screens.tactics import edit_tactics
 from hoopr.ui.screens.trade import trade_screen
-from hoopr.ui.widgets import bracket_panel, header, money
+from hoopr.ui.widgets import bracket_panel, header
 
 
 # ---------------------------------------------------------------------------
@@ -265,6 +265,7 @@ def _enter_playoffs(world: World) -> None:
     show_standings_inline(world)
     pause("Press Enter to begin the postseason")
     log = P.start_playoffs(world)
+    store.autosave(world)
     clear()
     console.print(Panel("\n".join(log) or "Seeds locked.",
                         title="[accent]Play-In Tournament[/accent]", border_style="accent"))
@@ -339,8 +340,6 @@ def _playoffs_menu(world: World) -> Optional[str]:
 
 
 def _advance_playoffs(world: World, watch: bool) -> None:
-    user_game = None
-    user_result = None
     with console.status("[accent]Simulating playoff games…[/accent]"):
         results, user_result = P.advance_playoff_slate(world, watch_user=watch)
     if watch and user_result is not None:

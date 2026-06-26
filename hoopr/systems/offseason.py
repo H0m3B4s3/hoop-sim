@@ -10,7 +10,7 @@ from typing import List
 
 from hoopr.config import RETIREMENT_AGE, ROSTER_MAX, ROSTER_MIN, VETERAN_MINIMUM
 from hoopr.models.contract import flat_contract
-from hoopr.models.league import Phase, conference_standings
+from hoopr.models.league import conference_standings
 from hoopr.models.world import World
 from hoopr.sim.season import start_season
 
@@ -98,9 +98,23 @@ def pre_draft(world: World, champion_tid) -> dict:
     return {"new_fas": len(new_fas), "retired": len(retired)}
 
 
+def cull_free_agents(world: World, keep: int = 80) -> int:
+    """Keep the league population bounded: unsigned, lowest-rated free agents leave the league."""
+    if len(world.free_agents) <= keep:
+        return 0
+    ranked = sorted(world.free_agents,
+                    key=lambda pid: world.players[pid].overall, reverse=True)
+    cut = ranked[keep:]
+    for pid in cut:
+        world.free_agents.remove(pid)
+        world.players.pop(pid, None)
+    return len(cut)
+
+
 def post_offseason(world: World) -> None:
-    """Fill rosters to the minimum and start the next regular season."""
+    """Fill rosters to the minimum, cull the free-agent pool, and start the next season."""
     fill_rosters(world)
+    cull_free_agents(world)
     world.season_year += 1
     start_season(world)
 

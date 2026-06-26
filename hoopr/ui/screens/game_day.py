@@ -4,8 +4,7 @@ from __future__ import annotations
 from hoopr.models.league import Game
 from hoopr.models.world import World
 from hoopr.ui.console import clear, confirm, console, pause
-from hoopr.ui.widgets import (box_score_table, header, line_score_panel, play_by_play,
-                              team_text)
+from hoopr.ui.widgets import box_score_table, header, line_score_panel, play_by_play
 
 
 def present_result(world: World, game: Game, result, *, watched: bool) -> None:

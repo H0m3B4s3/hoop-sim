@@ -31,7 +31,7 @@ def trade_screen(world: World) -> None:
         style = "good" if legal else "warn"
         console.print(f"[{style}]{reason}[/{style}]\n")
 
-        opts = [("add_send", f"➕ Add a player to send")]
+        opts = [("add_send", "➕ Add a player to send")]
         if a_sends:
             opts.append(("rm_send", "➖ Remove a player you're sending"))
         opts.append(("add_get", f"🎯 Add a player to request from {b.abbrev}"))
