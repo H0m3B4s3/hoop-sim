@@ -211,6 +211,7 @@ def _regular_season_menu(world: World) -> Optional[str]:
         ("quick", "⏩  Quick-sim next game"),
         ("week", "📅  Simulate a week"),
         ("roster", "👥  Roster"),
+        ("lineup", "🧩  Set lineup"),
         ("tactics", "📋  Tactics"),
         ("front", "🏢  Front Office (trade · sign · finances)"),
         ("standings", "📊  Standings"),
@@ -226,6 +227,9 @@ def _regular_season_menu(world: World) -> Optional[str]:
         _sim_span(world, days=4)
     elif action == "roster":
         show_roster(world)
+    elif action == "lineup":
+        from hoopr.ui.screens.lineup import lineup_screen
+        lineup_screen(world)
     elif action == "tactics":
         edit_tactics(world)
     elif action == "front":

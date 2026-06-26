@@ -6,7 +6,7 @@ that need player data take a ``players`` mapping so the model stays pure data.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from hoopr.config import DEFAULT_OWNER_BUDGET, STARTERS, game_minutes
 from hoopr.models.attributes import POSITIONS
@@ -28,6 +28,7 @@ class Team:
     roster: List[int] = field(default_factory=list)        # ordered player ids
     starters: List[int] = field(default_factory=list)      # up to 5 player ids
     minutes_target: Dict[int, int] = field(default_factory=dict)  # pid -> target minutes
+    auto_lineup: bool = True                               # False -> user set the starting five
     tactics: Tactics = field(default_factory=Tactics)
 
     wins: int = 0
@@ -123,6 +124,7 @@ class Team:
             "roster": list(self.roster),
             "starters": list(self.starters),
             "minutes_target": {str(k): v for k, v in self.minutes_target.items()},
+            "auto_lineup": self.auto_lineup,
             "tactics": self.tactics.to_dict(),
             "wins": self.wins,
             "losses": self.losses,
@@ -152,6 +154,7 @@ class Team:
             roster=list(d.get("roster", [])),
             starters=list(d.get("starters", [])),
             minutes_target={int(k): v for k, v in d.get("minutes_target", {}).items()},
+            auto_lineup=d.get("auto_lineup", True),
             tactics=Tactics.from_dict(d.get("tactics", {})),
             wins=d.get("wins", 0),
             losses=d.get("losses", 0),
@@ -184,40 +187,57 @@ def available_players(team: Team, players: Dict[int, Player]) -> List[Player]:
     return [p for p in roster_players(team, players) if p.available]
 
 
-def _best_at_position(pool: List[Player], position: str, used: set) -> Optional[Player]:
-    candidates = [p for p in pool if p.pid not in used]
-    if not candidates:
-        return None
-    # Prefer natural position, then secondary, then best overall as a fallback.
-    natural = [p for p in candidates if p.position == position]
-    if natural:
-        return max(natural, key=lambda p: p.overall)
-    secondary = [p for p in candidates if p.secondary_position == position]
-    if secondary:
-        return max(secondary, key=lambda p: p.overall)
-    return max(candidates, key=lambda p: p.overall)
+_POSITION_INDEX = {pos: i for i, pos in enumerate(POSITIONS)}
+
+
+def position_distance(player: Player, slot: str) -> float:
+    """How far out of position a player is for a slot (0 = natural, smaller is better)."""
+    if player.position == slot:
+        return 0.0
+    if player.secondary_position == slot:
+        return 0.4
+    return float(abs(_POSITION_INDEX[player.position] - _POSITION_INDEX[slot]))
+
+
+def assign_positions(five: List[Player]) -> List[int]:
+    """Slot up to five players into PG..C, minimizing how far each plays out of position.
+
+    Positions are flexible: a shooting guard will start at point guard if that is the best fit,
+    rather than benching a better player to force a natural point guard into the lineup.
+    """
+    remaining = list(five)
+    ordered: List[int] = []
+    for slot in POSITIONS:
+        if not remaining:
+            break
+        best = min(remaining, key=lambda p: (position_distance(p, slot), -p.overall))
+        ordered.append(best.pid)
+        remaining.remove(best)
+    return ordered
 
 
 def auto_set_lineup(team: Team, players: Dict[int, Player]) -> None:
-    """Pick the strongest healthy starting five by position and assign rotation minutes."""
+    """Set the starting five and rotation minutes.
+
+    With ``auto_lineup`` on, the five best available players start (slotted into positions by
+    fit). If the user has set a manual lineup, that five is kept and only unavailable players are
+    replaced.
+    """
     pool = available_players(team, players)
     if not pool:
-        pool = roster_players(team, players)   # everyone hurt; still field a lineup
-    used: set = set()
-    starters: List[int] = []
-    for pos in POSITIONS:
-        pick = _best_at_position(pool, pos, used)
-        if pick is not None:
-            starters.append(pick.pid)
-            used.add(pick.pid)
-    # Fill any gaps (short roster) with best remaining.
-    remaining = sorted((p for p in pool if p.pid not in used),
+        pool = roster_players(team, players)       # everyone hurt; still field a lineup
+
+    if not team.auto_lineup and team.starters:
+        available_ids = {p.pid for p in pool}
+        kept = [pid for pid in team.starters if pid in available_ids]
+        bench = sorted((p for p in pool if p.pid not in kept),
                        key=lambda p: p.overall, reverse=True)
-    while len(starters) < STARTERS and remaining:
-        nxt = remaining.pop(0)
-        starters.append(nxt.pid)
-        used.add(nxt.pid)
-    team.starters = starters
+        while len(kept) < STARTERS and bench:
+            kept.append(bench.pop(0).pid)
+        team.starters = kept
+    else:
+        best_five = sorted(pool, key=lambda p: p.overall, reverse=True)[:STARTERS]
+        team.starters = assign_positions(best_five)
     set_auto_minutes(team, players)
 
 
@@ -244,10 +264,18 @@ def set_auto_minutes(team: Team, players: Dict[int, Player]) -> None:
         share = total_minutes * (w / total_w)
         floor = starter_floor if p.pid in team.starters else 0
         targets[p.pid] = int(max(floor, min(cap, round(share))))
-    # Normalize so totals land near the game's player-minutes (engine tolerates small drift).
+    # Spread any leftover/excess minutes across the rotation, never exceeding the per-player cap.
     drift = total_minutes - sum(targets.values())
-    if rotation:
-        # apply drift to the top player
-        top = rotation[0].pid
-        targets[top] = max(8, targets[top] + drift)
+    step = 1 if drift > 0 else -1
+    guard = 0
+    while drift != 0 and rotation and guard < 2000:
+        for p in rotation:
+            if drift == 0:
+                break
+            floor = starter_floor if p.pid in team.starters else 0
+            new_val = targets[p.pid] + step
+            if floor <= new_val <= cap:
+                targets[p.pid] = new_val
+                drift -= step
+        guard += 1
     team.minutes_target = targets
