@@ -13,7 +13,7 @@ from hoopr.models.world import World
 from hoopr.sim.boxscore import GameResult
 from hoopr.sim.season import sim_one
 
-NATIONAL_FIELD = 16
+NATIONAL_FIELD = 32
 
 
 # ---------------------------------------------------------------------------

@@ -22,19 +22,65 @@ from hoopr.models.team import Team, auto_set_lineup
 from hoopr.models.world import World
 from hoopr.rng import Rng
 
-_COLLEGES_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "colleges.json")
+_NAMES_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "college_names.json")
 
 COLLEGE_SEASON_GAMES = 28
-NBA_TID_OFFSET = 100               # keep background-NBA ids clear of college ids
-_RECRUITS = 60
+NBA_TID_OFFSET = 200               # keep background-NBA ids clear of college ids
+_RECRUITS = 90
+TEAMS_PER_CONFERENCE = 8
+
+# 8 conferences across three tiers: power (blue bloods), mid-major, low-major.
+COLLEGE_CONFERENCES = [
+    ("Atlantic", "power"), ("Continental", "power"),
+    ("Heartland", "mid"), ("Pacific", "mid"), ("Summit", "mid"),
+    ("Frontier", "low"), ("Coastal", "low"), ("Highland", "low"),
+]
+_TIER_PRESTIGE = {"power": (3, 5), "mid": (2, 4), "low": (1, 2)}
+
 # 13-man roster class distribution (Fr, So, Jr, Sr) and a descending talent curve.
 _CLASS_PLAN = [1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4]
 _ROSTER_CURVE = [74, 71, 69, 67, 65, 63, 61, 60, 58, 57, 55, 54, 52]
 
 
-def _load_college_records() -> List[dict]:
-    with open(_COLLEGES_PATH, "r", encoding="utf-8") as fh:
+def _load_name_pools() -> dict:
+    with open(_NAMES_PATH, "r", encoding="utf-8") as fh:
         return json.load(fh)
+
+
+def _make_abbrev(place: str, mascot: str, used: set) -> str:
+    letters = [c for c in place.upper() if c.isalpha()]
+    base = "".join(letters[:3]) if len(letters) >= 3 else (place.upper() + mascot.upper())[:3]
+    abbr = base
+    i = 0
+    while abbr in used:
+        i += 1
+        abbr = (base[:2] + mascot.upper()[i % len(mascot)]).upper()
+    used.add(abbr)
+    return abbr
+
+
+def _generate_college_records(rng: Rng) -> List[dict]:
+    pools = _load_name_pools()
+    places = list(pools["places"])
+    mascots = list(pools["mascots"])
+    colors = list(pools["colors"])
+    rng.shuffle(places)
+    rng.shuffle(mascots)
+    records: List[dict] = []
+    used_abbr: set = set()
+    pi = mi = 0
+    for conf, tier in COLLEGE_CONFERENCES:
+        lo, hi = _TIER_PRESTIGE[tier]
+        for slot in range(TEAMS_PER_CONFERENCE):
+            place = places[pi % len(places)]; pi += 1
+            mascot = mascots[mi % len(mascots)]; mi += 1
+            prestige = 5 if (tier == "power" and slot == 0) else rng.randint(lo, hi)
+            records.append({
+                "city": place, "name": mascot,
+                "abbrev": _make_abbrev(place, mascot, used_abbr),
+                "conference": conf, "color": rng.choice(colors), "prestige": prestige,
+            })
+    return records
 
 
 def class_label(class_year: int) -> str:
@@ -121,7 +167,7 @@ def build_college_world(seed: int = None, economy: str = DEFAULT_COLLEGE_ECONOMY
     world.phase = Phase.PRESEASON
 
     names = NameGenerator(rng)
-    for tid, rec in enumerate(_load_college_records()):
+    for tid, rec in enumerate(_generate_college_records(rng)):
         team = Team(
             tid=tid, city=rec["city"], name=rec["name"], abbrev=rec["abbrev"],
             conference=rec["conference"], color=rec.get("color", "white"),

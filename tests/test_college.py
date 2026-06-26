@@ -41,9 +41,13 @@ def test_world_shape_and_toggle():
     w = build_college_world(seed=2, economy="nil")
     assert w.mode == "college"
     assert w.college_economy == "nil"
-    assert len(w.teams) == 32                  # college programs
+    assert len(w.teams) == 64                  # college programs across 8 conferences
+    assert len({t.conference for t in w.teams.values()}) == 8
     assert len(w.other_teams) == 30            # background NBA
     assert len(w.recruits) > 0
+    # prestige tiers exist (blue bloods and low-majors)
+    prestiges = {t.prestige for t in w.teams.values()}
+    assert 5 in prestiges and 1 in prestiges
     for t in w.teams.values():
         assert t.league == "college"
         assert len(t.roster) >= 11

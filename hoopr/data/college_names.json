@@ -1,0 +1,32 @@
+{
+  "places": [
+    "Ashford", "Granite Bay", "Kingsport", "Mercer Hill", "New Haven", "Portsmouth",
+    "Riverton", "Stonebridge", "Cedar Falls", "Drayton", "Fort Wells", "Grand Prairie",
+    "Hillcrest", "Marshall Plains", "Red Rock", "Sutter Valley", "Bayview", "Coronado",
+    "Eldorado", "Harbor City", "Monterey", "Redwood", "Sierra Peak", "Westgate",
+    "Alpine Crest", "Boulder Ridge", "Cascade", "Denali", "Glacier Point", "Ironwood",
+    "Summit Lake", "Timberline", "Fairmont", "Lakeside", "Brookfield", "Clearwater",
+    "Northfield", "Southport", "Easton", "Westbrook", "Maplewood", "Pinehurst",
+    "Crestview", "Fallbrook", "Sunderland", "Thornton", "Vandermere", "Whitfield",
+    "Arlington Heights", "Belmont", "Carrington", "Dunmore", "Elkhart", "Fennimore",
+    "Glenwood", "Haverford", "Inglewood", "Jamesport", "Keystone", "Lansford",
+    "Middlebury", "Norwalk", "Oakhaven", "Prescott", "Quarryville", "Ravenswood",
+    "Shelby", "Tanner Creek", "Underwood", "Valmont", "Westcliffe", "Yorkville",
+    "Amberton", "Briarwood", "Cobalt", "Driftwood", "Emberton", "Foxglen"
+  ],
+  "mascots": [
+    "Hawks", "Tritons", "Colonels", "Foxes", "Wolves", "Anchors", "Owls", "Saints",
+    "Bison", "Aggies", "Miners", "Cyclones", "Badgers", "Stallions", "Outlaws",
+    "Threshers", "Sharks", "Surfers", "Prospectors", "Mariners", "Otters", "Lumberjacks",
+    "Climbers", "Condors", "Yetis", "Rams", "Pioneers", "Huskies", "Frost", "Grizzlies",
+    "Loons", "Elk", "Falcons", "Raiders", "Mustangs", "Knights", "Pelicans", "Comets",
+    "Vipers", "Rangers", "Pilots", "Crusaders", "Voyagers", "Gators", "Hornets", "Lancers",
+    "Ospreys", "Bobcats"
+  ],
+  "colors": [
+    "red3", "deep_sky_blue1", "navy_blue", "dark_orange3", "grey70", "cyan", "gold1",
+    "purple", "dark_red", "green4", "yellow3", "bright_red", "red1", "dark_green",
+    "orange1", "blue3", "bright_cyan", "dark_cyan", "medium_purple", "dark_goldenrod",
+    "green", "deep_sky_blue3", "cyan1", "blue1", "yellow4", "magenta", "spring_green3"
+  ]
+}
