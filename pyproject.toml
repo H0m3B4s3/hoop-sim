@@ -11,13 +11,18 @@ requires-python = ">=3.9"
 dependencies = ["rich>=13.0"]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0"]
+dev = ["pytest>=7.0", "httpx>=0.24"]
+web = ["fastapi>=0.104", "uvicorn[standard]>=0.24"]
 
 [project.scripts]
 hoopr = "hoopr.app:run"
+hoopr-web = "hoopr.web.app:run"
 
 [tool.setuptools.packages.find]
 include = ["hoopr*"]
+
+[tool.setuptools.package-data]
+"hoopr.web" = ["static/**"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
