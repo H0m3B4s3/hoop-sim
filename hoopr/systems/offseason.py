@@ -1,0 +1,101 @@
+"""Offseason orchestration: archive the year, roll contracts, age/retire, reload next season.
+
+Development, the draft, and free-agent bidding are wired in here as the systems land. The order
+is: archive → expire contracts → age/retire → develop → draft → free agency → fill rosters →
+start the next regular season.
+"""
+from __future__ import annotations
+
+from typing import List
+
+from hoopr.config import RETIREMENT_AGE, ROSTER_MIN, VETERAN_MINIMUM
+from hoopr.models.contract import flat_contract
+from hoopr.models.league import Phase, conference_standings
+from hoopr.models.world import World
+from hoopr.sim.season import start_season
+
+
+def archive_season(world: World, champion_tid) -> None:
+    standings = {conf: [t.tid for t in conference_standings(world.team_list(), conf)]
+                 for conf in ("East", "West")}
+    world.history.append({
+        "year": world.season_year,
+        "champion": champion_tid,
+        "champion_name": world.teams[champion_tid].full_name if champion_tid in world.teams else "",
+        "standings": standings,
+    })
+    for p in world.players.values():
+        if p.season.gp > 0:
+            team = world.teams.get(p.team_id)
+            p.career.append({
+                "year": world.season_year,
+                "team": team.abbrev if team else "FA",
+                "gp": p.season.gp, "ppg": round(p.season.ppg, 1),
+                "rpg": round(p.season.rpg, 1), "apg": round(p.season.apg, 1),
+                "ovr": p.overall,
+            })
+
+
+def expire_contracts(world: World) -> List[int]:
+    """Advance every rostered contract a year; return pids that hit free agency."""
+    new_fas: List[int] = []
+    for team in world.team_list():
+        for pid in list(team.roster):
+            contract = world.players[pid].contract
+            contract.advance_year()
+            if contract.years_remaining == 0:
+                new_fas.append(pid)
+    for pid in new_fas:
+        world.release_player(pid)
+    return new_fas
+
+
+def age_and_retire(world: World) -> List[int]:
+    retired: List[int] = []
+    for p in list(world.players.values()):
+        p.age += 1
+        force = p.age >= RETIREMENT_AGE
+        decline = p.age >= 35 and p.overall < 68 and world.rng.chance(0.5)
+        if force or decline:
+            retired.append(p.pid)
+    for pid in retired:
+        p = world.players.pop(pid)
+        if p.team_id in world.teams:
+            world.teams[p.team_id].remove_player(pid)
+        if pid in world.free_agents:
+            world.free_agents.remove(pid)
+    return retired
+
+
+def fill_rosters(world: World) -> None:
+    """Ensure every team meets the roster minimum by signing minimum-deal free agents."""
+    for team in world.team_list():
+        while len(team.roster) < ROSTER_MIN and world.free_agents:
+            best = max(world.free_agents, key=lambda pid: world.players[pid].overall)
+            contract = flat_contract(VETERAN_MINIMUM, 1, world.season_year + 1)
+            world.sign_player(best, team.tid, contract)
+
+
+def run_offseason(world: World, champion_tid) -> dict:
+    """Run the full offseason and start the next regular season. Returns a summary."""
+    archive_season(world, champion_tid)
+
+    # Development, draft, and FA bidding hooks (filled in as systems land).
+    from hoopr.systems import development
+    development.develop_all(world)
+
+    new_fas = expire_contracts(world)
+    retired = age_and_retire(world)
+
+    from hoopr.systems import draft_system
+    draft_summary = draft_system.run_offseason_draft(world)
+
+    from hoopr.systems import freeagency
+    fa_summary = freeagency.run_free_agency(world)
+
+    fill_rosters(world)
+
+    world.season_year += 1
+    start_season(world)
+    return {"new_fas": len(new_fas), "retired": len(retired),
+            "draft": draft_summary, "free_agency": fa_summary}
