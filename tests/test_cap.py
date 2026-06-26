@@ -119,6 +119,31 @@ def test_extend_contract():
     assert not ok3
 
 
+def test_capped_out_team_cannot_sign_star_for_minimum():
+    from hoopr.config import MID_LEVEL_EXCEPTION
+    w = build_world(seed=1)
+    team = w.teams[0]
+    # release the league's best player to free agency
+    star = max(w.players.values(), key=lambda p: p.overall)
+    if star.team_id is not None:
+        w.release_player(star.pid)
+    assert cap.market_salary(star) > MID_LEVEL_EXCEPTION      # a genuine max-type free agent
+    # cap the team well over the salary cap
+    for pid in team.roster:
+        w.players[pid].contract.salaries = [20_000_000] + w.players[pid].contract.salaries[1:]
+    assert cap.cap_space(w, team) == 0
+    # the offer is the player's market price, never silently the minimum
+    sal, _ = freeagency.offer_for(w, team, star)
+    assert sal == cap.market_salary(star)
+    # the old bug: signing the star for the veteran minimum must be rejected
+    ok_min, _ = freeagency.sign_free_agent(w, team, star.pid, VETERAN_MINIMUM, 1)
+    assert not ok_min
+    # and a max deal can't fit with no cap room
+    ok_mkt, _ = freeagency.sign_free_agent(w, team, star.pid, cap.market_salary(star), 4)
+    assert not ok_mkt
+    assert star.team_id is None                              # still a free agent
+
+
 def test_free_agency_signs_players():
     w = build_world(seed=3)
     w.user_team_id = 0

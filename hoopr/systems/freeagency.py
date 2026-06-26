@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import List, Tuple
 
-from hoopr.config import MID_LEVEL_EXCEPTION, VETERAN_MINIMUM
+from hoopr.config import VETERAN_MINIMUM
 from hoopr.models.contract import flat_contract
 from hoopr.models.player import Player
 from hoopr.models.team import Team, auto_set_lineup
@@ -22,20 +22,25 @@ def contract_years_for(player: Player) -> int:
 
 
 def offer_for(world: World, team: Team, player: Player) -> Tuple[int, int]:
-    """A (salary, years) a team would realistically offer this free agent."""
-    salary = cap.market_salary(player)
-    space = cap.cap_space(world, team)
-    if salary > space:
-        salary = MID_LEVEL_EXCEPTION if salary <= MID_LEVEL_EXCEPTION else VETERAN_MINIMUM
-    return max(VETERAN_MINIMUM, salary), contract_years_for(player)
+    """The (salary, years) it takes to sign this free agent — their market price.
+
+    A free agent commands their market value; a capped-out team simply may not be able to fit it
+    (that legality is enforced in :func:`sign_free_agent`). The price is *not* silently reduced to
+    the minimum — you can't land a star for a veteran-minimum deal.
+    """
+    return max(VETERAN_MINIMUM, cap.market_salary(player)), contract_years_for(player)
 
 
 def sign_free_agent(world: World, team: Team, pid: int, salary: int, years: int
                     ) -> Tuple[bool, str]:
-    """Sign a free agent to a contract after checking legality."""
+    """Sign a free agent to a contract after checking the player accepts and it is cap-legal."""
     player = world.players[pid]
     if player.team_id is not None:
         return False, "Player is not a free agent."
+    asking = cap.market_salary(player)
+    if salary < asking:
+        return False, f"{player.short_name} won't sign for that — they want about " \
+                      f"${asking // 1_000_000}M."
     ok, reason = cap.can_sign(world, team, salary)
     if not ok:
         return False, reason
