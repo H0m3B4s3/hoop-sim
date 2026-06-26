@@ -144,6 +144,35 @@ def test_capped_out_team_cannot_sign_star_for_minimum():
     assert star.team_id is None                              # still a free agent
 
 
+def test_mid_level_exception_limited_to_once_per_offseason():
+    from hoopr.config import MID_LEVEL_EXCEPTION
+    w = build_world(seed=1)
+    team = w.teams[0]
+    # cap the team well over the salary cap and open a couple of roster spots
+    for pid in team.roster:
+        w.players[pid].contract.salaries = [20_000_000] + w.players[pid].contract.salaries[1:]
+    while len(team.roster) > ROSTER_MAX - 3:
+        team.roster.pop()
+    assert cap.cap_space(w, team) == 0
+
+    # two free agents whose market sits inside the mid-level band
+    band = [p for p in w.players.values()
+            if VETERAN_MINIMUM < cap.market_salary(p) <= MID_LEVEL_EXCEPTION
+            and p.team_id is not None and p.team_id != team.tid]
+    fa1, fa2 = band[0], band[1]
+    w.release_player(fa1.pid)
+    w.release_player(fa2.pid)
+
+    # the first mid-level signing succeeds and spends the exception
+    ok1, _ = freeagency.sign_free_agent(w, team, fa1.pid, cap.market_salary(fa1), 2)
+    assert ok1 and team.mle_used
+    # a second mid-level signing is now rejected (only one MLE per offseason)
+    ok2, _ = freeagency.sign_free_agent(w, team, fa2.pid, cap.market_salary(fa2), 2)
+    assert not ok2 and fa2.team_id is None
+    # a veteran-minimum deal is still always available
+    assert cap.can_sign(w, team, VETERAN_MINIMUM)[0]
+
+
 def test_free_agency_signs_players():
     w = build_world(seed=3)
     w.user_team_id = 0

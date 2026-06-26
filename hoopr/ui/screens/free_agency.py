@@ -10,7 +10,7 @@ from rich.table import Table
 
 from hoopr.ui.console import ask_int, choose, clear, confirm, console, pause
 from hoopr.ui.theme import ovr_style
-from hoopr.ui.widgets import header, money
+from hoopr.ui.widgets import header, money, player_card
 
 _PAGE = 18
 
@@ -32,15 +32,18 @@ def free_agent_screen(world: World) -> None:
         header(world)
         space = cap.cap_space(world, team)
         full = len(team.roster) >= ROSTER_MAX
+        mle = "[bad]used[/bad]" if team.mle_used else "[good]available[/good]"
         console.print(f"Cap space: [good]{money(space)}[/good]   "
                       f"Roster: {'[bad]' if full else ''}{len(team.roster)}/{ROSTER_MAX}"
                       f"{'[/bad] (full — waive someone to sign)' if full else ''}   "
+                      f"MLE: {mle}   "
                       f"Filter: [accent]{pos_filter}[/accent]\n")
         console.print(_fa_table(world, team, shown, start))
         console.print(f"[dim]Showing {start + 1}-{start + len(shown)} of {len(fas)} free agents "
                       f"· page {page + 1}/{pages}[/dim]")
 
-        opts = [("sign", "✍️   Sign a player (enter its #)")]
+        opts = [("sign", "✍️   Sign a player (enter its #)"),
+                ("ratings", "🔍  View a player's ratings (enter its #)")]
         if page < pages - 1:
             opts.append(("next", "▶  Next page"))
         if page > 0:
@@ -53,6 +56,13 @@ def free_agent_screen(world: World) -> None:
             n = ask_int("Player # to sign", default=0)
             if 1 <= n <= len(shown):
                 _attempt_sign(world, team, shown[n - 1])
+        elif action == "ratings":
+            n = ask_int("Player # to scout", default=0)
+            if 1 <= n <= len(shown):
+                clear()
+                header(world)
+                console.print(player_card(world, shown[n - 1]))
+                pause()
         elif action == "next":
             page += 1
         elif action == "prev":

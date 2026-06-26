@@ -151,5 +151,13 @@ def can_sign(world: World, team: Team, salary: int) -> Tuple[bool, str]:
     if salary <= space:
         return True, "Uses cap space."
     if salary <= MID_LEVEL_EXCEPTION:
+        if team.mle_used:
+            return False, "Over the cap — mid-level exception already used this offseason."
         return True, "Mid-level exception."
     return False, "Not enough cap space."
+
+
+def uses_exception(world: World, team: Team, salary: int) -> bool:
+    """True if signing at ``salary`` would dip into the mid-level exception (over the cap,
+    above the minimum, and not covered by cap space) — i.e. it consumes the team's one MLE."""
+    return (salary > VETERAN_MINIMUM and salary > cap_space(world, team))

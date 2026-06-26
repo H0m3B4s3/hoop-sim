@@ -44,7 +44,10 @@ def sign_free_agent(world: World, team: Team, pid: int, salary: int, years: int
     ok, reason = cap.can_sign(world, team, salary)
     if not ok:
         return False, reason
+    spent_mle = cap.uses_exception(world, team, salary)
     world.sign_player(pid, team.tid, flat_contract(salary, years, world.season_year))
+    if spent_mle:
+        team.mle_used = True
     auto_set_lineup(team, world.players)
     return True, reason
 
@@ -63,6 +66,8 @@ def run_free_agency(world: World) -> dict:
         if not candidates:
             continue
         team = max(candidates, key=lambda t: cap.cap_space(world, t))
+        if cap.uses_exception(world, team, salary):
+            team.mle_used = True
         world.sign_player(pid, team.tid, flat_contract(salary, years, world.season_year))
         signings += 1
     for t in ai_teams:

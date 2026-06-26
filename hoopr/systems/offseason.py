@@ -91,6 +91,8 @@ def fill_rosters(world: World) -> None:
 def pre_draft(world: World, champion_tid) -> dict:
     """Archive the year, develop players, expire contracts, age and retire. (Pre-draft.)"""
     archive_season(world, champion_tid)
+    for team in world.team_list():
+        team.mle_used = False          # each team gets its one mid-level exception back
     from hoopr.systems import development
     development.develop_all(world)
     new_fas = expire_contracts(world)

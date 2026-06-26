@@ -41,6 +41,7 @@ class Team:
 
     market_size: int = 3                                   # 1 (small) .. 5 (large)
     owner_budget: int = DEFAULT_OWNER_BUDGET
+    mle_used: bool = False                                  # mid-level exception spent this offseason
 
     # League membership and college-mode state.
     league: str = "nba"                                    # "nba" | "college"
@@ -135,6 +136,7 @@ class Team:
             "streak": self.streak,
             "market_size": self.market_size,
             "owner_budget": self.owner_budget,
+            "mle_used": self.mle_used,
             "league": self.league,
             "prestige": self.prestige,
             "nil_budget": self.nil_budget,
@@ -165,6 +167,7 @@ class Team:
             streak=d.get("streak", 0),
             market_size=d.get("market_size", 3),
             owner_budget=d.get("owner_budget", DEFAULT_OWNER_BUDGET),
+            mle_used=d.get("mle_used", False),
             league=d.get("league", "nba"),
             prestige=d.get("prestige", 3),
             nil_budget=d.get("nil_budget", 0),
