@@ -8,7 +8,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from hoopr.config import LUXURY_TAX_LINE, SALARY_CAP
+from hoopr.config import LUXURY_TAX_LINE, SALARY_CAP, SCHOLARSHIP_LIMIT
 from hoopr.models.league import Phase, conference_standings
 from hoopr.models.player import Player
 from hoopr.models.team import Team, roster_players, team_salary
@@ -34,16 +34,26 @@ def header(world: World) -> None:
     team = world.user_team
     if team is None:
         return
-    payroll = team_salary(team, world.players)
-    cap_style = "money" if payroll <= SALARY_CAP else ("warn" if payroll <= LUXURY_TAX_LINE
-                                                       else "bad")
     bits = [
         Text(team.full_name, style=f"bold {team.color}"),
         Text(f"  {game_date(world, world.day)}", style="dim"),
         Text(f"  {Phase.label(world.phase)}", style="accent"),
         Text(f"  {team.record_str}", style="label"),
-        Text(f"  Payroll {money(payroll)}/{money(SALARY_CAP)}", style=cap_style),
     ]
+    if world.mode == "college":
+        from hoopr.systems import collegefin
+        if world.college_economy == "nil":
+            spent = collegefin.nil_spent(world, team)
+            bits.append(Text(f"  NIL {money(spent)}/{money(team.nil_budget)}", style="money"))
+        else:
+            bits.append(Text(f"  Schol {collegefin.scholarships_used(team)}/{SCHOLARSHIP_LIMIT}",
+                             style="accent"))
+        bits.append(Text(f"  Prestige {'★' * team.prestige}", style="star"))
+    else:
+        payroll = team_salary(team, world.players)
+        cap_style = "money" if payroll <= SALARY_CAP else ("warn" if payroll <= LUXURY_TAX_LINE
+                                                           else "bad")
+        bits.append(Text(f"  Payroll {money(payroll)}/{money(SALARY_CAP)}", style=cap_style))
     line = Text()
     for b in bits:
         line.append_text(b)
@@ -53,13 +63,23 @@ def header(world: World) -> None:
 # ---------------------------------------------------------------------------
 # Roster
 # ---------------------------------------------------------------------------
+def class_label(class_year: int) -> str:
+    return {1: "Fr", 2: "So", 3: "Jr", 4: "Sr"}.get(class_year, "--")
+
+
 def roster_table(world: World, team: Team, *, title: str = None) -> Table:
+    college = team.league == "college"
+    nil = college and world.college_economy == "nil"
     table = Table(title=title or f"{team.full_name} — Roster", title_style="title",
                   header_style="label", expand=False)
-    for col in ("#", "Name", "Pos", "Age", "OVR", "POT"):
-        table.add_column(col, justify="right" if col in ("Age", "OVR", "POT") else "left")
-    for col in ("PPG", "RPG", "APG", "Salary", "Yrs"):
+    for col in ("#", "Name", "Pos"):
+        table.add_column(col, justify="left")
+    table.add_column("Yr" if college else "Age", justify="right")
+    for col in ("OVR", "POT", "PPG", "RPG", "APG"):
         table.add_column(col, justify="right")
+    table.add_column("NIL" if nil else ("Schol" if college else "Salary"), justify="right")
+    if not college:
+        table.add_column("Yrs", justify="right")
     table.add_column("Status", justify="left")
 
     players = sorted(roster_players(team, world.players), key=lambda p: p.overall, reverse=True)
@@ -68,14 +88,20 @@ def roster_table(world: World, team: Team, *, title: str = None) -> Table:
         s = p.season
         star = "[star]★[/star]" if p.pid in starters else " "
         status = "[injury]OUT %dg[/injury]" % p.injury.games_remaining if p.is_injured else ""
-        name = f"{star} {p.name}"
-        table.add_row(
-            str(p.jersey), name, p.position, str(p.age),
-            f"[{ovr_style(p.overall)}]{p.overall}[/]", str(p.scouted_potential()),
-            f"{s.ppg:.1f}" if s.gp else "-", f"{s.rpg:.1f}" if s.gp else "-",
-            f"{s.apg:.1f}" if s.gp else "-",
-            money(p.contract.current_salary), str(p.contract.years_remaining), status,
-        )
+        row = [str(p.jersey), f"{star} {p.name}", p.position,
+               class_label(p.class_year) if college else str(p.age),
+               f"[{ovr_style(p.overall)}]{p.overall}[/]", str(p.scouted_potential()),
+               f"{s.ppg:.1f}" if s.gp else "-", f"{s.rpg:.1f}" if s.gp else "-",
+               f"{s.apg:.1f}" if s.gp else "-"]
+        if nil:
+            row.append(money(p.contract.current_salary) if p.contract.current_salary else "-")
+        elif college:
+            row.append("[good]✓[/good]")
+        else:
+            row.append(money(p.contract.current_salary))
+            row.append(str(p.contract.years_remaining))
+        row.append(status)
+        table.add_row(*row)
     return table
 
 
@@ -206,6 +232,55 @@ def bracket_panel(world: World) -> Panel:
     if champ is not None:
         title = f"[star]🏆 {world.teams[champ].full_name} — CHAMPIONS[/star]"
     return Panel(table, title=title, border_style="accent")
+
+
+def _round_label(n_matchups: int) -> str:
+    teams = n_matchups * 2
+    return {2: "Final", 4: "Semifinals", 8: "Quarterfinals",
+            16: "Round of 16", 32: "Round of 32"}.get(teams, f"Round of {teams}")
+
+
+def _render_bracket_rounds(world: World, grid: Table, bracket: dict) -> None:
+    for rnd in bracket["rounds"]:
+        grid.add_row(Text("  " + _round_label(len(rnd)), style="dim"))
+        for m in rnd:
+            a, b = world.teams[m["a"]], world.teams[m["b"]]
+            line = Text("    ")
+            if m["winner"] is None:
+                line.append(f"{a.abbrev}", style=a.color)
+                line.append(" vs ", style="dim")
+                line.append(f"{b.abbrev}", style=b.color)
+            else:
+                aw = m["winner"] == m["a"]
+                line.append(f"{a.abbrev} {m['a_score']}", style="good" if aw else "dim")
+                line.append("  ", style="dim")
+                line.append(f"{b.abbrev} {m['b_score']}", style="good" if not aw else "dim")
+            grid.add_row(line)
+
+
+def college_bracket_panel(world: World) -> Panel:
+    b = world.bracket
+    if not b:
+        return Panel("No tournament yet.", border_style="muted")
+    grid = Table.grid(padding=(0, 2))
+    grid.add_column()
+    if b["stage"] == "conf":
+        title = "Conference Tournaments"
+        for conf, cb in b["conf"].items():
+            grid.add_row(Text(conf, style="accent"))
+            _render_bracket_rounds(world, grid, cb)
+            if cb["champion"] is not None:
+                grid.add_row(Text(f"  ✦ {world.teams[cb['champion']].abbrev} wins {conf}",
+                                  style="good"))
+    else:
+        title = "National Tournament"
+        if b.get("national"):
+            _render_bracket_rounds(world, grid, b["national"])
+    champ = b.get("champion")
+    panel_title = title
+    if champ is not None:
+        panel_title = f"[star]🏆 {world.teams[champ].full_name} — NATIONAL CHAMPIONS[/star]"
+    return Panel(grid, title=panel_title, border_style="accent")
 
 
 def play_by_play(world: World, result: GameResult, *, animate: bool = False,

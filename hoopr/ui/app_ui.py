@@ -67,20 +67,31 @@ def _title() -> None:
 # ---------------------------------------------------------------------------
 def new_career() -> Optional[World]:
     clear()
-    console.print(Panel("[title]New Career — NBA Mode[/title]\n"
-                        "[dim]Build a franchise: draft, trade, develop, and chase a title.[/dim]",
-                        border_style="accent"))
+    console.print(Panel("[title]New Career[/title]\n"
+                        "[dim]Choose your league. The college and NBA layers are connected by the "
+                        "draft pipeline.[/dim]", border_style="accent"))
+    league = choose("Which league do you want to manage?", [
+        ("nba", "🏀 NBA franchise — cap, trades, free agency, draft"),
+        ("college", "🎓 College program — recruiting, a season, March-style tournament"),
+    ])
+    if league is None:
+        return None
+    seed = random.randrange(1 << 30)
+    if league == "college":
+        return _new_college_career(seed)
+    return _new_nba_career(seed)
+
+
+def _new_nba_career(seed: int) -> Optional[World]:
     preset = choose("Season length", [
         ("Standard", "Standard — 82 games"),
         ("Quick", "Quick — 30 games (faster sims)"),
     ])
     if preset is None:
         return None
-    seed = random.randrange(1 << 30)
     with console.status("[accent]Generating league…[/accent]", spinner="dots"):
         from hoopr.gen.leaguegen import build_world
         world = build_world(seed=seed, season_preset=preset)
-
     tid = _choose_team(world)
     if tid is None:
         return None
@@ -96,16 +107,45 @@ def new_career() -> Optional[World]:
     return world
 
 
+def _new_college_career(seed: int) -> Optional[World]:
+    economy = choose("Choose your college economy (locked for this save)", [
+        ("scholarship", "🎓 Scholarship mode — traditional 13-scholarship limit & allocation"),
+        ("nil", "💸 NIL mode — recruit with NIL money & marketability, grow brand value"),
+    ])
+    if economy is None:
+        return None
+    with console.status("[accent]Generating the college landscape…[/accent]", spinner="dots"):
+        from hoopr.gen.collegegen import build_college_world
+        world = build_college_world(seed=seed, economy=economy)
+    tid = _choose_team(world)
+    if tid is None:
+        return None
+    world.user_team_id = tid
+    S.start_season(world)
+    store.autosave(world)
+    clear()
+    econ = "NIL" if economy == "nil" else "Scholarship"
+    console.print(Panel(f"You are now the head coach of the [bold {world.teams[tid].color}]"
+                        f"{world.teams[tid].full_name}[/] "
+                        f"([star]{'★' * world.teams[tid].prestige}[/star]).\n"
+                        f"[dim]{econ} mode · seed {seed} · declared players feed the NBA draft.[/dim]",
+                        title="[good]Career Started[/good]", border_style="good"))
+    pause()
+    return world
+
+
 def _choose_team(world: World) -> Optional[int]:
+    from hoopr.ui.screens.standings import world_conferences
     options: List[Tuple[str, str]] = []
-    for conf in CONFERENCES:
+    for conf in world_conferences(world):
         for t in sorted((t for t in world.team_list() if t.conference == conf),
                         key=lambda t: t.city):
-            stars = "★" * t.market_size
+            tag = ("★" * t.prestige) if world.mode == "college" else ("★" * t.market_size)
             options.append((str(t.tid),
                             f"[{t.color}]{t.abbrev}[/] {t.full_name} "
-                            f"[dim]({conf}) {stars}[/dim]"))
-    key = choose("Choose your franchise", options)
+                            f"[dim]({conf}) {tag}[/dim]"))
+    key = choose("Choose your program" if world.mode == "college" else "Choose your franchise",
+                 options)
     return int(key) if key is not None else None
 
 
@@ -133,6 +173,10 @@ def load_career() -> Optional[World]:
 # Game hub — dispatches by season phase
 # ---------------------------------------------------------------------------
 def game_hub(world: World) -> None:
+    if world.mode == "college":
+        from hoopr.ui.college_ui import college_hub
+        college_hub(world)
+        return
     while True:
         phase = world.phase
         if phase == Phase.REGULAR_SEASON:

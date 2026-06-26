@@ -26,7 +26,26 @@ python -m hoopr
 
 > Requires Python 3.9+. The only runtime dependency is [`rich`](https://github.com/Textualize/rich).
 
-From the main menu: **New Career → choose season length → pick your franchise**, and you're the GM.
+From the main menu: **New Career → choose your league (NBA or College) → pick your team**, and
+you're in charge.
+
+## Game modes
+
+At the start of a career you choose which league to manage. Both leagues coexist in one world and
+are connected by the **draft pipeline**.
+
+- **🏀 NBA franchise** — salary cap, trades, free agency, an 82-game (or Quick 30) season,
+  play-in, best-of-7 playoffs, and a lottery draft.
+- **🎓 College program** — pick from 32 programs across four conferences and a **college economy
+  chosen at game start**:
+  - **Scholarship mode** — a traditional 13-scholarship limit and allocation; recruit on prestige
+    and active interest.
+  - **NIL mode** — manage an NIL collective budget, sign players to NIL deals, watch brand value
+    grow, and recruit with NIL money and marketability.
+
+  A college season runs through conference standings, single-elimination **conference
+  tournaments**, and a seeded **national tournament**. In the offseason your players develop,
+  declare for (or graduate into) the **NBA Draft**, and you recruit the next class.
 
 ## What you can do
 
@@ -63,12 +82,14 @@ hoopr/
   config.py          # all tunables (cap numbers, ratings scale, pace, injury rates…)
   rng.py             # seedable, save-restorable RNG
   models/            # pure data: player, team, contract, tactics, league, draft, world
-  gen/               # procedural generation: names, players, full league
-  sim/               # engine (possessions + PBP), ratings, boxscore, season, playoffs
+  gen/               # procedural generation: names, players, NBA league, college world
+  sim/               # engine (possessions + PBP), ratings, boxscore, season, playoffs,
+                     #   college_tourney (single-elim conference + national tournaments)
   systems/           # cap, trades, free agency, draft, development, offseason
+                     #   + college: recruiting, collegefin (scholarship/NIL), college_offseason
   save/              # JSON serialization (schema-versioned) + save slots
-  ui/                # rich terminal UI: console, theme, widgets, screens
-  data/              # team and name pools (JSON)
+  ui/                # rich terminal UI: console, theme, widgets, screens, college_ui
+  data/              # team, college, and name pools (JSON)
 tests/               # pytest suite (engine, season, cap/trades, draft, save…)
 ```
 
@@ -88,20 +109,17 @@ round-trips with reproducible RNG.
 
 ## Roadmap
 
-HoopR Phase 1 (this build) is the **NBA franchise** experience. The data model already reserves
-dormant *marketability / brand value* fields and a college-economy toggle so later phases bolt on
-without breaking saves.
+Implemented today: the **NBA franchise** experience, the **College** experience with both the
+**Scholarship** and **NIL** economies (chosen at game start), and the **college → NBA draft
+pipeline** connecting them.
 
-- **Phase 2 — College (Scholarship):** college programs, a recruiting board, scholarship limits
-  and allocation, a college season with conference and national tournaments, and a
-  declare-for-draft pipeline that feeds the existing NBA draft. International prospects enter via
-  the draft.
-- **Phase 3 — NIL economy:** a Scholarship/NIL toggle at career start, brand-value growth,
-  marketability-driven recruiting, an NIL deal marketplace, and endorsement negotiation; plus
-  international recruiting into college programs.
-- **Phase 4 — Depth:** the transfer portal, advanced cap rules (apron, sign-and-trade), two-way /
-  G-League contracts, deeper scouting, awards / Hall of Fame / history, chemistry and momentum,
-  and coaching staff.
+Still on the roadmap:
+
+- **International prospects** entering via the NBA draft and recruitable to college programs.
+- **Transfer portal** for college rosters.
+- **Advanced NBA cap** rules (apron, sign-and-trade), two-way / G-League contracts.
+- **Deeper scouting**, awards / Hall of Fame / history, chemistry and momentum, coaching staff.
+- A richer **NIL marketplace** (negotiated endorsement packages, brand events).
 
 ## Notes
 
