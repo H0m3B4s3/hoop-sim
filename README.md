@@ -34,18 +34,24 @@ you're in charge.
 At the start of a career you choose which league to manage. Both leagues coexist in one world and
 are connected by the **draft pipeline**.
 
-- **🏀 NBA franchise** — salary cap, trades, free agency, an 82-game (or Quick 30) season,
+- **🏀 NBA franchise** — a salary cap that **grows each year**, trades, free agency,
+  **re-signing and extending** your own players (Bird rights), an 82-game (or Quick 30) season,
   play-in, best-of-7 playoffs, and a lottery draft.
-- **🎓 College program** — pick from 32 programs across four conferences and a **college economy
-  chosen at game start**:
+- **🎓 College program** — pick from **64 programs across eight conferences** spanning power,
+  mid-major, and low-major prestige tiers, with a **college economy chosen at game start**:
   - **Scholarship mode** — a traditional 13-scholarship limit and allocation; recruit on prestige
     and active interest.
   - **NIL mode** — manage an NIL collective budget, sign players to NIL deals, watch brand value
     grow, and recruit with NIL money and marketability.
 
-  A college season runs through conference standings, single-elimination **conference
-  tournaments**, and a seeded **national tournament**. In the offseason your players develop,
-  declare for (or graduate into) the **NBA Draft**, and you recruit the next class.
+  College games are played in **two 20-minute halves** at a slower, college pace. A season runs
+  through conference standings, single-elimination **conference tournaments**, and a seeded
+  32-team **national tournament**. In the offseason your players develop, declare for (or graduate
+  into) the **NBA Draft**, and you recruit the next class.
+
+In both modes you can **set and lock your own starting five** (positions are flexible — a guard
+will slot up to the point if that's your best five), and close games feature **clutch lineups and
+late-game intentional fouling**.
 
 ## What you can do
 
