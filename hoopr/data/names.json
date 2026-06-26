@@ -1,0 +1,28 @@
+{
+  "first": [
+    "James", "Marcus", "Tyrone", "DeShawn", "Anthony", "Chris", "Jalen", "Trey", "Darius",
+    "Malik", "Isaiah", "Jamal", "Andre", "Brandon", "Cameron", "Devin", "Elijah", "Gabriel",
+    "Hassan", "Ibrahim", "Jaylen", "Kevin", "Lamar", "Micah", "Nasir", "Omar", "Quentin",
+    "Rashad", "Samuel", "Terrence", "Victor", "Xavier", "Zion", "Aaron", "Bryce", "Caleb",
+    "Damian", "Evan", "Felix", "Grant", "Hunter", "Ian", "Josiah", "Keenan", "Logan",
+    "Mason", "Nolan", "Owen", "Preston", "Reggie", "Tobias", "Vince", "Wesley", "Amir",
+    "Bojan", "Dario", "Goran", "Luka", "Nikola", "Dejan", "Kristaps", "Rui", "Yuki",
+    "Joel", "Pascal", "Serge", "Thabo", "Andrei", "Dirk", "Tony", "Manu", "Carlos",
+    "Juan", "Ricardo", "Mateo", "Diego", "Andre", "Kenji", "Hideki", "Ousmane", "Cheick"
+  ],
+  "last": [
+    "Johnson", "Williams", "Brown", "Jones", "Davis", "Miller", "Wilson", "Moore", "Taylor",
+    "Anderson", "Thomas", "Jackson", "White", "Harris", "Martin", "Thompson", "Robinson",
+    "Lewis", "Walker", "Hall", "Allen", "Young", "King", "Wright", "Scott", "Green",
+    "Baker", "Adams", "Nelson", "Carter", "Mitchell", "Roberts", "Turner", "Phillips",
+    "Campbell", "Parker", "Evans", "Edwards", "Collins", "Stewart", "Morris", "Murphy",
+    "Cook", "Rogers", "Morgan", "Bell", "Bailey", "Reed", "Kelly", "Howard", "Cox",
+    "Ward", "Brooks", "Sanders", "Price", "Bennett", "Wood", "Barnes", "Ross", "Henderson",
+    "Coleman", "Jenkins", "Perry", "Powell", "Long", "Patterson", "Hughes", "Washington",
+    "Butler", "Simmons", "Foster", "Bryant", "Alexander", "Russell", "Griffin", "Diaz",
+    "Hayes", "Myers", "Ford", "Hamilton", "Graham", "Sullivan", "Wallace", "Woods",
+    "Doncic", "Jokic", "Antetokounmpo", "Porzingis", "Sabonis", "Gobert", "Markkanen",
+    "Hachimura", "Watanabe", "Schroder", "Dragic", "Bogdanovic", "Vucevic", "Sengun",
+    "Okafor", "Diallo", "Mbaye", "Traore", "Ndiaye", "Garcia", "Hernandez", "Santos"
+  ]
+}
