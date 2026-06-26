@@ -54,6 +54,14 @@ def header(world: World) -> None:
         cap_style = ("money" if payroll <= world.salary_cap
                      else "warn" if payroll <= world.luxury_tax_line else "bad")
         bits.append(Text(f"  Payroll {money(payroll)}/{money(world.salary_cap)}", style=cap_style))
+        if world.phase == Phase.REGULAR_SEASON:
+            from hoopr.systems import trades
+            if trades.trade_deadline_passed(world):
+                bits.append(Text("  Deadline passed", style="bad"))
+            else:
+                left = trades.trade_deadline_day(world) - world.day
+                style = "warn" if left <= 7 else "dim"
+                bits.append(Text(f"  Trade deadline in {left}d", style=style))
     line = Text()
     for b in bits:
         line.append_text(b)

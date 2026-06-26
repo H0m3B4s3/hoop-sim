@@ -50,6 +50,10 @@ export interface Summary {
   luxury_tax_line: number;
   teams: TeamBrief[];
   conferences: string[];
+  regular_season_complete: boolean;
+  trade_deadline_day?: number;
+  trade_deadline_passed?: boolean;
+  days_to_deadline?: number;
   user_team?: TeamBrief;
   record?: string;
   payroll?: number;
@@ -75,6 +79,8 @@ export const api = {
   leaders: () => get<any>("/leaders"),
   finances: () => get<any>("/finances"),
   freeAgents: () => get<any>("/freeagents"),
+  scouting: () => get<any>("/scouting"),
+  tradeBlock: (tid: number) => get<{ tid: number; pids: number[] }>(`/teams/${tid}/trade-block`),
   player: (pid: number) => get<any>(`/players/${pid}`),
 
   simGame: (watch: boolean) => post<any>(`/sim/game?watch=${watch}`),

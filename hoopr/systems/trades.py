@@ -4,12 +4,24 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Tuple
 
-from hoopr.config import ROSTER_MAX
-from hoopr.models.team import auto_set_lineup
+from hoopr.config import ROSTER_MAX, TRADE_DEADLINE_FRACTION
+from hoopr.models.league import Phase
+from hoopr.models.team import Team, auto_set_lineup, roster_players
 from hoopr.models.world import World
 from hoopr.systems import cap
 
 ROSTER_FLOOR_AFTER_TRADE = 12
+
+
+def trade_deadline_day(world: World) -> int:
+    """The last day on which trades are allowed (NBA), ~2/3 through the regular season."""
+    return round(TRADE_DEADLINE_FRACTION * world.season_games)
+
+
+def trade_deadline_passed(world: World) -> bool:
+    """True once the NBA regular-season trade deadline is behind us (waivers still allowed)."""
+    return (world.mode == "nba" and world.phase == Phase.REGULAR_SEASON
+            and world.day > trade_deadline_day(world))
 
 
 @dataclass
@@ -25,6 +37,8 @@ def _salary(world: World, pids: List[int]) -> int:
 
 
 def validate_trade(world: World, offer: TradeOffer) -> Tuple[bool, str]:
+    if trade_deadline_passed(world):
+        return False, "The trade deadline has passed."
     a, b = world.teams[offer.a], world.teams[offer.b]
     if not offer.a_sends and not offer.b_sends:
         return False, "Empty trade."
@@ -68,6 +82,29 @@ def ai_evaluates(world: World, offer: TradeOffer, ai_tid: int) -> Tuple[bool, st
     if v_in >= v_out * 0.97:
         return False, "We'd want a bit more value to do this."
     return False, "That's too lopsided for us."
+
+
+TRADE_BLOCK_VET_AGE = 30
+TRADE_BLOCK_MAX_YEARS = 2   # last one or two years of the deal
+
+
+def team_trade_block(world: World, team: Team) -> List[int]:
+    """Players ``team`` is shopping — its trade-block "for sale" list, computed on demand.
+
+    A team out of contention sells its aging veterans on expiring deals: a club is a seller
+    when it is below .500 (or, in the preseason, projects as a non-contender by prestige), and
+    it dangles players who are ``TRADE_BLOCK_VET_AGE``+ and in the last one or two years of
+    their contract. Contenders hold everyone. Returned high-overall first for display.
+    """
+    contending = team.win_pct >= 0.5 if team.games_played else team.prestige >= 4
+    if contending:
+        return []
+    block = [p.pid for p in roster_players(team, world.players)
+             if p.age >= TRADE_BLOCK_VET_AGE
+             and 0 < p.contract.years_remaining <= TRADE_BLOCK_MAX_YEARS
+             and cap.trade_value(p) > 0]
+    block.sort(key=lambda pid: world.players[pid].overall, reverse=True)
+    return block
 
 
 def execute_trade(world: World, offer: TradeOffer) -> None:

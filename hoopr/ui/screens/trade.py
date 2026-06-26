@@ -9,12 +9,19 @@ from rich.table import Table
 
 from hoopr.models.world import World
 from hoopr.systems import cap
-from hoopr.systems.trades import TradeOffer, ai_evaluates, execute_trade, validate_trade
+from hoopr.systems.trades import (TradeOffer, ai_evaluates, execute_trade,
+                                  team_trade_block, trade_deadline_passed, validate_trade)
 from hoopr.ui.console import choose, clear, confirm, console, pause
-from hoopr.ui.widgets import header, money
+from hoopr.ui.widgets import header, money, player_card
 
 
 def trade_screen(world: World) -> None:
+    if trade_deadline_passed(world):
+        console.print("[bad]The trade deadline has passed.[/bad] "
+                      "[dim]You can still waive players from Free Agency; trading reopens "
+                      "next season.[/dim]")
+        pause()
+        return
     a = world.user_team
     b_tid = _choose_team(world)
     if b_tid is None:
@@ -23,8 +30,10 @@ def trade_screen(world: World) -> None:
     b_sends: List[int] = []
     while True:
         b = world.teams[b_tid]
+        block = set(team_trade_block(world, b))
         clear()
         header(world)
+        _render_block(world, b, block)
         _render_offer(world, a, b, a_sends, b_sends)
         offer = TradeOffer(a.tid, b.tid, list(a_sends), list(b_sends))
         legal, reason = validate_trade(world, offer)
@@ -37,7 +46,8 @@ def trade_screen(world: World) -> None:
         opts.append(("add_get", f"🎯 Add a player to request from {b.abbrev}"))
         if b_sends:
             opts.append(("rm_get", "➖ Remove a requested player"))
-        opts += [("propose", "📨 Propose trade"), ("team", "🔄 Different team"),
+        opts += [("inspect", "🔍 Scout a player's ratings"),
+                 ("propose", "📨 Propose trade"), ("team", "🔄 Different team"),
                  ("back", "← Back")]
         action = choose("", opts)
 
@@ -50,13 +60,16 @@ def trade_screen(world: World) -> None:
             if pid is not None:
                 a_sends.remove(pid)
         elif action == "add_get":
-            pid = _pick(world, [p for p in b.roster if p not in b_sends], "Request which player?")
+            pid = _pick(world, [p for p in b.roster if p not in b_sends], "Request which player?",
+                        block=block)
             if pid is not None:
                 b_sends.append(pid)
         elif action == "rm_get":
             pid = _pick(world, b_sends, "Remove which player?")
             if pid is not None:
                 b_sends.remove(pid)
+        elif action == "inspect":
+            _inspect(world, a, b)
         elif action == "propose":
             _propose(world, TradeOffer(a.tid, b.tid, list(a_sends), list(b_sends)), b_tid)
             # if the trade executed, players changed teams; drop any that moved
@@ -79,17 +92,47 @@ def _choose_team(world: World) -> Optional[int]:
     return int(key) if key is not None else None
 
 
-def _pick(world: World, pids: List[int], prompt: str) -> Optional[int]:
+def _pick(world: World, pids: List[int], prompt: str,
+          block: Optional[set] = None) -> Optional[int]:
     if not pids:
         console.print("[dim]No eligible players.[/dim]")
         pause()
         return None
+    block = block or set()
     players = sorted((world.players[pid] for pid in pids), key=lambda p: p.overall, reverse=True)
     opts = [(str(p.pid),
-             f"{p.name} [dim]{p.position} · OVR {p.overall} · {money(p.contract.current_salary)} "
+             f"{'[accent]✦[/accent] ' if p.pid in block else ''}{p.name} "
+             f"[dim]{p.position} · OVR {p.overall} · {money(p.contract.current_salary)} "
              f"· val {cap.trade_value(p):.1f}[/dim]") for p in players]
     key = choose(prompt, opts, allow_back=True)
     return int(key) if key is not None else None
+
+
+def _render_block(world: World, b, block: set) -> None:
+    """Show the partner's shopping list — the aging vets they're dangling — above the deal."""
+    if not block:
+        return
+    names = ", ".join(f"{world.players[pid].name} ([dim]{world.players[pid].position} "
+                      f"{world.players[pid].overall}[/dim])"
+                      for pid in sorted(block, key=lambda x: world.players[x].overall, reverse=True))
+    console.print(f"[accent]✦ {b.abbrev} are shopping:[/accent] {names}\n")
+
+
+def _inspect(world: World, a, b) -> None:
+    """Scout the full ratings of any player on either roster without leaving the deal."""
+    team_key = choose("Scout a player from which team?",
+                      [(str(a.tid), f"[{a.color}]{a.abbrev}[/] (yours)"),
+                       (str(b.tid), f"[{b.color}]{b.abbrev}[/]")], allow_back=True)
+    if team_key is None:
+        return
+    team = world.teams[int(team_key)]
+    pid = _pick(world, list(team.roster), f"Scout which {team.abbrev} player?")
+    if pid is None:
+        return
+    clear()
+    header(world)
+    console.print(player_card(world, world.players[pid]))
+    pause()
 
 
 def _side_table(world: World, team, pids: List[int], title: str) -> Table:

@@ -44,6 +44,42 @@ def test_color_hex_resolves_named_colors():
     assert ser.color_hex("not-a-real-color").startswith("#")  # falls back, never raises
 
 
+def test_scouting_view_covers_league_and_flags_block():
+    world = build_world(seed=7, season_preset="Quick")
+    world.user_team_id = world.team_list()[0].tid
+    view = ser.scouting_view(world)
+    rostered = sum(len(t.roster) for t in world.team_list())
+    assert len(view["players"]) == rostered + len(world.free_agents)
+    assert "composites" in view["players"][0]
+    # the user's own players are never flagged as shopped to themselves
+    user_rows = [r for r in view["players"] if r["team_id"] == world.user_team_id]
+    assert user_rows and not any(r["on_block"] for r in user_rows)
+
+
+def test_trade_block_is_aging_vets_on_expiring_deals():
+    from hoopr.systems.trades import (TRADE_BLOCK_MAX_YEARS, TRADE_BLOCK_VET_AGE,
+                                      team_trade_block)
+    world = build_world(seed=7, season_preset="Quick")
+    for team in world.team_list():
+        for pid in team_trade_block(world, team):
+            p = world.players[pid]
+            assert p.age >= TRADE_BLOCK_VET_AGE
+            assert 0 < p.contract.years_remaining <= TRADE_BLOCK_MAX_YEARS
+
+
+def test_api_scouting_and_trade_block_endpoints():
+    client = TestClient(app)
+    state = client.post("/api/career/new",
+                        json={"league": "nba", "preset": "Quick", "seed": 3}).json()
+    tid = state["summary"]["teams"][0]["tid"]
+    client.post(f"/api/career/team/{tid}")
+    scout = client.get("/api/scouting").json()
+    assert scout["players"] and "composite_order" in scout
+    other = next(t["tid"] for t in state["summary"]["teams"] if t["tid"] != tid)
+    blk = client.get(f"/api/teams/{other}/trade-block").json()
+    assert blk["tid"] == other and isinstance(blk["pids"], list)
+
+
 def test_api_drives_a_short_game_loop():
     client = TestClient(app)
     assert client.get("/api/state").json()["active"] is False

@@ -365,14 +365,85 @@ table.dt tr.clickable:hover td {
   font-size: 13px;
   line-height: 1.6;
 }
-.bracket {
+/* playoff bracket */
+.champ {
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+}
+.bracketCols {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  align-items: stretch;
+}
+.bracketCol {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  gap: 12px;
+  min-width: 150px;
+}
+.roundName {
+  margin: 0 0 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  text-align: center;
+}
+.seriesCard {
   background: var(--panel-2);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 12px;
-  overflow: auto;
-  font-size: 12px;
-  max-height: 60vh;
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+}
+.seriesCard.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.seedRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.seedRow.win {
+  background: rgba(52, 211, 153, 0.12);
+  font-weight: 700;
+}
+.seedRow.mine .abbr {
+  color: var(--accent);
+}
+.seedRow .seed {
+  width: 16px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+}
+.seedRow .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+.seedRow .abbr {
+  font-weight: 600;
+}
+.seedRow .wins {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
 }
 
 /* pill */
@@ -421,6 +492,42 @@ table.dt tr.clickable:hover td {
 }
 .pickrow.on {
   background: rgba(245, 158, 11, 0.12);
+}
+.pickrow .scout {
+  padding: 0 6px;
+  line-height: 1.6;
+}
+.blockMark {
+  color: var(--accent);
+  font-weight: 700;
+}
+.shopping {
+  background: rgba(245, 158, 11, 0.08);
+  border-left: 3px solid var(--accent);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.checkLine {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.deadline {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 4px 0 10px;
+}
+.deadline.soon {
+  color: var(--accent);
+  font-weight: 600;
+}
+.deadline.passed {
+  color: var(--text);
+  background: rgba(239, 68, 68, 0.1);
+  border-left: 3px solid #ef4444;
+  padding: 8px 12px;
+  border-radius: 6px;
 }
 .verdict {
   background: var(--panel-2);

@@ -193,6 +193,20 @@ def free_agents(sid: str = Depends(_sid)):
     return ser.free_agents_view(_world(sid))
 
 
+@app.get("/api/scouting")
+def scouting(sid: str = Depends(_sid)):
+    return ser.scouting_view(_world(sid))
+
+
+@app.get("/api/teams/{tid}/trade-block")
+def trade_block(tid: int, sid: str = Depends(_sid)):
+    world = _world(sid)
+    team = world.find_team(tid)
+    if team is None:
+        raise HTTPException(status_code=404, detail="Unknown team.")
+    return {"tid": tid, "pids": trades.team_trade_block(world, team)}
+
+
 @app.get("/api/players/{pid}")
 def player(pid: int, sid: str = Depends(_sid)):
     world = _world(sid)

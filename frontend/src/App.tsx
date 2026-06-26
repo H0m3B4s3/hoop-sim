@@ -183,6 +183,7 @@ const NAV: { key: string; label: string }[] = [
   { key: "leaders", label: "Leaders" },
   { key: "finances", label: "Finances" },
   { key: "fa", label: "Free Agents" },
+  { key: "scout", label: "Scouting" },
   { key: "trade", label: "Trade" },
 ];
 
@@ -202,9 +203,12 @@ function Hub({
   const phase = summary.phase;
   const inPlayoffs = phase === "playoffs" || phase === "play_in";
   const inOffseason = ["draft", "free_agency", "offseason"].includes(phase);
+  // The regular season can finish while phase is still REGULAR_SEASON: surface the
+  // Playoffs tab so the user can actually start the postseason.
+  const showPlayoffs = inPlayoffs || summary.regular_season_complete;
 
   const nav = [...NAV];
-  if (inPlayoffs) nav.push({ key: "playoffs", label: "Playoffs" });
+  if (showPlayoffs) nav.push({ key: "playoffs", label: "Playoffs" });
   if (inOffseason) nav.push({ key: "offseason", label: "Offseason" });
 
   const refresh = (s?: Summary) => {
@@ -240,8 +244,18 @@ function Hub({
           {tab === "fa" && (
             <FreeAgentsPanel onPlayer={setOpenPid} refresh={refresh} toast={toast} />
           )}
-          {tab === "trade" && <TradePanel summary={summary} refresh={refresh} toast={toast} />}
-          {tab === "playoffs" && <PlayoffsPanel refresh={refresh} toast={toast} />}
+          {tab === "scout" && <ScoutingPanel onPlayer={setOpenPid} />}
+          {tab === "trade" && (
+            <TradePanel
+              summary={summary}
+              refresh={refresh}
+              toast={toast}
+              onPlayer={setOpenPid}
+            />
+          )}
+          {tab === "playoffs" && (
+            <PlayoffsPanel summary={summary} refresh={refresh} toast={toast} />
+          )}
           {tab === "offseason" && <OffseasonPanel refresh={refresh} toast={toast} />}
         </main>
       </div>
@@ -335,6 +349,12 @@ function PlayPanel({
     return <p className="muted pad">It's the offseason — use the Offseason tab.</p>;
   if (phase === "playoffs" || phase === "play_in")
     return <p className="muted pad">Playoffs are on — use the Playoffs tab.</p>;
+  if (summary.regular_season_complete)
+    return (
+      <p className="muted pad">
+        Regular season complete — head to the Playoffs tab to start the postseason.
+      </p>
+    );
 
   return (
     <div>
@@ -696,6 +716,115 @@ function FreeAgentsPanel({
 }
 
 // ---------------------------------------------------------------------------
+// Scouting board — league-wide attributes for trade/FA targeting
+// ---------------------------------------------------------------------------
+const COMPOSITE_COLS: { key: string; header: string }[] = [
+  { key: "scoring", header: "SCO" },
+  { key: "playmaking", header: "PLA" },
+  { key: "rebounding", header: "REB" },
+  { key: "defense", header: "DEF" },
+  { key: "athleticism", header: "ATH" },
+  { key: "intangibles", header: "INT" },
+];
+
+function ScoutingPanel({ onPlayer }: { onPlayer: (pid: number) => void }) {
+  const [data, setData] = useState<any | null>(null);
+  const [pos, setPos] = useState("All");
+  const [team, setTeam] = useState("All");
+  const [blockOnly, setBlockOnly] = useState(false);
+  useEffect(() => {
+    api.scouting().then(setData).catch(() => {});
+  }, []);
+  if (!data) return <Loading />;
+
+  const teams = [...new Set<string>(data.players.map((p: Row) => p.team_abbrev))].sort();
+  const rows = (data.players as Row[]).filter(
+    (p) =>
+      (pos === "All" || p.position === pos || p.secondary_position === pos) &&
+      (team === "All" || p.team_abbrev === team) &&
+      (!blockOnly || p.on_block)
+  );
+
+  const cols: ColumnDef<Row, any>[] = [
+    { accessorKey: "name", header: "Name" },
+    {
+      accessorKey: "team_abbrev",
+      header: "Tm",
+      cell: (c) => (
+        <span style={{ color: c.row.original.team_color }}>{c.getValue() as string}</span>
+      ),
+    },
+    { accessorKey: "position", header: "Pos" },
+    { accessorKey: "age", header: "Age" },
+    { accessorKey: "overall", header: "OVR", cell: (c) => OVR(c.getValue() as number) },
+    { accessorKey: "potential", header: "POT" },
+    ...COMPOSITE_COLS.map(
+      (c): ColumnDef<Row, any> => ({
+        id: c.key,
+        header: c.header,
+        accessorFn: (r) => (r.composites ? r.composites[c.key] : 0),
+      })
+    ),
+    {
+      id: "on_block",
+      header: "Blk",
+      accessorFn: (r) => (r.on_block ? 1 : 0),
+      cell: (c) =>
+        c.row.original.on_block ? (
+          <span className="blockMark" title="On the trade block">
+            ✦
+          </span>
+        ) : (
+          ""
+        ),
+    },
+  ];
+
+  return (
+    <div className="card">
+      <div className="finalLine">
+        <h3>Scouting Board</h3>
+        <span className="muted right">
+          {rows.length} of {data.players.length} players · ✦ = on the trade block
+        </span>
+      </div>
+      <div className="toolbar">
+        <select value={team} onChange={(e) => setTeam(e.target.value)}>
+          <option value="All">All teams</option>
+          {teams.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+        <select value={pos} onChange={(e) => setPos(e.target.value)}>
+          {["All", "PG", "SG", "SF", "PF", "C"].map((p) => (
+            <option key={p} value={p}>
+              {p === "All" ? "All positions" : p}
+            </option>
+          ))}
+        </select>
+        <label className="checkLine">
+          <input
+            type="checkbox"
+            checked={blockOnly}
+            onChange={(e) => setBlockOnly(e.target.checked)}
+          />
+          Trade block only
+        </label>
+      </div>
+      <DataTable
+        data={rows}
+        columns={cols}
+        initialSort={[{ id: "overall", desc: true }]}
+        onRowClick={(r) => onPlayer((r as Row).pid)}
+        searchPlaceholder="Search players…"
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Lineup & tactics
 // ---------------------------------------------------------------------------
 function LineupPanel({
@@ -807,10 +936,12 @@ function TradePanel({
   summary,
   refresh,
   toast,
+  onPlayer,
 }: {
   summary: Summary;
   refresh: (s?: Summary) => void;
   toast: (m: string) => void;
+  onPlayer: (pid: number) => void;
 }) {
   const others = summary.teams.filter((t) => t.tid !== summary.user_team_id);
   const [partner, setPartner] = useState<number>(others[0]?.tid);
@@ -819,6 +950,7 @@ function TradePanel({
   const [give, setGive] = useState<number[]>([]);
   const [get, setGet] = useState<number[]>([]);
   const [verdict, setVerdict] = useState<string>("");
+  const [block, setBlock] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     api.roster(summary.user_team_id!).then(setMine);
@@ -826,9 +958,12 @@ function TradePanel({
   useEffect(() => {
     if (partner) {
       api.roster(partner).then(setTheirs);
+      api.tradeBlock(partner).then((b) => setBlock(new Set(b.pids))).catch(() => setBlock(new Set()));
       setGet([]);
     }
   }, [partner]);
+
+  const shopping = (theirs?.players ?? []).filter((p: Row) => block.has(p.pid));
 
   const reqBody = () => ({ partner_tid: partner, user_sends: give, partner_sends: get });
   const check = async () => {
@@ -856,9 +991,22 @@ function TradePanel({
   const toggle = (arr: number[], set: (a: number[]) => void, pid: number) =>
     set(arr.includes(pid) ? arr.filter((x) => x !== pid) : [...arr, pid]);
 
+  const deadlinePassed = summary.trade_deadline_passed === true;
+  const daysLeft = summary.days_to_deadline ?? 0;
+
   return (
     <div className="card">
       <h3>Propose a Trade</h3>
+      {deadlinePassed ? (
+        <p className="deadline passed">
+          🔒 The trade deadline has passed — trading reopens next season. You can still waive
+          players from the Free Agents tab.
+        </p>
+      ) : (
+        <p className={`deadline${daysLeft <= 7 ? " soon" : ""}`}>
+          ⏳ Trade deadline in <b>{daysLeft}</b> {daysLeft === 1 ? "day" : "days"}.
+        </p>
+      )}
       <label>
         Partner:{" "}
         <select value={partner} onChange={(e) => setPartner(Number(e.target.value))}>
@@ -869,18 +1017,38 @@ function TradePanel({
           ))}
         </select>
       </label>
+      {shopping.length > 0 && (
+        <p className="shopping">
+          <span className="blockMark">✦</span> Shopping:{" "}
+          {shopping.map((p: Row) => `${p.name} (${p.position} ${p.overall})`).join(", ")}
+        </p>
+      )}
       <div className="tradeGrid">
-        <PickList title="You send" data={mine} sel={give} onToggle={(p) => toggle(give, setGive, p)} />
+        <PickList
+          title="You send"
+          data={mine}
+          sel={give}
+          onToggle={(p) => toggle(give, setGive, p)}
+          onPlayer={onPlayer}
+        />
         <PickList
           title="You receive"
           data={theirs}
           sel={get}
           onToggle={(p) => toggle(get, setGet, p)}
+          onPlayer={onPlayer}
+          block={block}
         />
       </div>
       <div className="toolbar">
-        <button onClick={check}>Check trade</button>
-        <button className="primary" onClick={exec} disabled={!give.length && !get.length}>
+        <button onClick={check} disabled={deadlinePassed}>
+          Check trade
+        </button>
+        <button
+          className="primary"
+          onClick={exec}
+          disabled={deadlinePassed || (!give.length && !get.length)}
+        >
           Execute
         </button>
       </div>
@@ -894,11 +1062,15 @@ function PickList({
   data,
   sel,
   onToggle,
+  onPlayer,
+  block,
 }: {
   title: string;
   data: any | null;
   sel: number[];
   onToggle: (pid: number) => void;
+  onPlayer: (pid: number) => void;
+  block?: Set<number>;
 }) {
   if (!data) return <div>{title}…</div>;
   return (
@@ -908,8 +1080,24 @@ function PickList({
         {data.players.map((p: Row) => (
           <label key={p.pid} className={sel.includes(p.pid) ? "pickrow on" : "pickrow"}>
             <input type="checkbox" checked={sel.includes(p.pid)} onChange={() => onToggle(p.pid)} />
+            {block?.has(p.pid) && (
+              <span className="blockMark" title="On the trade block">
+                ✦
+              </span>
+            )}
             {p.name} <span className="muted">{p.position}</span> {OVR(p.overall)}{" "}
             <span className="muted right">{money(p.salary)}</span>
+            <button
+              type="button"
+              className="ghost scout"
+              title="Scout ratings"
+              onClick={(e) => {
+                e.preventDefault();
+                onPlayer(p.pid);
+              }}
+            >
+              🔍
+            </button>
           </label>
         ))}
       </div>
@@ -921,9 +1109,11 @@ function PickList({
 // Playoffs & offseason
 // ---------------------------------------------------------------------------
 function PlayoffsPanel({
+  summary,
   refresh,
   toast,
 }: {
+  summary: Summary;
   refresh: (s?: Summary) => void;
   toast: (m: string) => void;
 }) {
@@ -949,7 +1139,8 @@ function PlayoffsPanel({
     refresh();
   };
   if (!data) return <Loading />;
-  const hasBracket = data.bracket && (data.bracket.all_series?.length || data.bracket.seeds);
+  const bracket = data.bracket;
+  const hasBracket = bracket && (bracket.all_series?.length || bracket.seeds);
   return (
     <div className="card">
       <div className="toolbar">
@@ -969,7 +1160,111 @@ function PlayoffsPanel({
         {data.complete && <Pill>Playoffs complete</Pill>}
       </div>
       {game && <BoxScore result={game} onClose={() => setGame(null)} />}
-      <pre className="bracket">{JSON.stringify(data.bracket, null, 1)}</pre>
+      {hasBracket ? (
+        <Bracket
+          bracket={bracket}
+          teams={summary.teams}
+          userTid={summary.user_team_id}
+          champion={data.champion ?? bracket.champion}
+        />
+      ) : (
+        <p className="muted">The bracket will appear once the postseason begins.</p>
+      )}
+    </div>
+  );
+}
+
+// Round columns left→right; "done" series are filtered out of the display.
+const ROUND_ORDER = ["R1", "R2", "CF", "Finals"];
+const ROUND_NAMES: Record<string, string> = {
+  R1: "First Round",
+  R2: "Conf. Semifinals",
+  CF: "Conf. Finals",
+  Finals: "Finals",
+};
+
+function Bracket({
+  bracket,
+  teams,
+  userTid,
+  champion,
+}: {
+  bracket: any;
+  teams: TeamBrief[];
+  userTid: number | null;
+  champion: number | null;
+}) {
+  const byTid = new Map(teams.map((t) => [t.tid, t]));
+  const seedOf = (tid: number): number | undefined => {
+    const s = bracket.seeds?.[String(tid)];
+    return s != null ? Number(s) : undefined;
+  };
+  const all: any[] = bracket.all_series ?? [];
+  const champTeam = champion != null ? byTid.get(champion) : undefined;
+
+  return (
+    <div>
+      {champTeam && (
+        <div className="champ">
+          🏆 <span style={{ color: champTeam.color }}>{champTeam.full_name}</span> — Champions
+        </div>
+      )}
+      <div className="bracketCols">
+        {ROUND_ORDER.map((rnd) => {
+          const series = all.filter((s) => s.round === rnd);
+          if (!series.length) return null;
+          return (
+            <div className="bracketCol" key={rnd}>
+              <h4 className="roundName">{ROUND_NAMES[rnd]}</h4>
+              {series.map((s) => (
+                <SeriesCard
+                  key={s.sid}
+                  s={s}
+                  byTid={byTid}
+                  seedOf={seedOf}
+                  userTid={userTid}
+                  active={bracket.round === rnd && s.winner == null}
+                />
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SeriesCard({
+  s,
+  byTid,
+  seedOf,
+  userTid,
+  active,
+}: {
+  s: any;
+  byTid: Map<number, TeamBrief>;
+  seedOf: (tid: number) => number | undefined;
+  userTid: number | null;
+  active: boolean;
+}) {
+  const row = (tid: number, wins: number) => {
+    const t = byTid.get(tid);
+    const seed = seedOf(tid);
+    const isWinner = s.winner === tid;
+    const isUser = tid === userTid;
+    return (
+      <div className={`seedRow${isWinner ? " win" : ""}${isUser ? " mine" : ""}`}>
+        {seed != null && <span className="seed">{seed}</span>}
+        <span className="dot" style={{ background: t?.color }} />
+        <span className="abbr">{t?.abbrev ?? "—"}</span>
+        <span className="wins">{wins}</span>
+      </div>
+    );
+  };
+  return (
+    <div className={`seriesCard${active ? " active" : ""}`}>
+      {row(s.hi, s.hi_w)}
+      {row(s.lo, s.lo_w)}
     </div>
   );
 }

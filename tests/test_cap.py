@@ -88,6 +88,38 @@ def test_execute_trade_moves_players():
     assert pa not in a.roster and pb not in b.roster
 
 
+def test_trade_deadline_blocks_after_cutoff():
+    from hoopr.models.league import Phase
+    from hoopr.systems.trades import trade_deadline_day, trade_deadline_passed
+    w = build_world(seed=8)
+    a, b = w.teams[0], w.teams[1]
+    pa, pb = _matched_pair(w, a, b)
+    assert pa is not None
+    offer = TradeOffer(a.tid, b.tid, [pa], [pb])
+    w.phase = Phase.REGULAR_SEASON
+
+    w.day = trade_deadline_day(w) - 1          # before the deadline → legal
+    assert not trade_deadline_passed(w)
+    assert validate_trade(w, offer)[0]
+
+    w.day = trade_deadline_day(w) + 1          # after the deadline → blocked
+    assert trade_deadline_passed(w)
+    legal, why = validate_trade(w, offer)
+    assert not legal and "deadline" in why.lower()
+
+
+def test_trade_deadline_inactive_outside_nba_regular_season():
+    from hoopr.models.league import Phase
+    from hoopr.systems.trades import trade_deadline_day, trade_deadline_passed
+    w = build_world(seed=8)
+    w.day = trade_deadline_day(w) + 5          # well past the cutoff
+    w.phase = Phase.PRESEASON                  # not in the regular season → no deadline
+    assert not trade_deadline_passed(w)
+    w.phase = Phase.REGULAR_SEASON
+    w.mode = "college"                         # college never has a trade deadline
+    assert not trade_deadline_passed(w)
+
+
 def test_cap_grows_each_offseason():
     w = build_world(seed=12)
     before = w.salary_cap

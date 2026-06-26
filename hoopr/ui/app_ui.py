@@ -214,6 +214,7 @@ def _regular_season_menu(world: World) -> Optional[str]:
         ("lineup", "🧩  Set lineup"),
         ("tactics", "📋  Tactics"),
         ("front", "🏢  Front Office (trade · sign · finances)"),
+        ("scout", "🔍  Scouting board (league-wide)"),
         ("standings", "📊  Standings"),
         ("leaders", "🏀  League leaders"),
         ("save", "💾  Save game"),
@@ -234,6 +235,9 @@ def _regular_season_menu(world: World) -> Optional[str]:
         edit_tactics(world)
     elif action == "front":
         _front_office(world)
+    elif action == "scout":
+        from hoopr.ui.screens.scouting import scouting_screen
+        scouting_screen(world)
     elif action == "standings":
         show_standings(world)
     elif action == "leaders":

@@ -27,6 +27,10 @@ PLAYOFF_TEAMS_PER_CONF = 8        # top 6 auto, 7-10 play-in -> 2 more
 SEASON_PRESETS = {"Quick": 30, "Standard": 82}
 DEFAULT_SEASON_PRESET = "Standard"
 
+# Trades are allowed (NBA) up to ~2/3 of the way through the regular season, mirroring the
+# real early-February deadline; scales automatically across season presets.
+TRADE_DEADLINE_FRACTION = 0.66
+
 # ---------------------------------------------------------------------------
 # Game (match) structure
 # ---------------------------------------------------------------------------

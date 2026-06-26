@@ -117,7 +117,11 @@ round-trips with reproducible RNG.
 
 Implemented today: the **NBA franchise** experience, the **College** experience with both the
 **Scholarship** and **NIL** economies (chosen at game start), and the **college → NBA draft
-pipeline** connecting them.
+pipeline** connecting them. Recent additions: a **league-wide scouting board** (attributes for
+every player, sortable/filterable), a **trade block** that surfaces the aging veterans
+non-contenders are shopping, an **NBA trade deadline** (~⅔ through the season; waivers stay open
+after), **player attributes inside the trade screen**, and a polished **playoff bracket** in the
+web app with full regular-season → postseason progression.
 
 Still on the roadmap:
 
@@ -126,6 +130,28 @@ Still on the roadmap:
 - **Advanced NBA cap** rules (apron, sign-and-trade), two-way / G-League contracts.
 - **Deeper scouting**, awards / Hall of Fame / history, chemistry and momentum, coaching staff.
 - A richer **NIL marketplace** (negotiated endorsement packages, brand events).
+
+### Future work (not started)
+
+Trades & draft assets
+- **NBA draft-pick trading**, including future picks (pick swaps, protections).
+- **AI-initiated trade offers** (teams proactively shopping from their trade block, not just listing it).
+
+Coach mode — end-of-game situations (NBA & CBB)
+- **Intentional fouling** to get the ball back (defense trades FTs for possession).
+- **Foul up 3** so the defense can't attempt a tying three-pointer (resolve via an IQ-vs-IQ roll).
+- **Offensive / defensive lineup switches** between possessions.
+
+Play-by-play depth
+- Expand PBP to surface **missed shots, rebounds, turnovers, steals, violations**, etc.
+  (could be limited to end-game situations initially).
+
+NBA free agency — rounds
+- **Rounds of free agency**: pursue a primary target; if he signs elsewhere (better offer — possibly
+  a minigame), that tier of FAs comes off the board and you move to the next group.
+
+CBB recruiting — phases
+- **Phased recruiting** for both scholarship and NIL, so missing an initial target isn't one-and-done.
 
 ## Notes
 

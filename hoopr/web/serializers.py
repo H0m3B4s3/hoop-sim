@@ -19,7 +19,7 @@ from hoopr.models.player import Player
 from hoopr.models.team import Team, roster_players, team_salary
 from hoopr.models.world import World
 from hoopr.sim.boxscore import GameResult
-from hoopr.sim.season import game_date
+from hoopr.sim.season import game_date, regular_season_complete
 from hoopr.systems import cap
 
 
@@ -81,6 +81,7 @@ def world_summary(world: World) -> dict:
         "luxury_tax_line": world.luxury_tax_line,
         "teams": [team_brief(t) for t in sorted(world.team_list(), key=lambda t: t.full_name)],
         "conferences": world_conferences(world),
+        "regular_season_complete": regular_season_complete(world),
     }
     if team is not None:
         out["user_team"] = team_brief(team)
@@ -95,6 +96,12 @@ def world_summary(world: World) -> dict:
                 out["scholarship_limit"] = SCHOLARSHIP_LIMIT
         else:
             out["payroll"] = team_salary(team, world.players)
+    if world.mode == "nba":
+        from hoopr.systems import trades
+        deadline = trades.trade_deadline_day(world)
+        out["trade_deadline_day"] = deadline
+        out["trade_deadline_passed"] = trades.trade_deadline_passed(world)
+        out["days_to_deadline"] = max(0, deadline - world.day)
     return out
 
 
@@ -131,6 +138,29 @@ def player_row(world: World, p: Player, *, is_starter: bool = False) -> dict:
         "team_abbrev": (team.abbrev if team else "FA"),
         "team_color": (color_hex(team.color) if team else "#9aa0a6"),
     }
+
+
+def scouting_row(world: World, p: Player, *, on_block: bool = False) -> dict:
+    """A league-scouting row: the roster row plus composite ratings and a trade-block flag."""
+    row = player_row(world, p)
+    row["composites"] = {name: round(v) for name, v in all_composites(p.ratings).items()}
+    row["on_block"] = on_block
+    return row
+
+
+def scouting_view(world: World, *, include_fa: bool = True) -> dict:
+    """Every player in the league with attributes — the scouting board for trades/targets."""
+    from hoopr.systems import trades
+    rows: List[dict] = []
+    for team in world.team_list():
+        block = (set() if team.tid == world.user_team_id
+                 else set(trades.team_trade_block(world, team)))
+        for p in roster_players(team, world.players):
+            rows.append(scouting_row(world, p, on_block=p.pid in block))
+    if include_fa:
+        for p in world.free_agent_players():
+            rows.append(scouting_row(world, p))
+    return {"players": rows, "composite_order": list(COMPOSITES)}
 
 
 def roster_view(world: World, team: Team) -> dict:
