@@ -59,13 +59,13 @@ def _unique_jersey(rng: Rng, used: set) -> int:
 
 def _build_roster(world: World, team: Team, names: NameGenerator) -> None:
     rng = world.rng
-    team_strength = rng.gauss(0.0, 3.5)
+    team_strength = rng.gauss(0.0, 2.8)
     used_jerseys: set = set()
     players: List[Player] = []
 
     for slot, base in enumerate(_ROSTER_CURVE):
         noise = rng.gauss(0.0, 2.5)
-        star_bonus = rng.uniform(-2.0, 8.0) if slot == 0 else 0.0
+        star_bonus = rng.uniform(-2.0, 6.0) if slot == 0 else 0.0
         target = int(max(50, min(95, round(base + team_strength + noise + star_bonus))))
         p = make_player(world.rng, world.new_pid(), names, target_overall=target)
         p.team_id = team.tid

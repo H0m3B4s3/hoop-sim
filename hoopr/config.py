@@ -36,7 +36,7 @@ OT_SECONDS = 5 * 60
 SHOT_CLOCK = 24
 # Average seconds a possession consumes at a neutral pace; pace tactic scales this.
 BASE_SECONDS_PER_POSSESSION = 14.5
-HOME_COURT_BONUS = 0.020          # added to home team's effective shooting/edge
+HOME_COURT_BONUS = 0.014          # added to home team's effective shooting/edge
 
 # ---------------------------------------------------------------------------
 # Ratings
