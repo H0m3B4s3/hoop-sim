@@ -93,6 +93,11 @@ def _build_recruits(world: World, names: NameGenerator) -> None:
         world.recruits.append(p.pid)
 
 
+def generate_recruit_class(world: World) -> None:
+    """Generate a fresh high-school recruit pool for the upcoming cycle."""
+    _build_recruits(world, NameGenerator(world.rng))
+
+
 def _build_background_nba(world: World, names: NameGenerator) -> None:
     for i, rec in enumerate(_load_team_records()):
         team = Team(
