@@ -16,10 +16,13 @@ from hoopr.sim import playoffs as P
 from hoopr.sim import season as S
 from hoopr.systems import offseason
 from hoopr.ui.console import ask_text, choose, clear, confirm, console, pause
+from hoopr.ui.screens.finances import show_finances
+from hoopr.ui.screens.free_agency import free_agent_screen
 from hoopr.ui.screens.game_day import present_result, result_one_liner
 from hoopr.ui.screens.roster import show_roster
 from hoopr.ui.screens.standings import show_standings
 from hoopr.ui.screens.tactics import edit_tactics
+from hoopr.ui.screens.trade import trade_screen
 from hoopr.ui.widgets import bracket_panel, header, money
 
 
@@ -165,6 +168,7 @@ def _regular_season_menu(world: World) -> Optional[str]:
         ("week", "📅  Simulate a week"),
         ("roster", "👥  Roster"),
         ("tactics", "📋  Tactics"),
+        ("front", "🏢  Front Office (trade · sign · finances)"),
         ("standings", "📊  Standings"),
         ("leaders", "🏀  League leaders"),
         ("save", "💾  Save game"),
@@ -180,6 +184,8 @@ def _regular_season_menu(world: World) -> Optional[str]:
         show_roster(world)
     elif action == "tactics":
         edit_tactics(world)
+    elif action == "front":
+        _front_office(world)
     elif action == "standings":
         show_standings(world)
     elif action == "leaders":
@@ -191,6 +197,26 @@ def _regular_season_menu(world: World) -> Optional[str]:
             _save_menu(world)
         return "quit"
     return None
+
+
+def _front_office(world: World) -> None:
+    while True:
+        clear()
+        header(world)
+        action = choose("Front Office", [
+            ("trade", "🤝  Propose a trade"),
+            ("sign", "✍️   Sign a free agent"),
+            ("finances", "💰  Finances & contracts"),
+            ("back", "← Back"),
+        ])
+        if action == "trade":
+            trade_screen(world)
+        elif action == "sign":
+            free_agent_screen(world)
+        elif action == "finances":
+            show_finances(world)
+        else:
+            return
 
 
 def _play_user_game(world: World, watch: bool) -> None:
