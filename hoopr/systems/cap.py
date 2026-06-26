@@ -122,6 +122,7 @@ def extend_contract(world: World, team: Team, pid: int, salary: int, add_years: 
     if not ok:
         return False, reason
     player = world.players[pid]
+    salary = max(VETERAN_MINIMUM, salary)        # a contract can't be below the minimum
     max_sal = max_salary(player.experience, world.salary_cap)
     if salary > max_sal:
         return False, f"Above the maximum salary ({max_sal // 1_000_000}M)."
