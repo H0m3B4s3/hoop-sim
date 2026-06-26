@@ -56,25 +56,32 @@ class _TeamState:
     def rebuild_cache(self) -> None:
         self.cache = build_lineup_cache(self.players_on_court())
 
-    def choose_lineup(self, game_secs: float) -> None:
+    def choose_lineup(self, game_secs: float, clutch: bool = False) -> None:
         candidates = [pid for pid in self.available if pid not in self.unavailable]
         if len(candidates) <= 5:
             self.on_court = list(candidates)
             self.rebuild_cache()
             return
 
-        def priority(pid: int) -> float:
-            remaining = max(0.0, self.target_secs[pid] - self.secs_played[pid])
-            foul_pen = 0.0
-            f = self.fouls[pid]
-            if f >= 5:
-                foul_pen = 5000
-            elif f >= 4:
-                foul_pen = 1800
-            elif f >= 3 and game_secs < 1440:
-                foul_pen = 600
-            starter_bonus = 250.0 if pid in self.team.starters else 0.0
-            return remaining - self.fatigue[pid] * 22.0 - foul_pen + starter_bonus
+        if clutch:
+            # Crunch time: ride your best closers regardless of how many minutes they've banked
+            # (best overall on the floor, lightly adjusted for exhaustion and foul trouble).
+            def priority(pid: int) -> float:
+                foul_pen = 4000.0 if self.fouls[pid] >= 5 else 0.0
+                return self.players[pid].overall * 10.0 - self.fatigue[pid] * 0.4 - foul_pen
+        else:
+            def priority(pid: int) -> float:
+                remaining = max(0.0, self.target_secs[pid] - self.secs_played[pid])
+                foul_pen = 0.0
+                f = self.fouls[pid]
+                if f >= 5:
+                    foul_pen = 5000
+                elif f >= 4:
+                    foul_pen = 1800
+                elif f >= 3 and game_secs < 1440:
+                    foul_pen = 600
+                starter_bonus = 250.0 if pid in self.team.starters else 0.0
+                return remaining - self.fatigue[pid] * 22.0 - foul_pen + starter_bonus
 
         candidates.sort(key=priority, reverse=True)
         self.on_court = candidates[:5]
@@ -109,6 +116,7 @@ class GameSim:
         self.clock = self.period_seconds
         self.game_secs = 0.0
         self._next_sub = SUB_INTERVAL
+        self._prev_crunch = False
 
     # -- public -------------------------------------------------------------
     def play(self) -> GameResult:
@@ -140,22 +148,32 @@ class GameSim:
         self.clock = length
         period_home = self.result.home_score
         period_away = self.result.away_score
-        self.home.choose_lineup(self.game_secs)
-        self.away.choose_lineup(self.game_secs)
+        crunch = self._is_crunch()
+        self.home.choose_lineup(self.game_secs, clutch=crunch)
+        self.away.choose_lineup(self.game_secs, clutch=crunch)
 
         while self.clock > 0:
-            poss_secs = self._possession_seconds(offense, defense)
+            intentional = self._should_intentional_foul(offense, defense)
+            if intentional:
+                poss_secs = self.rng.uniform(2.5, 5.0)
+            else:
+                poss_secs = self._possession_seconds(offense, defense)
             if poss_secs > self.clock:
                 poss_secs = self.clock
             self.clock -= poss_secs
             self.game_secs += poss_secs
 
-            if self.game_secs >= self._next_sub:
-                self.home.choose_lineup(self.game_secs)
-                self.away.choose_lineup(self.game_secs)
-                self._next_sub += SUB_INTERVAL
+            crunch = self._is_crunch()
+            if self.game_secs >= self._next_sub or crunch != self._prev_crunch:
+                self.home.choose_lineup(self.game_secs, clutch=crunch)
+                self.away.choose_lineup(self.game_secs, clutch=crunch)
+                self._next_sub = self.game_secs + SUB_INTERVAL
+                self._prev_crunch = crunch
 
-            self._resolve_possession(offense, defense)
+            if intentional:
+                self._intentional_foul(offense, defense)
+            else:
+                self._resolve_possession(offense, defense)
             self._apply_fatigue(poss_secs)
             self._injury_check(offense)
             self._injury_check(defense)
@@ -164,6 +182,37 @@ class GameSim:
         self.result.line_score.append(
             (self.result.home_score - period_home, self.result.away_score - period_away))
         return offense, defense
+
+    def _is_crunch(self) -> bool:
+        """Final period / OT, close game, under three minutes — ride your best lineup."""
+        if self.quarter < self.periods:
+            return False
+        return self.clock <= 180 and abs(self.result.home_score - self.result.away_score) <= 8
+
+    def _should_intentional_foul(self, offense: _TeamState, defense: _TeamState) -> bool:
+        """The defense (trailing late) fouls to stop the clock and get the ball back."""
+        if self.quarter < self.periods or not (3.0 < self.clock <= 35.0):
+            return False
+        off_score = self.result.home_score if offense.is_home else self.result.away_score
+        def_score = self.result.away_score if offense.is_home else self.result.home_score
+        lead = off_score - def_score          # offense has the ball; defense trails if lead > 0
+        return 1 <= lead <= 9 and self.rng.chance(0.85)
+
+    def _intentional_foul(self, offense: _TeamState, defense: _TeamState) -> None:
+        oc, dc = offense.cache, defense.cache
+        if not oc.players or not dc.players:
+            return
+        self._commit_foul(defense, dc)
+        shooter = oc.players[_weighted_index(self.rng, oc.usage)]
+        made, last_made = self._shoot_fts(shooter, 2)
+        self._score(offense, defense, made)
+        self._log(offense.team.tid,
+                  f"{shooter.short_name} sent to the line on a foul, {made}/2 FT")
+        if not last_made:                      # missed the last FT -> live rebound
+            if self.rng.chance(self._oreb_prob(offense, defense, oc, dc)):
+                self._credit_rebound(offense, oc, offensive=True)
+            else:
+                self._credit_rebound(defense, dc, offensive=False)
 
     def _possession_seconds(self, offense: _TeamState, defense: _TeamState) -> float:
         pf = (R.PACE_FACTOR[offense.team.tactics.pace]
@@ -376,7 +425,7 @@ class GameSim:
         if deff.fouls[fouler.pid] >= FOUL_OUT:
             deff.unavailable.add(fouler.pid)
             if fouler.pid in deff.on_court:
-                deff.choose_lineup(self.game_secs)
+                deff.choose_lineup(self.game_secs, clutch=self._is_crunch())
             self._log(deff.team.tid, f"{fouler.short_name} fouls out")
         return fouler
 
@@ -429,7 +478,7 @@ class GameSim:
                 games, severity = self._injury_severity()
                 self.result.injuries.append((pid, games, "in-game injury", severity))
                 state.unavailable.add(pid)
-                state.choose_lineup(self.game_secs)
+                state.choose_lineup(self.game_secs, clutch=self._is_crunch())
                 self._log(state.team.tid, f"{p.short_name} is injured and leaves the game")
 
     def _injury_severity(self):
