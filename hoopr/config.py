@@ -84,7 +84,9 @@ RETIREMENT_AGE = 38
 # ---------------------------------------------------------------------------
 # Base per-game probability a given rotation player suffers an injury, before durability.
 BASE_INJURY_RATE = 0.012
-IN_GAME_INJURY_RATE = 0.004
+# Per on-court-player, per-possession injury chance. A full-game player faces ~200 checks,
+# so this is deliberately tiny (~1.5% chance of an in-game injury across a full game).
+IN_GAME_INJURY_RATE = 0.00008
 
 # ---------------------------------------------------------------------------
 # Calendar
