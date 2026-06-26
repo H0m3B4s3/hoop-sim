@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from typing import Tuple
 
-from hoopr.config import (LUXURY_TAX_LINE, LUXURY_TAX_RATE, MAX_SALARY_TIERS, MID_LEVEL_EXCEPTION,
-                          ROSTER_MAX, SALARY_CAP, TRADE_MATCH_BUFFER, TRADE_MATCH_FACTOR,
-                          VETERAN_MINIMUM)
+from hoopr.config import (LUXURY_TAX_RATE, MAX_CONTRACT_YEARS, MAX_SALARY_TIERS,
+                          MID_LEVEL_EXCEPTION, ROSTER_MAX, SALARY_CAP, TRADE_MATCH_BUFFER,
+                          TRADE_MATCH_FACTOR, VETERAN_MINIMUM)
 from hoopr.models.player import Player
 from hoopr.models.team import Team, team_salary
 from hoopr.models.world import World
@@ -20,24 +20,24 @@ def payroll(world: World, team: Team) -> int:
 
 
 def cap_space(world: World, team: Team) -> int:
-    return max(0, SALARY_CAP - payroll(world, team))
+    return max(0, world.salary_cap - payroll(world, team))
 
 
 def over_cap(world: World, team: Team) -> bool:
-    return payroll(world, team) > SALARY_CAP
+    return payroll(world, team) > world.salary_cap
 
 
 def luxury_tax(world: World, team: Team) -> int:
-    over = payroll(world, team) - LUXURY_TAX_LINE
+    over = payroll(world, team) - world.luxury_tax_line
     return int(over * LUXURY_TAX_RATE) if over > 0 else 0
 
 
-def max_salary(experience: int) -> int:
+def max_salary(experience: int, cap: int = SALARY_CAP) -> int:
     fraction = MAX_SALARY_TIERS[0][1]
     for min_years, frac in MAX_SALARY_TIERS:
         if experience >= min_years:
             fraction = frac
-    return int(SALARY_CAP * fraction)
+    return int(cap * fraction)
 
 
 def base_salary_for(ovr: int) -> int:
@@ -97,6 +97,47 @@ def trade_matching_ok(space_before: int, outgoing: int, incoming: int) -> bool:
     allowance = max(space_before + outgoing,
                     int(outgoing * TRADE_MATCH_FACTOR) + TRADE_MATCH_BUFFER)
     return incoming <= allowance
+
+
+def can_extend(world: World, team: Team, pid: int) -> Tuple[bool, str]:
+    player = world.players.get(pid)
+    if player is None or pid not in team.roster:
+        return False, "Player is not on your roster."
+    if player.contract.years_remaining >= MAX_CONTRACT_YEARS:
+        return False, "Contract is already at the maximum length."
+    return True, "Eligible to extend."
+
+
+def extension_offer(world: World, player) -> Tuple[int, int]:
+    """A reasonable (salary, added years) the team would offer to extend a player."""
+    salary = min(market_salary(player), max_salary(player.experience, world.salary_cap))
+    add_years = max(1, min(MAX_CONTRACT_YEARS - player.contract.years_remaining, 4))
+    return salary, add_years
+
+
+def extend_contract(world: World, team: Team, pid: int, salary: int, add_years: int
+                    ) -> Tuple[bool, str]:
+    """Re-sign / extend an own player (Bird rights — allowed over the cap)."""
+    ok, reason = can_extend(world, team, pid)
+    if not ok:
+        return False, reason
+    player = world.players[pid]
+    max_sal = max_salary(player.experience, world.salary_cap)
+    if salary > max_sal:
+        return False, f"Above the maximum salary ({max_sal // 1_000_000}M)."
+    add_years = min(add_years, MAX_CONTRACT_YEARS - player.contract.years_remaining)
+    if add_years <= 0:
+        return False, "No additional years available."
+    player.contract.salaries.extend([salary] * add_years)
+    player.contract.guaranteed.extend([True] * add_years)
+    return True, f"Extended {add_years} year(s) at {salary // 1_000_000}M."
+
+
+def grow_cap(world: World, rate: float) -> None:
+    """Grow the live cap, tax line, and apron by ``rate`` (called each NBA offseason)."""
+    world.salary_cap = int(world.salary_cap * (1 + rate))
+    world.luxury_tax_line = int(world.luxury_tax_line * (1 + rate))
+    world.first_apron = int(world.first_apron * (1 + rate))
 
 
 def can_sign(world: World, team: Team, salary: int) -> Tuple[bool, str]:

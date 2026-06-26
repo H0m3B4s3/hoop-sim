@@ -69,6 +69,9 @@ POTENTIAL_FLOOR = 40
 SALARY_CAP = 140_000_000
 LUXURY_TAX_LINE = 170_000_000
 FIRST_APRON = 178_000_000
+# The cap (and the tax/apron lines that track it) grow this fraction every NBA offseason as
+# league revenue rises.
+CAP_GROWTH_RATE = 0.035
 MIN_TEAM_SALARY = int(SALARY_CAP * 0.90)
 VETERAN_MINIMUM = 2_000_000
 MID_LEVEL_EXCEPTION = 12_800_000

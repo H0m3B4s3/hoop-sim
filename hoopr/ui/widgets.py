@@ -8,7 +8,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from hoopr.config import LUXURY_TAX_LINE, SALARY_CAP, SCHOLARSHIP_LIMIT
+from hoopr.config import SCHOLARSHIP_LIMIT
 from hoopr.models.league import Phase, conference_standings
 from hoopr.models.player import Player
 from hoopr.models.team import Team, roster_players, team_salary
@@ -51,9 +51,9 @@ def header(world: World) -> None:
         bits.append(Text(f"  Prestige {'★' * team.prestige}", style="star"))
     else:
         payroll = team_salary(team, world.players)
-        cap_style = "money" if payroll <= SALARY_CAP else ("warn" if payroll <= LUXURY_TAX_LINE
-                                                           else "bad")
-        bits.append(Text(f"  Payroll {money(payroll)}/{money(SALARY_CAP)}", style=cap_style))
+        cap_style = ("money" if payroll <= world.salary_cap
+                     else "warn" if payroll <= world.luxury_tax_line else "bad")
+        bits.append(Text(f"  Payroll {money(payroll)}/{money(world.salary_cap)}", style=cap_style))
     line = Text()
     for b in bits:
         line.append_text(b)

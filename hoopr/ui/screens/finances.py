@@ -4,7 +4,6 @@ from __future__ import annotations
 from rich.panel import Panel
 from rich.table import Table
 
-from hoopr.config import LUXURY_TAX_LINE, SALARY_CAP
 from hoopr.models.team import roster_players
 from hoopr.models.world import World
 from hoopr.systems import cap
@@ -24,9 +23,9 @@ def show_finances(world: World) -> None:
     summary.add_column(style="label")
     summary.add_column(justify="right")
     summary.add_row("Payroll", money(payroll))
-    summary.add_row("Salary cap", money(SALARY_CAP))
+    summary.add_row("Salary cap", money(world.salary_cap))
     summary.add_row("Cap space", f"[good]{money(space)}[/good]" if space else "[dim]None[/dim]")
-    summary.add_row("Luxury tax line", money(LUXURY_TAX_LINE))
+    summary.add_row("Luxury tax line", money(world.luxury_tax_line))
     summary.add_row("Luxury tax owed", f"[bad]{money(tax)}[/bad]" if tax else "[dim]None[/dim]")
     summary.add_row("Owner budget", money(team.owner_budget))
     console.print(Panel(summary, title=f"[title]{team.full_name} — Finances[/title]",

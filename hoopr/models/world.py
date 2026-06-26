@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from hoopr.config import DEFAULT_COLLEGE_ECONOMY, SCHEMA_VERSION
+from hoopr.config import (DEFAULT_COLLEGE_ECONOMY, FIRST_APRON, LUXURY_TAX_LINE, SALARY_CAP,
+                          SCHEMA_VERSION)
 from hoopr.models.contract import Contract
 from hoopr.models.draft import DraftClass
 from hoopr.models.league import Game, Phase
@@ -33,6 +34,10 @@ class World:
 
         self.user_team_id: Optional[int] = None
         self.season_games: int = 82
+        # Live salary-cap values (grow each NBA offseason; start from config defaults).
+        self.salary_cap: int = SALARY_CAP
+        self.luxury_tax_line: int = LUXURY_TAX_LINE
+        self.first_apron: int = FIRST_APRON
         self.history: List[dict] = []                # champions / awards per finished season
 
         # Mode & the college layer. ``mode`` is the league the user controls; ``other_teams``
@@ -143,6 +148,9 @@ class World:
             "bracket": self.bracket,
             "user_team_id": self.user_team_id,
             "season_games": self.season_games,
+            "salary_cap": self.salary_cap,
+            "luxury_tax_line": self.luxury_tax_line,
+            "first_apron": self.first_apron,
             "mode": self.mode,
             "college_economy": self.college_economy,
             "other_teams": {str(t): team.to_dict() for t, team in self.other_teams.items()},
@@ -169,6 +177,9 @@ class World:
         w.bracket = d.get("bracket")
         w.user_team_id = d.get("user_team_id")
         w.season_games = d.get("season_games", 82)
+        w.salary_cap = d.get("salary_cap", SALARY_CAP)
+        w.luxury_tax_line = d.get("luxury_tax_line", LUXURY_TAX_LINE)
+        w.first_apron = d.get("first_apron", FIRST_APRON)
         w.mode = d.get("mode", "nba")
         w.college_economy = d.get("college_economy", DEFAULT_COLLEGE_ECONOMY)
         w.other_teams = {int(t): Team.from_dict(td) for t, td in d.get("other_teams", {}).items()}

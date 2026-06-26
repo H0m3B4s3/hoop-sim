@@ -88,6 +88,37 @@ def test_execute_trade_moves_players():
     assert pa not in a.roster and pb not in b.roster
 
 
+def test_cap_grows_each_offseason():
+    w = build_world(seed=12)
+    before = w.salary_cap
+    cap.grow_cap(w, 0.035)
+    assert w.salary_cap > before
+    assert w.luxury_tax_line > 170_000_000
+    # cap functions read the live value
+    team = w.teams[0]
+    assert cap.cap_space(w, team) == max(0, w.salary_cap - cap.payroll(w, team))
+
+
+def test_extend_contract():
+    w = build_world(seed=13)
+    team = w.teams[0]
+    pid = team.roster[0]
+    p = w.players[pid]
+    years_before = p.contract.years_remaining
+    ok, _ = cap.extend_contract(w, team, pid, cap.market_salary(p), 2)
+    assert ok
+    assert p.contract.years_remaining == years_before + 2
+    # cannot exceed the max contract length
+    from hoopr.config import MAX_CONTRACT_YEARS
+    p.contract.salaries = [10_000_000] * MAX_CONTRACT_YEARS
+    p.contract.guaranteed = [True] * MAX_CONTRACT_YEARS
+    ok2, _ = cap.extend_contract(w, team, pid, 10_000_000, 1)
+    assert not ok2
+    # cannot exceed the max salary
+    ok3, _ = cap.extend_contract(w, w.teams[1], w.teams[1].roster[0], 999_000_000, 1)
+    assert not ok3
+
+
 def test_free_agency_signs_players():
     w = build_world(seed=3)
     w.user_team_id = 0

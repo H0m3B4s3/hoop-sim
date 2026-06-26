@@ -254,6 +254,7 @@ def _front_office(world: World) -> None:
         action = choose("Front Office", [
             ("trade", "🤝  Propose a trade"),
             ("sign", "✍️   Sign a free agent"),
+            ("extend", "📝  Re-sign / extend a player"),
             ("finances", "💰  Finances & contracts"),
             ("back", "← Back"),
         ])
@@ -261,6 +262,9 @@ def _front_office(world: World) -> None:
             trade_screen(world)
         elif action == "sign":
             free_agent_screen(world)
+        elif action == "extend":
+            from hoopr.ui.screens.extend import extend_screen
+            extend_screen(world)
         elif action == "finances":
             show_finances(world)
         else:
