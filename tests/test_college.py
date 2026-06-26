@@ -17,6 +17,26 @@ def _college_world(seed=1, economy="scholarship", games=12):
     return w
 
 
+def test_college_games_are_two_halves():
+    import statistics as st
+    from hoopr.sim.engine import simulate_game
+    w = build_college_world(seed=10)
+    teams = list(w.teams.values())
+    scores = []
+    result = a = b = None
+    for _ in range(60):
+        a, b = w.rng.sample(teams, 2)
+        result = simulate_game(w, a, b)
+        scores += [result.home_score, result.away_score]
+    assert result.period_label == "half"
+    assert len(result.line_score) == 2 + result.overtimes   # two halves + any OT
+    # college scoring is markedly lower than the NBA (40-minute, slower-pace games)
+    assert 60 <= st.mean(scores) <= 88
+    # ~200 player-minutes (5 * 40) per team
+    minutes = sum(result.box[p].secs for p in a.roster if p in result.box) / 60
+    assert 195 <= minutes <= 205 + result.overtimes * 30
+
+
 def test_world_shape_and_toggle():
     w = build_college_world(seed=2, economy="nil")
     assert w.mode == "college"

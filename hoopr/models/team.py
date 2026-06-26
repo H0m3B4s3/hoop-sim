@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from hoopr.config import DEFAULT_OWNER_BUDGET, STARTERS
+from hoopr.config import DEFAULT_OWNER_BUDGET, STARTERS, game_minutes
 from hoopr.models.attributes import POSITIONS
 from hoopr.models.player import Player
 from hoopr.models.stats import StatLine
@@ -235,13 +235,16 @@ def set_auto_minutes(team: Team, players: Dict[int, Player]) -> None:
     rotation = pool[:10]
     weights = [max(1.0, p.overall - 55) ** 1.4 for p in rotation]
     total_w = sum(weights)
-    total_minutes = STARTERS * 48  # 240
+    minutes = game_minutes(team.league)            # 48 (NBA) or 40 (college)
+    total_minutes = STARTERS * minutes
+    starter_floor = minutes // 2
+    cap = minutes - 10
     targets: Dict[int, int] = {}
     for p, w in zip(rotation, weights):
         share = total_minutes * (w / total_w)
-        floor = 24 if p.pid in team.starters else 0
-        targets[p.pid] = int(max(floor, min(38, round(share))))
-    # Normalize so totals land near 240 (engine tolerates small drift).
+        floor = starter_floor if p.pid in team.starters else 0
+        targets[p.pid] = int(max(floor, min(cap, round(share))))
+    # Normalize so totals land near the game's player-minutes (engine tolerates small drift).
     drift = total_minutes - sum(targets.values())
     if rotation:
         # apply drift to the top player

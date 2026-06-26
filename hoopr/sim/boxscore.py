@@ -32,6 +32,7 @@ class GameResult:
     home_starters: List[int] = field(default_factory=list)
     away_starters: List[int] = field(default_factory=list)
     line_score: List[Tuple[int, int]] = field(default_factory=list)  # (home, away) per period
+    period_label: str = "quarter"                                  # "quarter" | "half"
     overtimes: int = 0
     pbp: List[PBPEvent] = field(default_factory=list)
     # In-game injuries to apply at the season layer: (pid, games, description, severity).

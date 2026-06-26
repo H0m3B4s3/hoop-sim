@@ -9,8 +9,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from hoopr.config import (BASE_SECONDS_PER_POSSESSION, HOME_COURT_BONUS, IN_GAME_INJURY_RATE,
-                          OT_SECONDS, QUARTER_SECONDS, QUARTERS)
+from hoopr.config import HOME_COURT_BONUS, IN_GAME_INJURY_RATE, OT_SECONDS, game_format
 from hoopr.models.player import Player
 from hoopr.models.team import Team
 from hoopr.sim import ratings as R
@@ -100,9 +99,14 @@ class GameSim:
         self.collect_pbp = collect_pbp
         self.home = _TeamState(world, home, is_home=True)
         self.away = _TeamState(world, away, is_home=False)
-        self.result = GameResult(home_tid=home.tid, away_tid=away.tid)
+        fmt = game_format(home.league)
+        self.periods = fmt["periods"]
+        self.period_seconds = fmt["period_seconds"]
+        self.base_poss_seconds = fmt["base_poss_seconds"]
+        self.result = GameResult(home_tid=home.tid, away_tid=away.tid,
+                                 period_label=fmt["label"])
         self.quarter = 1
-        self.clock = QUARTER_SECONDS
+        self.clock = self.period_seconds
         self.game_secs = 0.0
         self._next_sub = SUB_INTERVAL
 
@@ -119,9 +123,9 @@ class GameSim:
         self.result.away_starters = list(self.away.on_court)
 
         offense, defense = (self.home, self.away) if self.rng.chance(0.5) else (self.away, self.home)
-        for q in range(1, QUARTERS + 1):
+        for q in range(1, self.periods + 1):
             self.quarter = q
-            offense, defense = self._play_period(offense, defense, QUARTER_SECONDS)
+            offense, defense = self._play_period(offense, defense, self.period_seconds)
 
         while self.result.home_score == self.result.away_score:
             self.quarter += 1
@@ -164,13 +168,14 @@ class GameSim:
     def _possession_seconds(self, offense: _TeamState, defense: _TeamState) -> float:
         pf = (R.PACE_FACTOR[offense.team.tactics.pace]
               + R.PACE_FACTOR[defense.team.tactics.pace]) / 2.0
-        mean = BASE_SECONDS_PER_POSSESSION * pf
+        mean = self.base_poss_seconds * pf
         if self._is_clutch():
             mean *= 1.12
-        return max(3.0, min(24.0, self.rng.gauss(mean, 4.0)))
+        upper = self.base_poss_seconds + 12.0          # ~26.5s NBA, ~30s college
+        return max(3.0, min(upper, self.rng.gauss(mean, 4.0)))
 
     def _is_clutch(self) -> bool:
-        if self.quarter < QUARTERS:
+        if self.quarter < self.periods:
             return False
         margin = abs(self.result.home_score - self.result.away_score)
         return self.clock <= 300 and margin <= 6

@@ -164,12 +164,15 @@ def standings_table(world: World, conference: str) -> Table:
 # Box score & play-by-play
 # ---------------------------------------------------------------------------
 def line_score_panel(world: World, result: GameResult) -> Panel:
-    home, away = world.teams[result.home_tid], world.teams[result.away_tid]
+    home = world.find_team(result.home_tid)
+    away = world.find_team(result.away_tid)
     table = Table.grid(padding=(0, 1))
     periods = len(result.line_score)
+    is_half = result.period_label == "half"
+    reg, abbr = (2, "H") if is_half else (4, "Q")
     table.add_column("Team", justify="left")
     for i in range(periods):
-        table.add_column(f"Q{i+1}" if i < 4 else f"OT{i-3}", justify="right")
+        table.add_column(f"{abbr}{i+1}" if i < reg else f"OT{i-reg+1}", justify="right")
     table.add_column("Final", justify="right")
     away_row = [away.abbrev] + [str(ls[1]) for ls in result.line_score] + [str(result.away_score)]
     home_row = [home.abbrev] + [str(ls[0]) for ls in result.line_score] + [str(result.home_score)]
@@ -181,7 +184,7 @@ def line_score_panel(world: World, result: GameResult) -> Panel:
 
 
 def box_score_table(world: World, result: GameResult, tid: int) -> Table:
-    team = world.teams[tid]
+    team = world.find_team(tid)
     table = Table(title=f"{team.abbrev} Box", title_style="title", header_style="label")
     for col in ("Player", "MIN", "PTS", "REB", "AST", "STL", "BLK", "TO", "FG", "3P", "FT", "+/-"):
         table.add_column(col, justify="right" if col != "Player" else "left")
@@ -285,16 +288,20 @@ def college_bracket_panel(world: World) -> Panel:
 
 def play_by_play(world: World, result: GameResult, *, animate: bool = False,
                  delay: float = 0.0) -> None:
-    home, away = world.teams[result.home_tid], world.teams[result.away_tid]
+    home, away = world.find_team(result.home_tid), world.find_team(result.away_tid)
+    is_half = result.period_label == "half"
+    reg, abbr = (2, "H") if is_half else (4, "Q")
+    period_word = "Half" if is_half else "Quarter"
     last_q = 0
     for e in result.pbp:
         if e.quarter != last_q:
             last_q = e.quarter
-            label = f"Quarter {e.quarter}" if e.quarter <= 4 else f"Overtime {e.quarter - 4}"
+            label = (f"{period_word} {e.quarter}" if e.quarter <= reg
+                     else f"Overtime {e.quarter - reg}")
             console.rule(f"[accent]{label}[/accent]", style="muted")
-        team = world.teams[e.tid] if e.tid is not None else None
+        team = world.find_team(e.tid) if e.tid is not None else None
         tag = f"[{team.color}]{team.abbrev}[/]" if team else "   "
         score = f"[dim]{away.abbrev} {e.away_score}-{e.home_score} {home.abbrev}[/dim]"
-        console.print(f"  [dim]Q{e.quarter} {e.clock}[/dim]  {tag}  {e.text}   {score}")
+        console.print(f"  [dim]{abbr}{e.quarter} {e.clock}[/dim]  {tag}  {e.text}   {score}")
         if animate and delay:
             time.sleep(delay)

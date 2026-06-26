@@ -34,6 +34,24 @@ QUARTERS = 4
 QUARTER_SECONDS = 12 * 60
 OT_SECONDS = 5 * 60
 SHOT_CLOCK = 24
+
+# Per-league game format: NBA plays 4x12-minute quarters; college plays 2x20-minute halves and
+# at a slower pace (30-second shot clock), so possessions run longer.
+GAME_FORMATS = {
+    "nba": {"periods": 4, "period_seconds": 12 * 60, "label": "quarter", "abbr": "Q",
+            "base_poss_seconds": 14.5},
+    "college": {"periods": 2, "period_seconds": 20 * 60, "label": "half", "abbr": "H",
+                "base_poss_seconds": 18.0},
+}
+
+
+def game_format(league: str) -> dict:
+    return GAME_FORMATS.get(league, GAME_FORMATS["nba"])
+
+
+def game_minutes(league: str) -> int:
+    fmt = game_format(league)
+    return fmt["periods"] * fmt["period_seconds"] // 60
 # Average seconds a possession consumes at a neutral pace; pace tactic scales this.
 BASE_SECONDS_PER_POSSESSION = 14.5
 HOME_COURT_BONUS = 0.014          # added to home team's effective shooting/edge
