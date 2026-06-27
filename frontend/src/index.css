@@ -673,6 +673,39 @@ table.dt tr.clickable:hover td {
   margin-left: auto;
   font-weight: 700;
 }
+/* ---- college bracket --------------------------------------------------- */
+.bracketTree {
+  margin-bottom: 12px;
+}
+.bracketTree > .roundName {
+  text-align: left;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.confTourneys {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 12px;
+}
+.bracketTree.compact {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+}
+.bracketTree.compact .bracketCol {
+  min-width: 96px;
+}
+.bracketTree.compact .seriesCard {
+  background: var(--panel);
+}
+.bracketTree.mine {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
 
 /* ---- pill -------------------------------------------------------------- */
 .pill {

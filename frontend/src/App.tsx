@@ -2033,7 +2033,8 @@ function PlayoffsPanel({
   };
   if (!data) return <Loading />;
   const bracket = data.bracket;
-  const hasBracket = bracket && (bracket.all_series?.length || bracket.seeds);
+  const isCollege = bracket?.type === "college";
+  const hasBracket = bracket && (isCollege ? bracket.conf : bracket.all_series?.length || bracket.seeds);
   return (
     <div className="card">
       <div className="toolbar">
@@ -2059,12 +2060,21 @@ function PlayoffsPanel({
       )}
       {game && <BoxScore result={game} onClose={() => setGame(null)} />}
       {hasBracket ? (
-        <Bracket
-          bracket={bracket}
-          teams={summary.teams}
-          userTid={summary.user_team_id}
-          champion={data.champion ?? bracket.champion}
-        />
+        isCollege ? (
+          <CollegeBracket
+            bracket={bracket}
+            teams={summary.teams}
+            userTid={summary.user_team_id}
+            champion={data.champion ?? bracket.champion}
+          />
+        ) : (
+          <Bracket
+            bracket={bracket}
+            teams={summary.teams}
+            userTid={summary.user_team_id}
+            champion={data.champion ?? bracket.champion}
+          />
+        )
       ) : (
         <p className="muted">The bracket will appear once the postseason begins.</p>
       )}
@@ -2164,6 +2174,169 @@ function SeriesCard({
     <div className={`seriesCard${active ? " active" : ""}`}>
       {row(s.hi, s.hi_w)}
       {row(s.lo, s.lo_w)}
+    </div>
+  );
+}
+
+// College postseason: single-elim conference tournaments, then a 64-team national tournament.
+// Round names are inferred from how many matches a round holds.
+const COLLEGE_NATIONAL_ROUNDS: Record<number, string> = {
+  32: "Round of 64",
+  16: "Round of 32",
+  8: "Sweet 16",
+  4: "Elite Eight",
+  2: "Final Four",
+  1: "Championship",
+};
+const COLLEGE_CONF_ROUNDS: Record<number, string> = {
+  4: "Quarterfinals",
+  2: "Semifinals",
+  1: "Final",
+};
+
+function seededHas(b: any, tid: number | null): boolean {
+  return tid != null && b?.seeds && b.seeds[String(tid)] != null;
+}
+
+function CollegeBracket({
+  bracket,
+  teams,
+  userTid,
+  champion,
+}: {
+  bracket: any;
+  teams: TeamBrief[];
+  userTid: number | null;
+  champion: number | null;
+}) {
+  const teamText = useTeamText();
+  const byTid = new Map(teams.map((t) => [t.tid, t]));
+  const champTeam = champion != null ? byTid.get(champion) : undefined;
+  const national = bracket.national;
+  const confs: Record<string, any> = bracket.conf ?? {};
+  const userConf =
+    userTid != null ? Object.keys(confs).find((c) => seededHas(confs[c], userTid)) : undefined;
+
+  return (
+    <div>
+      {champTeam && (
+        <div className="champ">
+          🏆 <span style={{ color: teamText(champTeam.color) }}>{champTeam.full_name}</span> —
+          National Champions
+        </div>
+      )}
+      {national && (
+        <BracketTree
+          title="National Tournament"
+          b={national}
+          byTid={byTid}
+          userTid={userTid}
+          labels={COLLEGE_NATIONAL_ROUNDS}
+          active={bracket.stage === "national"}
+        />
+      )}
+      <h4 className="roundName" style={{ marginTop: 16 }}>
+        Conference Tournaments
+      </h4>
+      <div className="confTourneys">
+        {Object.entries(confs).map(([name, b]) => (
+          <BracketTree
+            key={name}
+            title={name}
+            b={b}
+            byTid={byTid}
+            userTid={userTid}
+            labels={COLLEGE_CONF_ROUNDS}
+            active={bracket.stage === "conf"}
+            highlight={name === userConf}
+            compact
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BracketTree({
+  title,
+  b,
+  byTid,
+  userTid,
+  labels,
+  active,
+  highlight,
+  compact,
+}: {
+  title: string;
+  b: any;
+  byTid: Map<number, TeamBrief>;
+  userTid: number | null;
+  labels: Record<number, string>;
+  active: boolean;
+  highlight?: boolean;
+  compact?: boolean;
+}) {
+  const rounds: any[][] = b.rounds ?? [];
+  const seedOf = (tid: number): number | undefined => {
+    const s = b.seeds?.[String(tid)];
+    return s != null ? Number(s) : undefined;
+  };
+  const activeIdx = rounds.findIndex((r) => r.some((m: any) => m.winner == null));
+  return (
+    <div className={`bracketTree${highlight ? " mine" : ""}${compact ? " compact" : ""}`}>
+      <h5 className="roundName">{title}</h5>
+      <div className="bracketCols">
+        {rounds.map((rnd, i) => (
+          <div className="bracketCol" key={i}>
+            <h5 className="roundName muted">{labels[rnd.length] ?? `Round ${i + 1}`}</h5>
+            {rnd.map((m: any, j: number) => (
+              <MatchCard
+                key={j}
+                m={m}
+                byTid={byTid}
+                seedOf={seedOf}
+                userTid={userTid}
+                active={active && i === activeIdx && m.winner == null}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MatchCard({
+  m,
+  byTid,
+  seedOf,
+  userTid,
+  active,
+}: {
+  m: any;
+  byTid: Map<number, TeamBrief>;
+  seedOf: (tid: number) => number | undefined;
+  userTid: number | null;
+  active: boolean;
+}) {
+  const row = (tid: number, score: number) => {
+    const t = byTid.get(tid);
+    const seed = seedOf(tid);
+    const isWinner = m.winner === tid;
+    const isUser = tid === userTid;
+    return (
+      <div className={`seedRow${isWinner ? " win" : ""}${isUser ? " mine" : ""}`}>
+        {seed != null && <span className="seed">{seed}</span>}
+        <span className="dot" style={{ background: t?.color }} />
+        <span className="abbr">{t?.abbrev ?? "—"}</span>
+        <span className="wins">{m.winner != null ? score : ""}</span>
+      </div>
+    );
+  };
+  return (
+    <div className={`seriesCard${active ? " active" : ""}`}>
+      {row(m.a, m.a_score)}
+      {row(m.b, m.b_score)}
     </div>
   );
 }

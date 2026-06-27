@@ -21,6 +21,7 @@ from hoopr.models.league import Game, Phase
 from hoopr.models.team import auto_set_lineup
 from hoopr.models.tactics import SETTINGS
 from hoopr.models.world import World
+from hoopr.sim import college_tourney as CT
 from hoopr.sim import playoffs as P
 from hoopr.sim import season as S
 from hoopr.sim.coach import Coach, CoachOrders
@@ -431,6 +432,9 @@ def advance_day(sid: str = Depends(_sid)):
 @app.get("/api/playoffs")
 def playoffs(sid: str = Depends(_sid)):
     world = _world(sid)
+    if world.mode == "college":
+        return {"bracket": world.bracket, "complete": CT.college_postseason_complete(world),
+                "champion": CT.national_champion(world)}
     return {"bracket": world.bracket, "complete": P.playoffs_complete(world),
             "champion": P.champion(world)}
 
@@ -438,7 +442,8 @@ def playoffs(sid: str = Depends(_sid)):
 @app.post("/api/playoffs/start")
 def playoffs_start(sid: str = Depends(_sid)):
     world = _world(sid)
-    log = P.start_playoffs(world)
+    log = CT.start_college_postseason(world) if world.mode == "college" \
+        else P.start_playoffs(world)
     SESSIONS.autosave(sid)
     return {"log": log, "bracket": world.bracket}
 
@@ -453,9 +458,24 @@ def _playoff_slate_out(world: World, results) -> dict:
                       for s, r in results]}
 
 
+def _college_slate_out(world: World, results) -> dict:
+    def _status(m) -> str:
+        a, b = world.find_team(m["a"]), world.find_team(m["b"])
+        return f"{a.abbrev} {m['a_score']}-{m['b_score']} {b.abbrev}"
+    return {"bracket": world.bracket, "complete": CT.college_postseason_complete(world),
+            "champion": CT.national_champion(world),
+            "slate": [{"status": _status(m),
+                       "away": world.find_team(r.away_tid).abbrev,
+                       "home": world.find_team(r.home_tid).abbrev,
+                       "away_score": r.away_score, "home_score": r.home_score}
+                      for m, r in results]}
+
+
 @app.post("/api/playoffs/advance")
 def playoffs_advance(watch: bool = False, sid: str = Depends(_sid)):
     world = _world(sid)
+    if world.mode == "college":
+        return _college_advance(world, sid, watch)
     if watch:
         series = P.user_series(world)
         if series is not None:
@@ -474,6 +494,31 @@ def playoffs_advance(watch: bool = False, sid: str = Depends(_sid)):
     results, user_result = P.advance_playoff_slate(world, watch_user=watch)
     SESSIONS.autosave(sid)
     out = _playoff_slate_out(world, results)
+    if watch and user_result is not None:
+        out["result"] = ser.game_result_view(world, user_result)
+    return out
+
+
+def _college_advance(world: World, sid: str, watch: bool) -> dict:
+    """College postseason advance: conference tournaments then the national tournament."""
+    if watch:
+        match = CT.user_match(world)
+        if match is not None:
+            # Play the rest of this round's slate, then coach the user's game live.
+            other = CT.play_nonuser_college_slate(world)
+            game = CT.start_user_college_game(world, match)
+
+            def finalize(w: World, result, _m=match, _game=game, _other=other) -> dict:
+                CT.finish_user_college_game(w, _m, _game, result)
+                out = _college_slate_out(w, list(_other))
+                out["summary"] = ser.world_summary(w)
+                return out
+
+            return _start_live_game(world, sid, game, finalize)
+
+    results, user_result = CT.advance_college_slate(world, watch_user=watch)
+    SESSIONS.autosave(sid)
+    out = _college_slate_out(world, results)
     if watch and user_result is not None:
         out["result"] = ser.game_result_view(world, user_result)
     return out
