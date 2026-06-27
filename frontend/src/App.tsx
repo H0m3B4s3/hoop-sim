@@ -313,15 +313,23 @@ function Hub({
           {tab === "playoffs" && (
             <PlayoffsPanel summary={summary} refresh={refresh} toast={toast} />
           )}
-          {tab === "offseason" && (
-            <OffseasonPanel
-              summary={summary}
-              refresh={refresh}
-              toast={toast}
-              onPlayer={setOpenPid}
-              userTid={summary.user_team_id}
-            />
-          )}
+          {tab === "offseason" &&
+            (summary.mode === "college" ? (
+              <CollegeOffseason
+                summary={summary}
+                refresh={refresh}
+                toast={toast}
+                onPlayer={setOpenPid}
+              />
+            ) : (
+              <OffseasonPanel
+                summary={summary}
+                refresh={refresh}
+                toast={toast}
+                onPlayer={setOpenPid}
+                userTid={summary.user_team_id}
+              />
+            ))}
         </main>
       </div>
       {openPid != null && (
@@ -2571,6 +2579,240 @@ function OffseasonFA({
         onChange={loadRoster}
       />
     </>
+  );
+}
+
+// College offseason: NBA draft pipeline (who declared & got drafted) → recruiting → next season.
+function CollegeOffseason({
+  summary,
+  refresh,
+  toast,
+  onPlayer,
+}: {
+  summary: Summary;
+  refresh: (s?: Summary) => void;
+  toast: (m: string) => void;
+  onPlayer: (pid: number) => void;
+}) {
+  const teamText = useTeamText();
+  const nil = summary.college_economy === "nil";
+  const [step, setStep] = useState<"intro" | "pipeline" | "recruiting" | "done">(() =>
+    summary.offseason_stage === "recruiting"
+      ? "recruiting"
+      : summary.offseason_stage === "pre_recruiting"
+        ? "intro"
+        : "done"
+  );
+  const [pipeline, setPipeline] = useState<any | null>(null);
+  const [board, setBoard] = useState<any | null>(null);
+  const [offers, setOffers] = useState<Record<number, number>>({});
+  const [busy, setBusy] = useState(false);
+
+  // Resuming straight into recruiting (e.g. tab switch): repopulate the board from the server.
+  useEffect(() => {
+    if (step === "recruiting" && !board) api.recruiting().then(setBoard).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const begin = async () => {
+    setBusy(true);
+    const r = await api.collegeBegin().catch((e) => toast(String(e)));
+    setBusy(false);
+    if (!r) return;
+    if (!r.resumed && r.summary)
+      toast(
+        `${r.summary.declared} declared · ${r.summary.drafted} drafted to the NBA · ` +
+          `${r.summary.graduated} graduated`
+      );
+    setPipeline(r.pipeline);
+    setBoard(r.recruiting);
+    refresh(); // persist the new stage so leaving/returning resumes correctly
+    setStep("pipeline");
+  };
+
+  const setOffer = (pid: number, val: number) =>
+    setOffers((o) => {
+      const next = { ...o };
+      if (val > 0) next[pid] = val;
+      else delete next[pid];
+      return next;
+    });
+
+  const sign = async () => {
+    setBusy(true);
+    const r = await api.recruitingSign(offers).catch((e) => toast(String(e)));
+    setBusy(false);
+    if (!r) return;
+    toast(
+      r.signed.length
+        ? `Signing Day: you signed ${r.signed.length} recruit(s)!`
+        : "Signing Day complete — you didn't land anyone this cycle."
+    );
+    refresh(r.summary);
+    setStep("done");
+  };
+
+  if (step === "intro")
+    return (
+      <div className="card">
+        <h3>Offseason</h3>
+        <p className="muted">
+          Players develop, seniors graduate, and underclassmen with NBA stock declare for the draft.
+          Then you recruit next year's class.
+        </p>
+        <button className="primary big" disabled={busy} onClick={begin}>
+          {busy ? "Running…" : "Begin offseason"}
+        </button>
+      </div>
+    );
+
+  if (step === "pipeline")
+    return (
+      <div className="card">
+        <h3>NBA Draft Pipeline</h3>
+        <p className="muted">{pipeline?.drafted ?? 0} declared players were drafted into the NBA.</p>
+        {pipeline?.mine?.length ? (
+          <>
+            <h4>Your players drafted</h4>
+            <table className="dt">
+              <thead>
+                <tr>
+                  <th>Pick</th>
+                  <th>Player</th>
+                  <th>NBA team</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pipeline.mine.map((r: any, i: number) => (
+                  <tr key={i}>
+                    <td>#{r.pick}</td>
+                    <td>{r.name}</td>
+                    <td style={{ color: teamText(r.nba_color) }}>{r.nba_abbrev}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        ) : (
+          <p className="muted">None of your players were drafted this year.</p>
+        )}
+        {pipeline?.top?.length ? (
+          <>
+            <h4>Top 10 picks</h4>
+            <table className="dt">
+              <thead>
+                <tr>
+                  <th>Pick</th>
+                  <th>Player</th>
+                  <th>From</th>
+                  <th>NBA team</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pipeline.top.map((r: any, i: number) => (
+                  <tr key={i}>
+                    <td>#{r.pick}</td>
+                    <td>{r.name}</td>
+                    <td className="muted">{r.college}</td>
+                    <td style={{ color: teamText(r.nba_color) }}>{r.nba_abbrev}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        ) : null}
+        <button className="primary" onClick={() => setStep("recruiting")}>
+          Continue to recruiting →
+        </button>
+      </div>
+    );
+
+  if (step === "recruiting") {
+    if (!board) return <Loading />;
+    const recruits: any[] = board.recruits ?? [];
+    const offeredCount = Object.keys(offers).length;
+    const totalNil = Object.values(offers).reduce((a, b) => a + b, 0);
+    const overBudget = nil && totalNil > (board.nil_available ?? 0);
+    return (
+      <div className="card">
+        <h3>Recruiting — Signing Day</h3>
+        {nil ? (
+          <p className={overBudget ? "deadline soon" : "muted"}>
+            NIL budget: {money(board.nil_available ?? 0)} available · offered {money(totalNil)} to{" "}
+            {offeredCount} recruit(s)
+          </p>
+        ) : (
+          <p className="muted">
+            Scholarships open: {board.scholarships_open ?? 0} · offered to {offeredCount} recruit(s).
+            Higher prestige + active interest wins recruiting battles.
+          </p>
+        )}
+        <div className="toolbar">
+          <button className="primary" disabled={busy} onClick={sign}>
+            {busy ? "Resolving…" : "📝 Signing Day → resolve & start next season"}
+          </button>
+        </div>
+        <table className="dt">
+          <thead>
+            <tr>
+              <th>Recruit</th>
+              <th>Pos</th>
+              <th>Stars</th>
+              <th>OVR</th>
+              <th>POT</th>
+              <th>Your offer</th>
+            </tr>
+          </thead>
+          <tbody>
+            {recruits.map((p) => (
+              <tr key={p.pid}>
+                <td>
+                  <span className="clickable" onClick={() => onPlayer(p.pid)}>
+                    {p.name}
+                  </span>
+                </td>
+                <td>
+                  {p.position}
+                  {p.secondary_position ? `/${p.secondary_position}` : ""}
+                </td>
+                <td>{"★".repeat(p.stars)}</td>
+                <td>{OVR(p.overall)}</td>
+                <td>{p.potential}</td>
+                <td>
+                  {nil ? (
+                    <input
+                      className="nilInput"
+                      type="number"
+                      min={0}
+                      step={50000}
+                      value={offers[p.pid] ?? ""}
+                      placeholder="$"
+                      onChange={(e) => setOffer(p.pid, Number(e.target.value) || 0)}
+                    />
+                  ) : (
+                    <button
+                      className={offers[p.pid] ? "mini active" : "mini"}
+                      onClick={() => setOffer(p.pid, offers[p.pid] ? 0 : 1)}
+                    >
+                      {offers[p.pid] ? "Offered ✓" : "Offer"}
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card">
+      <h3>New season underway!</h3>
+      <p className="muted">
+        Your {summary.season_year} recruiting class is in. Head to the Play tab to tip off.
+      </p>
+    </div>
   );
 }
 

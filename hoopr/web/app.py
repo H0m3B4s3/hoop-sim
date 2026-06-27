@@ -26,7 +26,8 @@ from hoopr.sim import playoffs as P
 from hoopr.sim import season as S
 from hoopr.sim.coach import Coach, CoachOrders
 from hoopr.sim.engine import GameSim
-from hoopr.systems import cap, draft_system as D, freeagency, offseason, trades
+from hoopr.systems import (cap, college_offseason as CO, collegefin, draft_system as D,
+                           freeagency, offseason, recruiting, trades)
 from hoopr.web import serializers as ser
 from hoopr.web.session import SESSIONS
 
@@ -123,6 +124,12 @@ class TacticBody(BaseModel):
 
 class DraftPickBody(BaseModel):
     pid: Optional[int] = None              # None -> best available
+
+
+class RecruitSignBody(BaseModel):
+    """College Signing Day: recruit pid -> NIL amount (NIL mode) or any truthy value
+    (scholarship mode means 'offer extended'). Keys arrive as strings over JSON."""
+    offers: Dict[int, int] = {}
 
 
 class CoachOrdersBody(BaseModel):
@@ -797,6 +804,87 @@ def offseason_finish(sid: str = Depends(_sid)):
     offseason.post_offseason(world)
     SESSIONS.autosave(sid)
     return ser.world_summary(world)
+
+
+# ---------------------------------------------------------------------------
+# College offseason: NBA draft pipeline + recruiting (mirrors ui.college_ui._run_offseason)
+# ---------------------------------------------------------------------------
+def _pipeline_view(world: World) -> dict:
+    """Which declared players got drafted into the background NBA, plus the user's own."""
+    team = world.user_team
+    results = (world.pipeline or {}).get("results", [])
+
+    def row(r: dict) -> dict:
+        nba = world.find_team(r["tid"])
+        return {"pick": r["pick"], "name": r["name"], "college": r["college"],
+                "nba_abbrev": nba.abbrev if nba else "?",
+                "nba_color": ser.color_hex(nba.color) if nba else "#9aa0a6"}
+
+    mine = [row(r) for r in results if team is not None and r["college"] == team.full_name]
+    return {"drafted": len(results), "mine": mine, "top": [row(r) for r in results[:10]]}
+
+
+def _recruiting_view(world: World) -> dict:
+    """The recruiting board: unsigned prospects + the user's budget/scholarship state."""
+    from hoopr.gen.collegegen import star_rating
+    team = world.user_team
+    recruits = sorted(world.recruit_players(), key=lambda p: p.scouted_potential(), reverse=True)
+    rows = [{"pid": p.pid, "name": p.name, "position": p.position,
+             "secondary_position": p.secondary_position, "stars": star_rating(p),
+             "overall": p.overall, "potential": p.scouted_potential()} for p in recruits]
+    out: dict = {"economy": world.college_economy, "recruits": rows}
+    if team is not None:
+        if world.college_economy == "nil":
+            out["nil_budget"] = team.nil_budget
+            out["nil_available"] = collegefin.nil_available(world, team)
+        else:
+            out["scholarships_open"] = collegefin.scholarships_open(team)
+    return out
+
+
+@app.post("/api/offseason/college/begin")
+def college_offseason_begin(sid: str = Depends(_sid)):
+    """Develop, run eligibility (declare/return/graduate) + the NBA draft pipeline, and open
+    recruiting. Idempotent: re-entering after it's begun this year just resumes (no double-aging)."""
+    world = _world(sid)
+    if world.mode != "college" or world.phase != Phase.DRAFT:
+        raise HTTPException(status_code=409, detail="The college offseason is not active.")
+    champ = CT.national_champion(world)
+    begun = world.pipeline is not None and world.pipeline.get("year") == world.season_year
+    if begun:
+        return {"resumed": True, "champion": champ, "pipeline": _pipeline_view(world),
+                "recruiting": _recruiting_view(world)}
+    summary = CO.pre_recruiting(world, champ)
+    SESSIONS.autosave(sid)
+    return {"resumed": False, "summary": summary, "champion": champ,
+            "pipeline": _pipeline_view(world), "recruiting": _recruiting_view(world)}
+
+
+@app.get("/api/recruiting")
+def recruiting_board(sid: str = Depends(_sid)):
+    world = _world(sid)
+    if world.mode != "college":
+        raise HTTPException(status_code=409, detail="Recruiting is college-only.")
+    return _recruiting_view(world)
+
+
+@app.post("/api/recruiting/sign")
+def recruiting_sign(body: RecruitSignBody, sid: str = Depends(_sid)):
+    """Signing Day: resolve the user's offers against AI programs, then roll into next season."""
+    world = _world(sid)
+    if world.mode != "college" or world.phase != Phase.DRAFT:
+        raise HTTPException(status_code=409, detail="Recruiting is not active.")
+    if world.college_economy == "nil":
+        offers: Dict[int, object] = {pid: int(amt) for pid, amt in body.offers.items()
+                                     if amt and int(amt) > 0}
+    else:
+        offers = {pid: True for pid in body.offers}
+    result = recruiting.resolve_recruiting(world, offers)
+    CO.post_recruiting(world)               # fill rosters, season_year += 1, start next season
+    SESSIONS.autosave(sid)
+    signed = [ser.player_row(world, world.players[pid]) for pid in result["user_signings"]
+              if pid in world.players]
+    return {"signed": signed, "total": result["total"], "summary": ser.world_summary(world)}
 
 
 # ---------------------------------------------------------------------------

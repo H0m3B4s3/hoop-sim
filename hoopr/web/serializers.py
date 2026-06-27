@@ -68,9 +68,17 @@ def world_conferences(world: World) -> List[str]:
 def _offseason_stage(world: World):
     """Where the resumable offseason wizard is, derived from authoritative world state.
 
-    ``pre_draft`` (offseason not yet begun) → ``draft`` (class generated, picking) →
+    NBA: ``pre_draft`` (offseason not yet begun) → ``draft`` (class generated, picking) →
     ``free_agency`` (draft done, signing) → ``None`` (season running).
+    College: ``pre_recruiting`` (offseason not yet begun) → ``recruiting`` (eligibility + NBA
+    pipeline done, signing recruits) → ``None`` (season running).
     """
+    if world.mode == "college":
+        if world.phase == Phase.DRAFT:
+            # pre_recruiting runs the NBA draft pipeline, stamping this year on world.pipeline.
+            begun = world.pipeline is not None and world.pipeline.get("year") == world.season_year
+            return "recruiting" if begun else "pre_recruiting"
+        return None
     if world.phase == Phase.DRAFT:
         return "draft" if world.draft_class is not None else "pre_draft"
     if world.phase == Phase.FREE_AGENCY:

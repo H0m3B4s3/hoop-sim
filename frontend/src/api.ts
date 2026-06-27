@@ -119,6 +119,11 @@ export const api = {
   draftPick: (pid: number | null) => post<any>("/draft/pick", { pid }),
   runFA: () => post<any>("/offseason/run-fa"),
   finishOffseason: () => post<Summary>("/offseason/finish"),
+
+  collegeBegin: () => post<any>("/offseason/college/begin"),
+  recruiting: () => get<any>("/recruiting"),
+  recruitingSign: (offers: Record<number, number>) =>
+    post<any>("/recruiting/sign", { offers }),
 };
 
 export const money = (v?: number) =>

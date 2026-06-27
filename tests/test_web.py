@@ -276,6 +276,87 @@ def test_api_history_after_a_season():
     assert mvp["name"] and "team_color" in mvp
 
 
+def test_api_college_postseason_crowns_champion():
+    """College worlds drive conference tournaments then a national tournament on the web.
+
+    Regression: the web playoff endpoints used to route everything through the NBA bracket,
+    which crashed with IndexError on a college world (8 conferences, no 6/4 play-in).
+    """
+    from hoopr.sim import season as S
+    from hoopr.web.session import SESSIONS
+    client = TestClient(app)
+    state = client.post("/api/career/new",
+                        json={"league": "college", "economy": "nil", "seed": 7}).json()
+    assert state["summary"]["mode"] == "college"
+    tid = state["summary"]["teams"][0]["tid"]
+    client.post(f"/api/career/team/{tid}")
+    world = SESSIONS.require(client.cookies.get("hoopr_sid"))
+
+    # Fast-forward the regular season directly, then drive the postseason through the API.
+    while not S.regular_season_complete(world):
+        S.advance_one_day(world)
+
+    start = client.post("/api/playoffs/start").json()
+    assert start["bracket"]["type"] == "college"
+    assert start["bracket"]["stage"] == "conf"
+    assert "all_series" not in start["bracket"]      # not the NBA series bracket
+
+    # Advance slates until a national champion is crowned.
+    for _ in range(60):
+        if client.get("/api/playoffs").json()["complete"]:
+            break
+        client.post("/api/playoffs/advance", params={"watch": False})
+    else:
+        raise AssertionError("college postseason did not complete")
+
+    final = client.get("/api/playoffs").json()
+    assert final["complete"] is True
+    champ = final["champion"]
+    assert champ is not None and world.find_team(champ) is not None
+    assert final["bracket"]["national"]["champion"] == champ
+
+
+def test_api_college_offseason_advances_to_next_season():
+    """College offseason on the web: NBA draft pipeline → recruiting → next season."""
+    from hoopr.sim import season as S
+    from hoopr.web.session import SESSIONS
+    client = TestClient(app)
+    state = client.post("/api/career/new",
+                        json={"league": "college", "economy": "nil", "seed": 11}).json()
+    tid = state["summary"]["teams"][0]["tid"]
+    client.post(f"/api/career/team/{tid}")
+    world = SESSIONS.require(client.cookies.get("hoopr_sid"))
+    year0 = world.season_year
+
+    while not S.regular_season_complete(world):
+        S.advance_one_day(world)
+    client.post("/api/playoffs/start")
+    for _ in range(60):
+        if client.get("/api/playoffs").json()["complete"]:
+            break
+        client.post("/api/playoffs/advance", params={"watch": False})
+
+    assert client.get("/api/state").json()["summary"]["offseason_stage"] == "pre_recruiting"
+
+    begin = client.post("/api/offseason/college/begin").json()
+    assert begin["resumed"] is False
+    assert "declared" in begin["summary"] and "drafted" in begin["summary"]
+    assert client.get("/api/state").json()["summary"]["offseason_stage"] == "recruiting"
+
+    # Re-entering (e.g. a tab refresh) must not re-run eligibility/aging.
+    assert client.post("/api/offseason/college/begin").json()["resumed"] is True
+
+    board = client.get("/api/recruiting").json()
+    assert board["recruits"] and "nil_available" in board
+
+    top = board["recruits"][0]["pid"]
+    sign = client.post("/api/recruiting/sign", json={"offers": {str(top): 1_500_000}}).json()
+    assert "signed" in sign and sign["total"] > 0           # recruiting resolved league-wide
+    assert world.season_year == year0 + 1                   # rolled into the next season
+    assert sign["summary"]["phase"] == "regular_season"
+    assert client.get("/api/state").json()["summary"]["offseason_stage"] is None
+
+
 def test_api_drives_a_short_game_loop():
     client = TestClient(app)
     assert client.get("/api/state").json()["active"] is False
