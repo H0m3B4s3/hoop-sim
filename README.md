@@ -63,8 +63,8 @@ late-game intentional fouling**.
   or quick-sim. Every game produces a full, reconciled box score.
 - **Coach the finish live** — when you watch your own game, take the bench over in crunch time:
   substitutions, timeouts (a tracked resource), tempo (run / bleed clock / hold for the last shot /
-  quick 3), and deliberate fouling — possession by possession. Available in the terminal (NBA &
-  college, regular season + postseason) and the web app (regular season + NBA playoffs).
+  quick 3), and deliberate fouling — possession by possession. Available in the terminal and the
+  web app alike (NBA & college, regular season + postseason).
 - **Run a season** — an 82-game (or Quick 30-game) schedule, live standings with tiebreakers,
   play-in tournament, and a best-of-7 playoff bracket through to a champion.
 - **Work the front office** — propose cap-legal trades (with an AI that values players by
@@ -99,13 +99,16 @@ hoopr/
                      #   + college: recruiting, collegefin (scholarship/NIL), college_offseason
   save/              # JSON serialization (schema-versioned) + save slots
   ui/                # rich terminal UI: console, theme, widgets, screens, college_ui
+  web/               # FastAPI app + serializers — drives the same engine over HTTP
   data/              # team, college, and name pools (JSON)
-tests/               # pytest suite (engine, season, cap/trades, draft, save…)
+frontend/            # React/TypeScript SPA, built into hoopr/web/static
+tools/               # dev scripts (gen_names.py regenerates data/names.json)
+tests/               # pytest suite (engine, season, cap/trades, draft, save, web…)
 ```
 
-**Design principle:** strict layering — `models` (data) ← `sim`/`systems` (logic) ← `ui`
-(rendering). Game logic never imports `rich`; the UI never holds game logic. This keeps the core
-testable and a future web UI a drop-in front-end.
+**Design principle:** strict layering — `models` (data) ← `sim`/`systems` (logic) ← `ui`/`web`
+(rendering). Game logic never imports `rich`; the UI never holds game logic. This kept the core
+testable and let the web UI drop in as a second front-end over the same resumable engine.
 
 ## Running the tests
 
@@ -139,12 +142,18 @@ a week, and clear at the deadline), and **end-of-season awards & league history*
 Year, Defensive POY, Most Improved, All-League first/second/third teams, and statistical leaders —
 crowned each offseason and browsable in a History tab alongside past champions).
 
-The newest addition is **live crunch-time coaching**: when you watch your own game you can take the
-bench over possession-by-possession in the closing window — substitutions, timeouts (now a tracked
-resource), tempo (run / bleed clock / hold for the last shot / quick 3), and deliberate fouling. The
-game engine is a resumable generator, so the terminal blocks on your input while the web app drives
-the very same simulation across HTTP requests; it runs in the terminal (NBA & college, regular
-season + postseason) and the web app (regular season + NBA playoffs).
+The web app now runs a **full college career** end to end — regular season, single-elim conference
+and national tournaments (with live coaching), and the offseason: the NBA draft pipeline (your
+declared players drafted by the background NBA) and **recruiting** (NIL bidding or scholarship
+offers on a board, resolved on Signing Day) before rolling into the next season. NBA and college
+reach parity in the browser.
+
+**Live crunch-time coaching**: when you watch your own game you can take the bench over
+possession-by-possession in the closing window — substitutions, timeouts (a tracked resource),
+tempo (run / bleed clock / hold for the last shot / quick 3), and deliberate fouling. The game
+engine is a resumable generator, so the terminal blocks on your input while the web app drives the
+very same simulation across HTTP requests; it runs in the terminal and the web app alike (NBA &
+college, regular season + postseason).
 
 Still on the roadmap:
 
@@ -160,8 +169,8 @@ Trades & draft assets
 - **Pick protections & swaps** (conditional picks, top-N protections rolling to the next year).
 
 Coach mode — end-of-game situations (NBA & CBB)
-- **Interactive crunch-time coaching is now built** (terminal: NBA & college incl. postseason;
-  web: regular season + NBA playoffs). Remaining: the college tournament in the web app.
+- **Interactive crunch-time coaching is built** across the terminal and web app (NBA & college,
+  regular season + postseason — including the college tournament in the browser).
 
 NBA free agency — rounds
 - **Rounds of free agency**: pursue a primary target; if he signs elsewhere (better offer — possibly
