@@ -1,8 +1,7 @@
 """In-memory holder for the live game state behind the web API.
 
-HoopSim is a single-player local app, so we keep one active ``World`` per browser session
-(keyed by a cookie). Persistence still goes through ``hoopr.save.store`` exactly as the
-terminal app does — sessions are just the live, unsaved game in memory.
+Each browser session is identified by a persistent cookie (the sid). Saves are
+namespaced to that sid so users only see their own files.
 """
 from __future__ import annotations
 
@@ -39,21 +38,20 @@ class SessionStore:
         with self._lock:
             self._worlds.pop(sid, None)
 
-    # -- persistence (thin wrappers over hoopr.save.store) ------------------
+    # -- persistence (saves namespaced by sid) --------------------------------
     def save(self, sid: str, slot: str) -> str:
-        return store.save_game(self.require(sid), slot)
+        return store.save_game(self.require(sid), slot, uid=sid)
 
     def autosave(self, sid: str) -> None:
-        store.autosave(self.require(sid))
+        store.autosave(self.require(sid), uid=sid)
 
     def load(self, sid: str, slot: str) -> World:
-        world = store.load_game(slot)
+        world = store.load_game(slot, uid=sid)
         self.set(sid, world)
         return world
 
-    @staticmethod
-    def list_saves():
-        return store.list_saves()
+    def list_saves(self, sid: str):
+        return store.list_saves(uid=sid)
 
 
 SESSIONS = SessionStore()

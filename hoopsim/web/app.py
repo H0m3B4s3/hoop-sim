@@ -43,7 +43,7 @@ def _sid(response: Response, hoopsim_sid: Optional[str] = Cookie(default=None)) 
     """Ensure every request carries a session id, minting one on first contact."""
     sid = hoopsim_sid or SESSIONS.new_session()
     if hoopsim_sid is None:
-        response.set_cookie(_COOKIE, sid, httponly=True, samesite="lax")
+        response.set_cookie(_COOKIE, sid, httponly=True, samesite="lax", max_age=60 * 60 * 24 * 365)
     return sid
 
 
@@ -148,7 +148,7 @@ def state(sid: str = Depends(_sid)):
     world = SESSIONS.get(sid)
     if world is None:
         return {"active": False, "presets": list(SEASON_PRESETS.keys()),
-                "saves": SESSIONS.list_saves()}
+                "saves": SESSIONS.list_saves(sid)}
     return {"active": True, "needs_team": world.user_team_id is None,
             "summary": ser.world_summary(world)}
 
@@ -180,7 +180,7 @@ def career_team(tid: int, sid: str = Depends(_sid)):
 
 @app.get("/api/saves")
 def saves(sid: str = Depends(_sid)):
-    return {"saves": SESSIONS.list_saves()}
+    return {"saves": SESSIONS.list_saves(sid)}
 
 
 @app.post("/api/save")
