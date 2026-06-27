@@ -11,7 +11,7 @@ from typing import List, Optional, Tuple
 from hoopr.models.league import Game, Phase
 from hoopr.models.world import World
 from hoopr.sim.boxscore import GameResult
-from hoopr.sim.season import sim_one
+from hoopr.sim.season import _apply_result, sim_one
 
 NATIONAL_FIELD = 32
 
@@ -41,7 +41,8 @@ def build_single_elim(seeded_tids: List[int]) -> dict:
     order = _seed_order(n)
     round1 = [_matchup(seeded_tids[order[i] - 1], seeded_tids[order[i + 1] - 1])
               for i in range(0, n, 2)]
-    return {"rounds": [round1], "champion": None}
+    seeds = {str(tid): i + 1 for i, tid in enumerate(seeded_tids)}
+    return {"rounds": [round1], "champion": None, "seeds": seeds}
 
 
 def _active_round(bracket: dict) -> Optional[List[dict]]:
@@ -186,6 +187,84 @@ def advance_college_slate(world: World, *, watch_user: bool = False, coach=None
             world.phase = Phase.DRAFT
         return r, ur
     return [], None
+
+
+# -- interactive (web) coaching: defer the user's game ------------------------
+def _active_brackets(world: World) -> List[dict]:
+    b = world.bracket
+    if b["stage"] == "conf":
+        return [cb for cb in b["conf"].values() if cb["champion"] is None]
+    if b["stage"] == "national" and b.get("national"):
+        return [b["national"]]
+    return []
+
+
+def user_match(world: World) -> Optional[dict]:
+    """The user's undecided match in the active round, or None (eliminated / not in field)."""
+    uid = world.user_team_id
+    if uid is None or not world.bracket:
+        return None
+    for cb in _active_brackets(world):
+        for home, away, m in _round_matches(cb):
+            if uid in (home, away):
+                return m
+    return None
+
+
+def play_nonuser_college_slate(world: World) -> List[Tuple[dict, GameResult]]:
+    """Play the active round for every undecided match EXCEPT the user's, advancing each bracket
+    that becomes fully decided. The user's match (and its bracket/stage transition) is left for
+    :func:`finish_user_college_game` so it can be coached live first."""
+    uid = world.user_team_id
+    results: List[Tuple[dict, GameResult]] = []
+    for cb in _active_brackets(world):
+        rnd = _active_round(cb)
+        if rnd is None:
+            continue
+        for m in rnd:
+            if m["winner"] is not None:
+                continue
+            home, away = m["a"], m["b"]
+            if uid is not None and uid in (home, away):
+                continue
+            g = Game(gid=world.new_gid(), day=world.day, home=home, away=away, is_playoff=True)
+            world.schedule.append(g)
+            res = sim_one(world, g, is_playoff=True)
+            m["gid"] = g.gid
+            m["a_score"], m["b_score"] = res.home_score, res.away_score
+            m["winner"] = home if res.home_score > res.away_score else away
+            results.append((m, res))
+        _advance_bracket(cb)            # no-op while the user's match in this bracket is open
+    return results
+
+
+def start_user_college_game(world: World, match: dict) -> Game:
+    """Create (but don't play) the user's next tournament game for the interactive engine."""
+    g = Game(gid=world.new_gid(), day=world.day, home=match["a"], away=match["b"],
+             is_playoff=True)
+    world.schedule.append(g)
+    return g
+
+
+def finish_user_college_game(world: World, match: dict, game: Game, result: GameResult) -> None:
+    """Apply a coached game's result, record it on the match, then advance brackets/stage."""
+    _apply_result(world, game, result, is_playoff=True)
+    match["gid"] = game.gid
+    match["a_score"], match["b_score"] = result.home_score, result.away_score
+    match["winner"] = game.home if result.home_score > result.away_score else game.away
+    b = world.bracket
+    if b["stage"] == "conf":
+        for cb in b["conf"].values():
+            _advance_bracket(cb)
+        if all(cb["champion"] is not None for cb in b["conf"].values()):
+            _build_national_field(world)
+            b["stage"] = "national"
+    elif b["stage"] == "national":
+        _advance_bracket(b["national"])
+        if b["national"]["champion"] is not None:
+            b["champion"] = b["national"]["champion"]
+            b["stage"] = "done"
+            world.phase = Phase.DRAFT
 
 
 def college_postseason_complete(world: World) -> bool:
