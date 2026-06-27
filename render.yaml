@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: hoopsim
+    runtime: python
+    buildCommand: cd frontend && npm install && npm run build && cd .. && pip install -e ".[web]"
+    startCommand: hoopsim-web
+    envVars:
+      - key: HOOPSIM_NO_BROWSER
+        value: "1"
+    plan: free

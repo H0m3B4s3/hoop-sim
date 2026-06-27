@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import statistics as st
 
-from hoopr.gen.leaguegen import build_world
-from hoopr.sim.engine import simulate_game
+from hoopsim.gen.leaguegen import build_world
+from hoopsim.sim.engine import simulate_game
 
 
 def _sim_sample(seed=4, n=120):

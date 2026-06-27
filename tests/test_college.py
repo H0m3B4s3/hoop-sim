@@ -1,12 +1,12 @@
 """College-mode tests: generation, season, tournaments, eligibility, pipeline, finances, save."""
 from __future__ import annotations
 
-from hoopr.gen.collegegen import build_college_world
-from hoopr.save.serialize import world_from_json, world_to_json
-from hoopr.sim import college_tourney as CT
-from hoopr.sim import season as S
-from hoopr.systems import college_offseason as CO
-from hoopr.systems import collegefin, recruiting
+from hoopsim.gen.collegegen import build_college_world
+from hoopsim.save.serialize import world_from_json, world_to_json
+from hoopsim.sim import college_tourney as CT
+from hoopsim.sim import season as S
+from hoopsim.systems import college_offseason as CO
+from hoopsim.systems import collegefin, recruiting
 
 
 def _college_world(seed=1, economy="scholarship", games=12):
@@ -19,7 +19,7 @@ def _college_world(seed=1, economy="scholarship", games=12):
 
 def test_college_games_are_two_halves():
     import statistics as st
-    from hoopr.sim.engine import simulate_game
+    from hoopsim.sim.engine import simulate_game
     w = build_college_world(seed=10)
     teams = list(w.teams.values())
     scores = []

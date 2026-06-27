@@ -1,12 +1,12 @@
 """Save/load round-trip and determinism tests."""
 from __future__ import annotations
 
-from hoopr.gen.leaguegen import build_world
-from hoopr.save import store
-from hoopr.save.serialize import world_from_json, world_to_json
-from hoopr.sim import playoffs as P
-from hoopr.sim import season as S
-from hoopr.sim.engine import simulate_game
+from hoopsim.gen.leaguegen import build_world
+from hoopsim.save import store
+from hoopsim.save.serialize import world_from_json, world_to_json
+from hoopsim.sim import playoffs as P
+from hoopsim.sim import season as S
+from hoopsim.sim.engine import simulate_game
 
 
 def _rich_world(seed=1):
@@ -49,7 +49,7 @@ def test_round_trip_preserves_state():
 
 
 def test_round_trip_preserves_traded_draft_picks():
-    from hoopr.systems.trades import TradeOffer, execute_trade
+    from hoopsim.systems.trades import TradeOffer, execute_trade
     w = build_world(seed=7)
     a, b = w.teams[0], w.teams[1]
     ka = w.find_pick(w.season_year, 1, a.tid).key

@@ -1,11 +1,11 @@
 """Draft, development, and offseason-rollover tests."""
 from __future__ import annotations
 
-from hoopr.config import NUM_TEAMS, ROSTER_MAX, ROSTER_MIN
-from hoopr.gen.leaguegen import build_world
-from hoopr.sim import playoffs as P
-from hoopr.sim import season as S
-from hoopr.systems import development, draft_system, offseason
+from hoopsim.config import NUM_TEAMS, ROSTER_MAX, ROSTER_MIN
+from hoopsim.gen.leaguegen import build_world
+from hoopsim.sim import playoffs as P
+from hoopsim.sim import season as S
+from hoopsim.systems import development, draft_system, offseason
 
 
 def _played_world(seed=1, games=14):
@@ -58,7 +58,7 @@ def test_draft_order_honors_traded_pick():
 
 
 def test_roll_draft_picks_keeps_window_and_replenishes():
-    from hoopr.config import FUTURE_PICK_YEARS
+    from hoopsim.config import FUTURE_PICK_YEARS
     w = build_world(seed=5)
     base_year = w.season_year
     # simulate the offseason year advance + roll

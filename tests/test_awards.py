@@ -1,10 +1,10 @@
 """End-of-season awards and league history."""
 from __future__ import annotations
 
-from hoopr.gen.leaguegen import build_world
-from hoopr.sim import playoffs as P
-from hoopr.sim import season as S
-from hoopr.systems import awards, offseason
+from hoopsim.gen.leaguegen import build_world
+from hoopsim.sim import playoffs as P
+from hoopsim.sim import season as S
+from hoopsim.systems import awards, offseason
 
 
 def _played_world(seed=2, games=16):
@@ -58,7 +58,7 @@ def test_archive_season_records_awards_in_history():
 
 
 def test_history_survives_save_round_trip():
-    from hoopr.save.serialize import world_from_json, world_to_json
+    from hoopsim.save.serialize import world_from_json, world_to_json
     w = _played_world(seed=2)
     offseason.pre_draft(w, P.champion(w))
     w2 = world_from_json(world_to_json(w))

@@ -1,4 +1,4 @@
-# 🏀 HoopR
+# 🏀 HoopSim
 
 A text-based, *Football-Manager-style* basketball management simulation that runs in your
 terminal. Take over an NBA franchise, set tactics, watch possession-by-possession games unfold
@@ -21,7 +21,7 @@ seedable simulation core, and a rich terminal UI.
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-python -m hoopr
+python -m hoopsim
 ```
 
 > Requires Python 3.9+. The only runtime dependency is [`rich`](https://github.com/Textualize/rich).
@@ -88,7 +88,7 @@ postseason and offseason when they arrive.
 ## Project layout
 
 ```
-hoopr/
+hoopsim/
   config.py          # all tunables (cap numbers, ratings scale, pace, injury rates…)
   rng.py             # seedable, save-restorable RNG
   models/            # pure data: player, team, contract, tactics, league, draft, world
@@ -101,7 +101,7 @@ hoopr/
   ui/                # rich terminal UI: console, theme, widgets, screens, college_ui
   web/               # FastAPI app + serializers — drives the same engine over HTTP
   data/              # team, college, and name pools (JSON)
-frontend/            # React/TypeScript SPA, built into hoopr/web/static
+frontend/            # React/TypeScript SPA, built into hoopsim/web/static
 tools/               # dev scripts (gen_names.py regenerates data/names.json)
 tests/               # pytest suite (engine, season, cap/trades, draft, save, web…)
 ```

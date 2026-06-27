@@ -3,10 +3,10 @@ from __future__ import annotations
 
 from collections import Counter
 
-from hoopr.gen.leaguegen import build_world
-from hoopr.models.league import conference_standings
-from hoopr.sim import playoffs as P
-from hoopr.sim import season as S
+from hoopsim.gen.leaguegen import build_world
+from hoopsim.models.league import conference_standings
+from hoopsim.sim import playoffs as P
+from hoopsim.sim import season as S
 
 
 def _quick_world(seed=1, games=14):

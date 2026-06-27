@@ -20,7 +20,7 @@ import {
 export type Theme = "dark" | "light";
 
 // --- theme context -------------------------------------------------------
-const KEY = "hoopr-theme";
+const KEY = "hoopsim-theme";
 const ThemeCtx = createContext<{ theme: Theme; toggle: () => void }>({
   theme: "dark",
   toggle: () => {},

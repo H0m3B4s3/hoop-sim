@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate ``hoopr/data/names.json`` from public-domain, frequency-ranked name data.
+"""Regenerate ``hoopsim/data/names.json`` from public-domain, frequency-ranked name data.
 
 Sources (public-domain at the root):
   - Surnames: US Census Bureau "most common surnames", via fivethirtyeight's mirror
@@ -11,7 +11,7 @@ We take the most common names, title-case them, then merge in the curated intern
 names already present in names.json so stars like Doncic / Jokic / Giannis stay in the pool.
 
 This is a one-off dev tool — the committed ``names.json`` is what the game actually reads. Note:
-editing the name pool changes seed->league reproducibility (see ``hoopr/gen/namegen.py``), so
+editing the name pool changes seed->league reproducibility (see ``hoopsim/gen/namegen.py``), so
 regenerate deliberately and re-baseline golden-seed tests afterward.
 
 Usage:  python tools/gen_names.py     (requires network access)
@@ -35,7 +35,7 @@ FIRSTNAMES_URL = ("https://raw.githubusercontent.com/hadley/data-baby-names/mast
 N_FIRST = 600
 N_LAST = 2500
 
-DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "hoopr", "data", "names.json")
+DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "hoopsim", "data", "names.json")
 
 
 def _fetch(url: str) -> str:

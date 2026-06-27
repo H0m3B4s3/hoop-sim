@@ -1,10 +1,10 @@
 """World-generation sanity checks."""
 from __future__ import annotations
 
-from hoopr.config import NUM_TEAMS, RATING_MAX, RATING_MIN, ROSTER_MIN
-from hoopr.gen.leaguegen import build_world
-from hoopr.models.attributes import ALL_RATINGS
-from hoopr.models.team import team_salary
+from hoopsim.config import NUM_TEAMS, RATING_MAX, RATING_MIN, ROSTER_MIN
+from hoopsim.gen.leaguegen import build_world
+from hoopsim.models.attributes import ALL_RATINGS
+from hoopsim.models.team import team_salary
 
 
 def test_world_shape():

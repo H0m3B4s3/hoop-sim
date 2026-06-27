@@ -1,1 +1,0 @@
-"""HoopR ui package."""

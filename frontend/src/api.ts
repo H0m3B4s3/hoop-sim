@@ -1,4 +1,4 @@
-// Thin typed client for the HoopR FastAPI backend. Every call sends the session
+// Thin typed client for the HoopSim FastAPI backend. Every call sends the session
 // cookie (credentials: include) so the backend resolves the right live World.
 
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {

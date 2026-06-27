@@ -1,10 +1,10 @@
 """Salary-cap, trade, and free-agency system tests."""
 from __future__ import annotations
 
-from hoopr.config import ROSTER_MAX, SALARY_CAP, VETERAN_MINIMUM
-from hoopr.gen.leaguegen import build_world
-from hoopr.systems import cap, freeagency
-from hoopr.systems.trades import TradeOffer, ai_evaluates, execute_trade, validate_trade
+from hoopsim.config import ROSTER_MAX, SALARY_CAP, VETERAN_MINIMUM
+from hoopsim.gen.leaguegen import build_world
+from hoopsim.systems import cap, freeagency
+from hoopsim.systems.trades import TradeOffer, ai_evaluates, execute_trade, validate_trade
 
 
 def test_max_salary_increases_with_experience():
@@ -101,7 +101,7 @@ def test_execute_trade_moves_players():
 
 
 def test_solicit_offers_returns_legal_fair_offers():
-    from hoopr.systems.trades import solicit_offers
+    from hoopsim.systems.trades import solicit_offers
     w = build_world(seed=8)
     user = w.teams[0]
     w.user_team_id = user.tid
@@ -126,7 +126,7 @@ def test_solicit_offers_returns_legal_fair_offers():
 
 
 def test_draft_picks_initialized_per_team():
-    from hoopr.config import FUTURE_PICK_YEARS
+    from hoopsim.config import FUTURE_PICK_YEARS
     w = build_world(seed=3)
     # every team owns its own 1st & 2nd for the rolling window
     assert len(w.draft_picks) == len(w.teams) * FUTURE_PICK_YEARS * 2
@@ -176,7 +176,7 @@ def test_validate_rejects_pick_not_owned():
 
 
 def test_ai_values_picks_in_a_trade():
-    from hoopr.systems import trades
+    from hoopsim.systems import trades
     w = build_world(seed=8)
     a, b = w.teams[0], w.teams[1]
     a.wins, a.losses = 5, 60          # A's own 1st is valuable
@@ -188,11 +188,11 @@ def test_ai_values_picks_in_a_trade():
 
 
 def test_blocked_player_draws_ai_offers_then_accepts():
-    from hoopr.systems import trades
+    from hoopsim.systems import trades
     w = build_world(seed=8)
     user = w.teams[0]
     w.user_team_id = user.tid
-    from hoopr.sim.season import start_season
+    from hoopsim.sim.season import start_season
     start_season(w)
     # block a quality, movable veteran
     pid = max(user.roster, key=lambda p: cap.trade_value(w.players[p]))
@@ -213,11 +213,11 @@ def test_blocked_player_draws_ai_offers_then_accepts():
 
 
 def test_offers_respect_cap_and_expire():
-    from hoopr.systems import trades
+    from hoopsim.systems import trades
     w = build_world(seed=3)
     user = w.teams[0]
     w.user_team_id = user.tid
-    from hoopr.sim.season import start_season
+    from hoopsim.sim.season import start_season
     start_season(w)
     pid = max(user.roster, key=lambda p: cap.trade_value(w.players[p]))
     user.block_list.append(pid)
@@ -237,7 +237,7 @@ def test_offers_respect_cap_and_expire():
 
 
 def test_solicit_offers_empty_for_nonroster_player():
-    from hoopr.systems.trades import solicit_offers
+    from hoopsim.systems.trades import solicit_offers
     w = build_world(seed=8)
     w.user_team_id = w.teams[0].tid
     other_pid = next(iter(w.teams[1].roster))
@@ -245,8 +245,8 @@ def test_solicit_offers_empty_for_nonroster_player():
 
 
 def test_trade_deadline_blocks_after_cutoff():
-    from hoopr.models.league import Phase
-    from hoopr.systems.trades import trade_deadline_day, trade_deadline_passed
+    from hoopsim.models.league import Phase
+    from hoopsim.systems.trades import trade_deadline_day, trade_deadline_passed
     w = build_world(seed=8)
     a, b, pa, pb = _any_matched_pair(w)
     offer = TradeOffer(a.tid, b.tid, [pa], [pb])
@@ -263,8 +263,8 @@ def test_trade_deadline_blocks_after_cutoff():
 
 
 def test_trade_deadline_inactive_outside_nba_regular_season():
-    from hoopr.models.league import Phase
-    from hoopr.systems.trades import trade_deadline_day, trade_deadline_passed
+    from hoopsim.models.league import Phase
+    from hoopsim.systems.trades import trade_deadline_day, trade_deadline_passed
     w = build_world(seed=8)
     w.day = trade_deadline_day(w) + 5          # well past the cutoff
     w.phase = Phase.PRESEASON                  # not in the regular season → no deadline
@@ -295,7 +295,7 @@ def test_extend_contract():
     assert ok
     assert p.contract.years_remaining == years_before + 2
     # cannot exceed the max contract length
-    from hoopr.config import MAX_CONTRACT_YEARS
+    from hoopsim.config import MAX_CONTRACT_YEARS
     p.contract.salaries = [10_000_000] * MAX_CONTRACT_YEARS
     p.contract.guaranteed = [True] * MAX_CONTRACT_YEARS
     ok2, _ = cap.extend_contract(w, team, pid, 10_000_000, 1)
@@ -306,7 +306,7 @@ def test_extend_contract():
 
 
 def test_capped_out_team_cannot_sign_star_for_minimum():
-    from hoopr.config import MID_LEVEL_EXCEPTION
+    from hoopsim.config import MID_LEVEL_EXCEPTION
     w = build_world(seed=1)
     team = w.teams[0]
     # release the league's best player to free agency
@@ -331,7 +331,7 @@ def test_capped_out_team_cannot_sign_star_for_minimum():
 
 
 def test_mid_level_exception_limited_to_once_per_offseason():
-    from hoopr.config import MID_LEVEL_EXCEPTION
+    from hoopsim.config import MID_LEVEL_EXCEPTION
     w = build_world(seed=1)
     team = w.teams[0]
     # cap the team well over the salary cap and open a couple of roster spots

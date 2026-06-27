@@ -11,11 +11,11 @@ pytest.importorskip("httpx")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from hoopr.gen.leaguegen import build_world  # noqa: E402
-from hoopr.models.league import conference_standings  # noqa: E402
-from hoopr.models.team import roster_players  # noqa: E402
-from hoopr.web import serializers as ser  # noqa: E402
-from hoopr.web.app import app  # noqa: E402
+from hoopsim.gen.leaguegen import build_world  # noqa: E402
+from hoopsim.models.league import conference_standings  # noqa: E402
+from hoopsim.models.team import roster_players  # noqa: E402
+from hoopsim.web import serializers as ser  # noqa: E402
+from hoopsim.web.app import app  # noqa: E402
 
 
 def test_roster_view_numbers_match_models():
@@ -57,7 +57,7 @@ def test_scouting_view_covers_league_and_flags_block():
 
 
 def test_trade_block_is_aging_vets_on_expiring_deals():
-    from hoopr.systems.trades import (TRADE_BLOCK_MAX_YEARS, TRADE_BLOCK_VET_AGE,
+    from hoopsim.systems.trades import (TRADE_BLOCK_MAX_YEARS, TRADE_BLOCK_VET_AGE,
                                       team_trade_block)
     world = build_world(seed=7, season_preset="Quick")
     for team in world.team_list():
@@ -151,7 +151,7 @@ def test_api_depth_chart_groups_by_position():
 
 
 def test_api_waive_and_extend():
-    from hoopr.config import ROSTER_MIN
+    from hoopsim.config import ROSTER_MIN
     client = TestClient(app)
     state = client.post("/api/career/new",
                         json={"league": "nba", "preset": "Quick", "seed": 5}).json()
@@ -182,14 +182,14 @@ def test_api_waive_and_extend():
 
 def test_offseason_pre_draft_is_idempotent():
     """Re-entering the offseason wizard must not run the offseason twice (the reported bug)."""
-    from hoopr.models.league import Phase
-    from hoopr.web.session import SESSIONS
+    from hoopsim.models.league import Phase
+    from hoopsim.web.session import SESSIONS
     client = TestClient(app)
     state = client.post("/api/career/new",
                         json={"league": "nba", "preset": "Quick", "seed": 5}).json()
     tid = state["summary"]["teams"][0]["tid"]
     client.post(f"/api/career/team/{tid}")
-    sid = client.cookies.get("hoopr_sid")
+    sid = client.cookies.get("hoopsim_sid")
     world = SESSIONS.require(sid)
 
     # Simulate "playoffs just ended": offseason available, not yet begun.
@@ -213,14 +213,14 @@ def test_offseason_pre_draft_is_idempotent():
 
 
 def test_api_block_and_offers_inbox():
-    from hoopr.systems import cap, trades
-    from hoopr.web.session import SESSIONS
+    from hoopsim.systems import cap, trades
+    from hoopsim.web.session import SESSIONS
     client = TestClient(app)
     state = client.post("/api/career/new",
                         json={"league": "nba", "preset": "Quick", "seed": 8}).json()
     tid = state["summary"]["teams"][0]["tid"]
     client.post(f"/api/career/team/{tid}")
-    world = SESSIONS.require(client.cookies.get("hoopr_sid"))
+    world = SESSIONS.require(client.cookies.get("hoopsim_sid"))
 
     # put a quality vet on the block via the endpoint
     pid = max(world.teams[tid].roster, key=lambda p: cap.trade_value(world.players[p]))
@@ -250,19 +250,19 @@ def test_api_block_and_offers_inbox():
 
 
 def test_api_history_after_a_season():
-    from hoopr.models.league import Phase
-    from hoopr.sim import playoffs as P
-    from hoopr.systems import offseason
-    from hoopr.web.session import SESSIONS
+    from hoopsim.models.league import Phase
+    from hoopsim.sim import playoffs as P
+    from hoopsim.systems import offseason
+    from hoopsim.web.session import SESSIONS
     client = TestClient(app)
     state = client.post("/api/career/new",
                         json={"league": "nba", "preset": "Quick", "seed": 2}).json()
     tid = state["summary"]["teams"][0]["tid"]
     client.post(f"/api/career/team/{tid}")
-    world = SESSIONS.require(client.cookies.get("hoopr_sid"))
+    world = SESSIONS.require(client.cookies.get("hoopsim_sid"))
 
     # play the whole season + playoffs, then archive it
-    from hoopr.sim import season as S
+    from hoopsim.sim import season as S
     while not S.regular_season_complete(world):
         S.advance_one_day(world)
     P.start_playoffs(world)
@@ -282,15 +282,15 @@ def test_api_college_postseason_crowns_champion():
     Regression: the web playoff endpoints used to route everything through the NBA bracket,
     which crashed with IndexError on a college world (8 conferences, no 6/4 play-in).
     """
-    from hoopr.sim import season as S
-    from hoopr.web.session import SESSIONS
+    from hoopsim.sim import season as S
+    from hoopsim.web.session import SESSIONS
     client = TestClient(app)
     state = client.post("/api/career/new",
                         json={"league": "college", "economy": "nil", "seed": 7}).json()
     assert state["summary"]["mode"] == "college"
     tid = state["summary"]["teams"][0]["tid"]
     client.post(f"/api/career/team/{tid}")
-    world = SESSIONS.require(client.cookies.get("hoopr_sid"))
+    world = SESSIONS.require(client.cookies.get("hoopsim_sid"))
 
     # Fast-forward the regular season directly, then drive the postseason through the API.
     while not S.regular_season_complete(world):
@@ -318,14 +318,14 @@ def test_api_college_postseason_crowns_champion():
 
 def test_api_college_offseason_advances_to_next_season():
     """College offseason on the web: NBA draft pipeline → recruiting → next season."""
-    from hoopr.sim import season as S
-    from hoopr.web.session import SESSIONS
+    from hoopsim.sim import season as S
+    from hoopsim.web.session import SESSIONS
     client = TestClient(app)
     state = client.post("/api/career/new",
                         json={"league": "college", "economy": "nil", "seed": 11}).json()
     tid = state["summary"]["teams"][0]["tid"]
     client.post(f"/api/career/team/{tid}")
-    world = SESSIONS.require(client.cookies.get("hoopr_sid"))
+    world = SESSIONS.require(client.cookies.get("hoopsim_sid"))
     year0 = world.season_year
 
     while not S.regular_season_complete(world):

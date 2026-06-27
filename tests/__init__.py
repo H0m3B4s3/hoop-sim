@@ -1,1 +1,1 @@
-"""HoopR test suite."""
+"""HoopSim test suite."""

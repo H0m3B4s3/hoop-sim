@@ -1,10 +1,10 @@
 """Coach-mode end-game behaviors and play-by-play depth."""
 from __future__ import annotations
 
-from hoopr.gen.leaguegen import build_world
-from hoopr.models.tactics import Tactics
-from hoopr.sim.coach import Coach, CoachOrders
-from hoopr.sim.engine import DRAW_PLAY_BONUS, GameSim, simulate_game
+from hoopsim.gen.leaguegen import build_world
+from hoopsim.models.tactics import Tactics
+from hoopsim.sim.coach import Coach, CoachOrders
+from hoopsim.sim.engine import DRAW_PLAY_BONUS, GameSim, simulate_game
 
 
 def _sim(seed=1, *, collect_pbp=False, coach=None):
