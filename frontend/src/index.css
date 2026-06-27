@@ -284,7 +284,8 @@ span.clickable:hover {
   box-shadow: var(--shadow-soft);
 }
 .setup {
-  width: 420px;
+  max-width: 420px;
+  width: 100%;
   text-align: center;
 }
 .logo {
@@ -1080,6 +1081,163 @@ select:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
+  }
+}
+
+/* ---- hamburger (mobile-only) -------------------------------------------- */
+.menuBtn {
+  display: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 18px;
+  border-radius: 9px;
+  flex: none;
+}
+
+/* ---- mobile layout -------------------------------------------------------- */
+@media (max-width: 768px) {
+  /* show hamburger */
+  .menuBtn {
+    display: grid;
+    place-items: center;
+  }
+
+  /* topbar compression */
+  .topbar {
+    gap: 8px;
+    padding: 8px 12px;
+    flex-wrap: nowrap;
+  }
+  .brand {
+    display: none;
+  }
+  .capline {
+    display: none;
+  }
+  .teamTag__name {
+    display: none;
+  }
+  /* hide date, phase pill, record from topbar — too much for small screens */
+  .topbar .teamline .muted,
+  .topbar .pill {
+    display: none;
+  }
+  /* keep save/quit buttons compact */
+  .topbar .ghost {
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+
+  /* sidebar: off-screen drawer */
+  .side {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 220px;
+    transform: translateX(-100%);
+    /* visibility:hidden removes items from tab order + a11y tree;
+       delay matches the slide-out so it hides only after animation */
+    visibility: hidden;
+    transition: transform 0.22s ease, visibility 0s linear 0.22s;
+    z-index: 20;
+    padding-top: 14px;
+    box-shadow: 2px 0 16px rgba(0, 0, 0, 0.45);
+  }
+  .side.open {
+    transform: translateX(0);
+    visibility: visible;
+    /* no delay: become visible immediately so items are reachable as it slides in */
+    transition: transform 0.22s ease, visibility 0s linear 0s;
+  }
+
+  /* overlay backdrop */
+  .sideOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 19;
+    background: rgba(0, 0, 0, 0.45);
+  }
+
+  /* nav items bigger for touch */
+  .navItem {
+    padding: 10px 12px;
+    font-size: 15px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+
+  /* content area */
+  .content {
+    padding: 12px;
+  }
+
+  /* touch targets */
+  button {
+    min-height: 40px;
+  }
+  .rowActions button,
+  button.mini {
+    min-height: 32px;
+  }
+
+  /* setup card */
+  .setup {
+    width: 100%;
+  }
+
+  /* grid collapses */
+  .boxGrid {
+    grid-template-columns: 1fr;
+  }
+  .tradeGrid {
+    grid-template-columns: 1fr;
+  }
+  .confTourneys {
+    grid-template-columns: 1fr;
+  }
+  .depthGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .awardGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* tactics label + control stack */
+  .tacticRow {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  /* coach panel */
+  .coachRow {
+    flex-wrap: wrap;
+  }
+  .coachRow select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  /* modal */
+  .modalBg {
+    padding: 12px;
+    align-items: flex-end;
+  }
+  .modal {
+    border-radius: 14px 14px 10px 10px;
+    max-height: 92vh;
+    width: 100%;
+  }
+
+  /* all-league rows */
+  .allLeagueRow {
+    flex-direction: column;
+    gap: 4px;
+  }
+  .allLeagueLabel {
+    min-width: 0;
   }
 }
 
