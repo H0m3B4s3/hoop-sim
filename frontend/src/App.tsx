@@ -34,7 +34,7 @@ export default function App() {
         <TeamSelect summary={summary} onPick={loadState} toast={toast} />
       )}
       {view === "hub" && summary && (
-        <Hub summary={summary} setSummary={setSummary} toast={toast} onQuit={loadState} />
+        <Hub summary={summary} setSummary={setSummary} toast={toast} onQuit={() => setView("setup")} />
       )}
       {toastNode}
     </div>
@@ -50,9 +50,11 @@ function Setup({ onReady, toast }: { onReady: () => void; toast: (m: string) => 
   const [economy, setEconomy] = useState("nil");
   const [saves, setSaves] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [hasGame, setHasGame] = useState(false);
 
   useEffect(() => {
     api.saves().then((r) => setSaves(r.saves)).catch(() => {});
+    api.state().then((s) => setHasGame(s.active && !s.needs_team)).catch(() => {});
   }, []);
 
   const create = async () => {
@@ -74,6 +76,12 @@ function Setup({ onReady, toast }: { onReady: () => void; toast: (m: string) => 
           HOOP<span>R</span>
         </h1>
         <p className="muted">Basketball Management Simulation</p>
+
+        {hasGame && (
+          <button className="primary big" onClick={onReady}>
+            ▶ Resume Current Game
+          </button>
+        )}
 
         <h3>New Career</h3>
         <div className="segrow">
