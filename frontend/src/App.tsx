@@ -77,7 +77,7 @@ function Setup({ onReady, toast }: { onReady: () => void; toast: (m: string) => 
           <ThemeToggle />
         </div>
         <h1 className="logo">
-          HOOP<span>R</span>
+          HOOPSI<span>M</span>
         </h1>
         <p className="muted">Basketball Management Simulation</p>
 
@@ -356,7 +356,7 @@ function TopBar({
   return (
     <header className="topbar">
       <div className="brand">
-        HOOP<span>R</span>
+        HOOPSI<span>M</span>
       </div>
       {t && (
         <div className="teamline">
