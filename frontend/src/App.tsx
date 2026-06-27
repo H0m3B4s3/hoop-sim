@@ -213,6 +213,7 @@ function Hub({
 }) {
   const [tab, setTab] = useState("play");
   const [openPid, setOpenPid] = useState<number | null>(null);
+  const [sideOpen, setSideOpen] = useState(false);
   const phase = summary.phase;
   const inPlayoffs = phase === "playoffs" || phase === "play_in";
   const inOffseason = ["draft", "free_agency", "offseason"].includes(phase);
@@ -236,14 +237,15 @@ function Hub({
 
   return (
     <div className="hub">
-      <TopBar summary={summary} toast={toast} onQuit={onQuit} />
+      <TopBar summary={summary} toast={toast} onQuit={onQuit} onMenuToggle={() => setSideOpen((o) => !o)} />
       <div className="body">
-        <nav className="side">
+        {sideOpen && <div className="sideOverlay" onClick={() => setSideOpen(false)} />}
+        <nav className={sideOpen ? "side open" : "side"}>
           {nav.map((n) => (
             <button
               key={n.key}
               className={tab === n.key ? "navItem active" : "navItem"}
-              onClick={() => setTab(n.key)}
+              onClick={() => { setTab(n.key); setSideOpen(false); }}
             >
               {n.label}
               {n.key === "offers" && openOffers > 0 && (
@@ -343,10 +345,12 @@ function TopBar({
   summary,
   toast,
   onQuit,
+  onMenuToggle,
 }: {
   summary: Summary;
   toast: (m: string) => void;
   onQuit: () => void;
+  onMenuToggle: () => void;
 }) {
   const t = summary.user_team;
   const save = async () => {
@@ -355,6 +359,7 @@ function TopBar({
   };
   return (
     <header className="topbar">
+      <button className="menuBtn ghost" onClick={onMenuToggle} aria-label="Menu">☰</button>
       <div className="brand">
         HOOPSI<span>M</span>
       </div>
