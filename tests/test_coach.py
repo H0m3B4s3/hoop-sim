@@ -137,12 +137,13 @@ def test_coach_timeout_ignored_when_none_left():
 
 
 def test_coach_forced_foul_overrides_auto():
-    # Home leads by 5 on offense: defense would normally never foul here.
+    # The user's defense (away) is *ahead*, so auto would never intentionally foul (deterministic,
+    # independent of the crunch-foul RNG roll) — a clean baseline to prove the forced order wins.
     auto = _StubCoach(CoachOrders(defensive_foul="auto"))
     _, sim = _sim(coach=auto)
     sim.coach_tid = sim.away.team.tid                       # user coaches the defense
     sim.clock = 20.0
-    sim.result.home_score, sim.result.away_score = 105, 100
+    sim.result.home_score, sim.result.away_score = 100, 105   # defense (away) leads by 5
     intentional, _, _ = sim._plan_possession(sim.home, sim.away, CoachOrders(defensive_foul="auto"))
     assert not intentional
     intentional, _, _ = sim._plan_possession(sim.home, sim.away, CoachOrders(defensive_foul="foul"))

@@ -52,6 +52,20 @@ def _matched_pair(world, a, b):
     return None, None
 
 
+def _any_matched_pair(world):
+    """Find any two teams with a salary-matched, overall-mismatched tradeable pair. Robust to the
+    name pool / seed: which exact rosters qualify shifts with generation, but some pair always does."""
+    teams = world.team_list()
+    for a in teams:
+        for b in teams:
+            if a.tid == b.tid:
+                continue
+            pa, pb = _matched_pair(world, a, b)
+            if pa is not None and validate_trade(world, TradeOffer(a.tid, b.tid, [pa], [pb]))[0]:
+                return a, b, pa, pb
+    raise AssertionError("no legal salary-matched, overall-mismatched pair found in the league")
+
+
 def test_trade_validation_and_ai_direction():
     w = build_world(seed=5)
     a, b = w.teams[0], w.teams[1]
@@ -77,9 +91,7 @@ def test_trade_validation_and_ai_direction():
 
 def test_execute_trade_moves_players():
     w = build_world(seed=8)
-    a, b = w.teams[0], w.teams[1]
-    pa, pb = _matched_pair(w, a, b)
-    assert pa is not None
+    a, b, pa, pb = _any_matched_pair(w)
     offer = TradeOffer(a.tid, b.tid, [pa], [pb])
     assert validate_trade(w, offer)[0]
     execute_trade(w, offer)
@@ -236,9 +248,7 @@ def test_trade_deadline_blocks_after_cutoff():
     from hoopr.models.league import Phase
     from hoopr.systems.trades import trade_deadline_day, trade_deadline_passed
     w = build_world(seed=8)
-    a, b = w.teams[0], w.teams[1]
-    pa, pb = _matched_pair(w, a, b)
-    assert pa is not None
+    a, b, pa, pb = _any_matched_pair(w)
     offer = TradeOffer(a.tid, b.tid, [pa], [pb])
     w.phase = Phase.REGULAR_SEASON
 
