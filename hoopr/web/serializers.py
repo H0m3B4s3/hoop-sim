@@ -13,7 +13,7 @@ from typing import Dict, List, Optional
 from rich.color import Color
 
 from hoopr.config import CONFERENCES, ROSTER_MAX, SCHOLARSHIP_LIMIT
-from hoopr.models.attributes import COMPOSITES, RATING_GROUPS, all_composites
+from hoopr.models.attributes import COMPOSITES, POSITIONS, RATING_GROUPS, all_composites
 from hoopr.models.league import Phase, conference_standings
 from hoopr.models.player import Player
 from hoopr.models.team import Team, roster_players, team_salary
@@ -65,6 +65,19 @@ def world_conferences(world: World) -> List[str]:
     return list(CONFERENCES)
 
 
+def _offseason_stage(world: World):
+    """Where the resumable offseason wizard is, derived from authoritative world state.
+
+    ``pre_draft`` (offseason not yet begun) → ``draft`` (class generated, picking) →
+    ``free_agency`` (draft done, signing) → ``None`` (season running).
+    """
+    if world.phase == Phase.DRAFT:
+        return "draft" if world.draft_class is not None else "pre_draft"
+    if world.phase == Phase.FREE_AGENCY:
+        return "free_agency"
+    return None
+
+
 def world_summary(world: World) -> dict:
     """The status-bar payload (mirrors ui.widgets.header)."""
     team = world.user_team
@@ -72,6 +85,7 @@ def world_summary(world: World) -> dict:
         "season_year": world.season_year,
         "phase": world.phase,
         "phase_label": Phase.label(world.phase),
+        "offseason_stage": _offseason_stage(world),
         "day": world.day,
         "date": game_date(world, world.day),
         "mode": world.mode,
@@ -102,6 +116,7 @@ def world_summary(world: World) -> dict:
         out["trade_deadline_day"] = deadline
         out["trade_deadline_passed"] = trades.trade_deadline_passed(world)
         out["days_to_deadline"] = max(0, deadline - world.day)
+        out["open_offers"] = len(world.trade_offers)
     return out
 
 
@@ -137,6 +152,7 @@ def player_row(world: World, p: Player, *, is_starter: bool = False) -> dict:
         "team_id": p.team_id,
         "team_abbrev": (team.abbrev if team else "FA"),
         "team_color": (color_hex(team.color) if team else "#9aa0a6"),
+        "on_block": bool(team is not None and p.pid in team.block_list),
     }
 
 
@@ -161,6 +177,21 @@ def scouting_view(world: World, *, include_fa: bool = True) -> dict:
         for p in world.free_agent_players():
             rows.append(scouting_row(world, p))
     return {"players": rows, "composite_order": list(COMPOSITES)}
+
+
+def depth_chart_view(world: World, team: Team) -> dict:
+    """Roster grouped by position (starters first, then by overall) — where you're deep or thin."""
+    starters = set(team.starters)
+    groups = []
+    for pos in POSITIONS:
+        players = [p for p in roster_players(team, world.players) if p.position == pos]
+        players.sort(key=lambda p: (p.pid in starters, p.overall), reverse=True)
+        groups.append({
+            "position": pos,
+            "count": len(players),
+            "players": [player_row(world, p, is_starter=p.pid in starters) for p in players],
+        })
+    return {"team": team_brief(team), "positions": groups, "roster_max": ROSTER_MAX}
 
 
 def roster_view(world: World, team: Team) -> dict:
@@ -305,6 +336,85 @@ def finances_view(world: World, team: Team) -> dict:
         "luxury_tax": cap.luxury_tax(world, team),
         "owner_budget": team.owner_budget,
         "contracts": rows,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Draft picks & solicited trade offers
+# ---------------------------------------------------------------------------
+def pick_view(world: World, pick) -> dict:
+    """A tradeable draft pick: its key, a human label, and asset value."""
+    orig = world.find_team(pick.original_tid)
+    owner = world.find_team(pick.owner_tid)
+    rnd = {1: "1st", 2: "2nd"}.get(pick.round, f"R{pick.round}")
+    label = f"{pick.year} {rnd}"
+    if orig is not None and pick.original_tid != pick.owner_tid:
+        label += f" (via {orig.abbrev})"      # acquired from another team
+    return {
+        "key": [pick.year, pick.round, pick.original_tid],
+        "year": pick.year,
+        "round": pick.round,
+        "original_tid": pick.original_tid,
+        "original_abbrev": orig.abbrev if orig else "?",
+        "owner_tid": pick.owner_tid,
+        "owner_abbrev": owner.abbrev if owner else "?",
+        "label": label,
+        "value": cap.pick_value(world, pick),
+    }
+
+
+def offer_view(world: World, o: dict) -> dict:
+    """Serialize a stored AI-initiated offer for the user's inbox."""
+    frm = world.find_team(o["from_tid"])
+
+    def _piece(pid: int) -> dict:
+        p = world.players[pid]
+        return {"pid": pid, "name": p.name, "position": p.position, "age": p.age,
+                "overall": p.overall, "salary": p.contract.current_salary}
+
+    picks = [world.find_pick(*k) for k in o.get("team_picks", [])]
+    return {
+        "id": o["id"],
+        "from_tid": o["from_tid"],
+        "from_abbrev": frm.abbrev if frm else "?",
+        "from_name": frm.full_name if frm else "?",
+        "from_color": color_hex(frm.color) if frm else "#9aa0a6",
+        "user_sends": list(o["user_sends"]),
+        "team_sends": list(o["team_sends"]),
+        "team_picks": [list(k) for k in o.get("team_picks", [])],
+        "wants": [_piece(pid) for pid in o["user_sends"]],     # your players they're after
+        "gives": [_piece(pid) for pid in o["team_sends"]],     # what comes back
+        "picks": [pick_view(world, p) for p in picks if p is not None],
+        "value": o["value"],
+        "unsolicited": o.get("unsolicited", False),
+        "expires_in": max(0, o["expires_day"] - world.day),
+    }
+
+
+def solicited_offer_view(world: World, so) -> dict:
+    """Serialize a ``trades.SolicitedOffer`` for the "shop my player" panel."""
+    offer = so.offer
+    partner = world.find_team(offer.b)
+
+    def _piece(pid: int) -> dict:
+        p = world.players[pid]
+        return {"pid": pid, "name": p.name, "position": p.position, "age": p.age,
+                "overall": p.overall, "salary": p.contract.current_salary,
+                "value": round(cap.trade_value(p), 1)}
+
+    pick_objs = [world.find_pick(*k) for k in offer.b_picks]
+    return {
+        "partner_tid": offer.b,
+        "partner_abbrev": partner.abbrev,
+        "partner_name": partner.full_name,
+        "partner_color": color_hex(partner.color),
+        "user_sends": offer.a_sends,
+        "partner_sends": offer.b_sends,
+        "partner_picks": [list(k) for k in offer.b_picks],
+        "pieces": [_piece(pid) for pid in offer.b_sends],
+        "picks": [pick_view(world, p) for p in pick_objs if p is not None],
+        "value": round(so.value, 1),
+        "target_value": round(so.target_value, 1),
     }
 
 

@@ -93,6 +93,9 @@ TRADE_MATCH_BUFFER = 250_000
 ROOKIE_SCALE = {1: 12_000_000, 14: 4_000_000, 30: 2_500_000, 31: 1_100_000, 60: 1_000_000}
 ROOKIE_CONTRACT_YEARS = 3
 
+# Each NBA team owns its own picks this many drafts out; tradeable as future assets.
+FUTURE_PICK_YEARS = 4
+
 # Owner patience / budget feel — used by AI and finance screens.
 DEFAULT_OWNER_BUDGET = LUXURY_TAX_LINE
 

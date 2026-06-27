@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 from hoopr.config import (DEFAULT_COLLEGE_ECONOMY, FIRST_APRON, LUXURY_TAX_LINE, SALARY_CAP,
                           SCHEMA_VERSION)
 from hoopr.models.contract import Contract
-from hoopr.models.draft import DraftClass
+from hoopr.models.draft import DraftClass, DraftPick
 from hoopr.models.league import Game, Phase
 from hoopr.models.player import Player
 from hoopr.models.team import Team
@@ -30,6 +30,9 @@ class World:
         self.schedule: List[Game] = []
         self.free_agents: List[int] = []
         self.draft_class: Optional[DraftClass] = None
+        self.draft_picks: List[DraftPick] = []       # tradeable future picks (NBA)
+        self.trade_offers: List[dict] = []           # pending AI-initiated offers to the user
+        self.offer_cooldowns: Dict[int, int] = {}    # pid -> earliest day a new offer may spawn
         self.bracket: Optional[dict] = None          # JSON-native playoff state
 
         self.user_team_id: Optional[int] = None
@@ -51,6 +54,7 @@ class World:
 
         self._next_pid: int = 1
         self._next_gid: int = 1
+        self._next_offer_id: int = 1
 
     # -- id allocation ------------------------------------------------------
     def new_pid(self) -> int:
@@ -62,6 +66,11 @@ class World:
         gid = self._next_gid
         self._next_gid += 1
         return gid
+
+    def new_offer_id(self) -> int:
+        oid = self._next_offer_id
+        self._next_offer_id += 1
+        return oid
 
     # -- accessors ----------------------------------------------------------
     @property
@@ -100,6 +109,18 @@ class World:
 
     def free_agent_players(self) -> List[Player]:
         return [self.players[pid] for pid in self.free_agents if pid in self.players]
+
+    # -- draft picks --------------------------------------------------------
+    def find_pick(self, year: int, round: int, original_tid: int) -> Optional[DraftPick]:
+        for p in self.draft_picks:
+            if p.year == year and p.round == round and p.original_tid == original_tid:
+                return p
+        return None
+
+    def picks_owned_by(self, tid: int) -> List[DraftPick]:
+        picks = [p for p in self.draft_picks if p.owner_tid == tid]
+        picks.sort(key=lambda p: (p.year, p.round, p.original_tid))
+        return picks
 
     # -- roster transactions ------------------------------------------------
     def sign_player(self, pid: int, tid: int, contract: Contract) -> None:
@@ -145,6 +166,9 @@ class World:
             "schedule": [g.to_dict() for g in self.schedule],
             "free_agents": list(self.free_agents),
             "draft_class": self.draft_class.to_dict() if self.draft_class else None,
+            "draft_picks": [p.to_dict() for p in self.draft_picks],
+            "trade_offers": list(self.trade_offers),
+            "offer_cooldowns": {str(k): v for k, v in self.offer_cooldowns.items()},
             "bracket": self.bracket,
             "user_team_id": self.user_team_id,
             "season_games": self.season_games,
@@ -159,6 +183,7 @@ class World:
             "history": list(self.history),
             "next_pid": self._next_pid,
             "next_gid": self._next_gid,
+            "next_offer_id": self._next_offer_id,
         }
 
     @classmethod
@@ -174,6 +199,9 @@ class World:
         w.free_agents = list(d.get("free_agents", []))
         dc = d.get("draft_class")
         w.draft_class = DraftClass.from_dict(dc) if dc else None
+        w.draft_picks = [DraftPick.from_dict(pd) for pd in d.get("draft_picks", [])]
+        w.trade_offers = list(d.get("trade_offers", []))
+        w.offer_cooldowns = {int(k): v for k, v in d.get("offer_cooldowns", {}).items()}
         w.bracket = d.get("bracket")
         w.user_team_id = d.get("user_team_id")
         w.season_games = d.get("season_games", 82)
@@ -188,4 +216,5 @@ class World:
         w.history = list(d.get("history", []))
         w._next_pid = d.get("next_pid", max(w.players, default=0) + 1)
         w._next_gid = d.get("next_gid", 1)
+        w._next_offer_id = d.get("next_offer_id", 1)
         return w

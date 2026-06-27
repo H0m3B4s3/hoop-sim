@@ -27,6 +27,7 @@ class Team:
 
     roster: List[int] = field(default_factory=list)        # ordered player ids
     starters: List[int] = field(default_factory=list)      # up to 5 player ids
+    block_list: List[int] = field(default_factory=list)    # pids the GM has made available
     minutes_target: Dict[int, int] = field(default_factory=dict)  # pid -> target minutes
     auto_lineup: bool = True                               # False -> user set the starting five
     tactics: Tactics = field(default_factory=Tactics)
@@ -124,6 +125,7 @@ class Team:
             "color": self.color,
             "roster": list(self.roster),
             "starters": list(self.starters),
+            "block_list": list(self.block_list),
             "minutes_target": {str(k): v for k, v in self.minutes_target.items()},
             "auto_lineup": self.auto_lineup,
             "tactics": self.tactics.to_dict(),
@@ -155,6 +157,7 @@ class Team:
             color=d.get("color", "white"),
             roster=list(d.get("roster", [])),
             starters=list(d.get("starters", [])),
+            block_list=list(d.get("block_list", [])),
             minutes_target={int(k): v for k, v in d.get("minutes_target", {}).items()},
             auto_lineup=d.get("auto_lineup", True),
             tactics=Tactics.from_dict(d.get("tactics", {})),

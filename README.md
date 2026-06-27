@@ -120,8 +120,18 @@ Implemented today: the **NBA franchise** experience, the **College** experience 
 pipeline** connecting them. Recent additions: a **league-wide scouting board** (attributes for
 every player, sortable/filterable), a **trade block** that surfaces the aging veterans
 non-contenders are shopping, an **NBA trade deadline** (~⅔ through the season; waivers stay open
-after), **player attributes inside the trade screen**, and a polished **playoff bracket** in the
-web app with full regular-season → postseason progression.
+after), **player attributes inside the trade screen**, **soliciting trade offers** (shop your own
+players around the league and accept the best cap-legal package interested teams offer),
+**tradeable future draft picks** (a rolling multi-year window of first- and second-rounders that
+move in trades, are valued by the original team's outlook, and are honored at draft time — "via"
+ownership and all), **coach-mode end-game instructions** (per-team crunch-time tactics the engine
+applies: foul-when-trailing aggressiveness, foul-up-3 to deny a tying triple resolved by an
+IQ-vs-IQ roll, and whether to ride your closers or keep the rotation), a **deeper play-by-play**
+that now surfaces missed shots, rebounds, blocks, and assists, and a polished **playoff bracket**
+in the web app with full regular-season → postseason progression, and a **trade block + AI-initiated
+offers** (mark players available and rival GMs bring you cap-legal packages — players and/or picks —
+as you sim, surfaced in a non-blocking Offers inbox with a nav badge; offers are capped, expire after
+a week, and clear at the deadline).
 
 Still on the roadmap:
 
@@ -134,17 +144,11 @@ Still on the roadmap:
 ### Future work (not started)
 
 Trades & draft assets
-- **NBA draft-pick trading**, including future picks (pick swaps, protections).
-- **AI-initiated trade offers** (teams proactively shopping from their trade block, not just listing it).
+- **Pick protections & swaps** (conditional picks, top-N protections rolling to the next year).
 
 Coach mode — end-of-game situations (NBA & CBB)
-- **Intentional fouling** to get the ball back (defense trades FTs for possession).
-- **Foul up 3** so the defense can't attempt a tying three-pointer (resolve via an IQ-vs-IQ roll).
-- **Offensive / defensive lineup switches** between possessions.
-
-Play-by-play depth
-- Expand PBP to surface **missed shots, rebounds, turnovers, steals, violations**, etc.
-  (could be limited to end-game situations initially).
+- **In-the-moment interactive coaching** (pause the watched game to make the call yourself, rather
+  than setting the instruction beforehand).
 
 NBA free agency — rounds
 - **Rounds of free agency**: pursue a primary target; if he signs elsewhere (better offer — possibly

@@ -41,6 +41,35 @@ def test_draft_order_and_completion():
     assert len(dc.picks_made) == dc.total_picks
 
 
+def test_draft_order_honors_traded_pick():
+    w = _played_world(seed=2)
+    champ = P.champion(w)
+    offseason.pre_draft(w, champ)
+    # Team B trades its current-year first-rounder to team A before the draft is set up.
+    a, b = w.teams[0], w.teams[1]
+    pick = w.find_pick(w.season_year, 1, b.tid)
+    pick.owner_tid = a.tid
+    dc = draft_system.setup_draft(w)
+    # the slot is still B's position, but A is the one selecting there
+    slot = dc.origins.index(b.tid)
+    assert dc.origins[slot] == b.tid
+    assert dc.order[slot] == a.tid
+
+
+def test_roll_draft_picks_keeps_window_and_replenishes():
+    from hoopr.config import FUTURE_PICK_YEARS
+    w = build_world(seed=5)
+    base_year = w.season_year
+    # simulate the offseason year advance + roll
+    w.season_year += 1
+    draft_system.roll_draft_picks(w)
+    years = {p.year for p in w.draft_picks}
+    assert min(years) == base_year + 1
+    assert max(years) == base_year + FUTURE_PICK_YEARS
+    # window stays the same size and every team again owns its far-future picks
+    assert len(w.draft_picks) == len(w.teams) * FUTURE_PICK_YEARS * 2
+
+
 def test_full_offseason_keeps_rosters_legal():
     w = _played_world(seed=4)
     champ = P.champion(w)

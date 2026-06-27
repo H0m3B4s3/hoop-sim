@@ -15,7 +15,8 @@ from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from hoopr.config import SEASON_PRESETS
+from hoopr.config import ROSTER_MIN, SEASON_PRESETS
+from hoopr.models.league import Phase
 from hoopr.models.team import auto_set_lineup
 from hoopr.models.tactics import SETTINGS
 from hoopr.models.world import World
@@ -85,6 +86,25 @@ class TradeBody(BaseModel):
     partner_tid: int
     user_sends: List[int] = []
     partner_sends: List[int] = []
+    user_picks: List[List[int]] = []      # pick keys [year, round, original_tid]
+    partner_picks: List[List[int]] = []
+
+
+class WaiveBody(BaseModel):
+    pid: int
+
+
+class BlockBody(BaseModel):
+    pid: int
+    on: bool
+
+
+class OfferBody(BaseModel):
+    id: int
+
+
+class SolicitBody(BaseModel):
+    pids: List[int] = []
 
 
 class LineupBody(BaseModel):
@@ -198,6 +218,23 @@ def scouting(sid: str = Depends(_sid)):
     return ser.scouting_view(_world(sid))
 
 
+@app.get("/api/teams/{tid}/depth-chart")
+def depth_chart(tid: int, sid: str = Depends(_sid)):
+    world = _world(sid)
+    team = world.find_team(tid)
+    if team is None:
+        raise HTTPException(status_code=404, detail="Unknown team.")
+    return ser.depth_chart_view(world, team)
+
+
+@app.get("/api/teams/{tid}/picks")
+def team_picks(tid: int, sid: str = Depends(_sid)):
+    world = _world(sid)
+    if world.find_team(tid) is None:
+        raise HTTPException(status_code=404, detail="Unknown team.")
+    return {"tid": tid, "picks": [ser.pick_view(world, p) for p in world.picks_owned_by(tid)]}
+
+
 @app.get("/api/teams/{tid}/trade-block")
 def trade_block(tid: int, sid: str = Depends(_sid)):
     world = _world(sid)
@@ -232,8 +269,9 @@ def sim_game(watch: bool = False, sid: str = Depends(_sid)):
     while world.day < game.day:
         S.advance_one_day(world)
     _, user_result = S.advance_one_day(world, watch_user=True)
+    new_offers = trades.refresh_offers(world)
     SESSIONS.autosave(sid)
-    out = {"played": True, "summary": ser.world_summary(world)}
+    out = {"played": True, "summary": ser.world_summary(world), "new_offers": new_offers}
     if user_result is not None:
         out["result"] = ser.game_result_view(world, user_result)
     return out
@@ -249,10 +287,12 @@ def sim_week(days: int = 4, sid: str = Depends(_sid)):
             break
         results, _ = S.advance_one_day(world)
         user_games += [g for g, _ in results if g.involves(uid)]
+    new_offers = trades.refresh_offers(world)
     SESSIONS.autosave(sid)
     return {"results": [ser.schedule_result(world, g) for g in user_games],
             "summary": ser.world_summary(world),
-            "season_complete": S.regular_season_complete(world)}
+            "season_complete": S.regular_season_complete(world),
+            "new_offers": new_offers}
 
 
 @app.post("/api/sim/advance-day")
@@ -260,10 +300,12 @@ def advance_day(sid: str = Depends(_sid)):
     world = _world(sid)
     uid = world.user_team_id
     results, _ = S.advance_one_day(world)
+    new_offers = trades.refresh_offers(world)
     SESSIONS.autosave(sid)
     return {"results": [ser.schedule_result(world, g) for g, _ in results if g.involves(uid)],
             "summary": ser.world_summary(world),
-            "season_complete": S.regular_season_complete(world)}
+            "season_complete": S.regular_season_complete(world),
+            "new_offers": new_offers}
 
 
 # ---------------------------------------------------------------------------
@@ -304,11 +346,17 @@ def playoffs_advance(watch: bool = False, sid: str = Depends(_sid)):
 # ---------------------------------------------------------------------------
 # Front office — trades, signings, extensions (mirrors ui.screens.*)
 # ---------------------------------------------------------------------------
+def _offer_from_body(world: World, body: TradeBody) -> "trades.TradeOffer":
+    return trades.TradeOffer(world.user_team_id, body.partner_tid,
+                             list(body.user_sends), list(body.partner_sends),
+                             [tuple(k) for k in body.user_picks],
+                             [tuple(k) for k in body.partner_picks])
+
+
 @app.post("/api/trade/validate")
 def trade_validate(body: TradeBody, sid: str = Depends(_sid)):
     world = _world(sid)
-    offer = trades.TradeOffer(world.user_team_id, body.partner_tid,
-                              list(body.user_sends), list(body.partner_sends))
+    offer = _offer_from_body(world, body)
     legal, why = trades.validate_trade(world, offer)
     accepts, ai_why = (trades.ai_evaluates(world, offer, body.partner_tid)
                        if legal else (False, "Trade is not legal."))
@@ -318,14 +366,35 @@ def trade_validate(body: TradeBody, sid: str = Depends(_sid)):
 @app.post("/api/trade/execute")
 def trade_execute(body: TradeBody, sid: str = Depends(_sid)):
     world = _world(sid)
-    offer = trades.TradeOffer(world.user_team_id, body.partner_tid,
-                              list(body.user_sends), list(body.partner_sends))
+    offer = _offer_from_body(world, body)
     legal, why = trades.validate_trade(world, offer)
     if not legal:
         raise HTTPException(status_code=400, detail=why)
     accepts, ai_why = trades.ai_evaluates(world, offer, body.partner_tid)
     if not accepts:
         return {"executed": False, "reason": ai_why}
+    trades.execute_trade(world, offer)
+    SESSIONS.autosave(sid)
+    return {"executed": True, "summary": ser.world_summary(world)}
+
+
+@app.post("/api/trade/solicit")
+def trade_solicit(body: SolicitBody, sid: str = Depends(_sid)):
+    """Shop the user's player(s) and return the offers interested teams would make."""
+    world = _world(sid)
+    _user_team(world)
+    offers = trades.solicit_offers(world, list(body.pids))
+    return {"offers": [ser.solicited_offer_view(world, o) for o in offers]}
+
+
+@app.post("/api/trade/accept")
+def trade_accept(body: TradeBody, sid: str = Depends(_sid)):
+    """Accept a solicited offer the AI already proposed — legality-checked, no re-evaluation."""
+    world = _world(sid)
+    offer = _offer_from_body(world, body)
+    legal, why = trades.validate_trade(world, offer)
+    if not legal:
+        raise HTTPException(status_code=400, detail=why)
     trades.execute_trade(world, offer)
     SESSIONS.autosave(sid)
     return {"executed": True, "summary": ser.world_summary(world)}
@@ -360,7 +429,68 @@ def extend(body: ExtendBody, sid: str = Depends(_sid)):
     ok, why = cap.extend_contract(world, team, body.pid, salary, add_years)
     if ok:
         SESSIONS.autosave(sid)
-    return {"extended": ok, "reason": why}
+    return {"extended": ok, "reason": why, "summary": ser.world_summary(world)}
+
+
+@app.post("/api/waive")
+def waive(body: WaiveBody, sid: str = Depends(_sid)):
+    world = _world(sid)
+    team = _user_team(world)
+    if body.pid not in team.roster:
+        raise HTTPException(status_code=400, detail="That player is not on your roster.")
+    if len(team.roster) <= ROSTER_MIN:
+        raise HTTPException(status_code=400,
+                            detail=f"Roster is at the minimum ({ROSTER_MIN}); "
+                                   "sign or trade before waiving.")
+    p = world.players[body.pid]
+    world.release_player(body.pid)
+    if body.pid in team.block_list:
+        team.block_list.remove(body.pid)
+    auto_set_lineup(team, world.players)
+    SESSIONS.autosave(sid)
+    return {"waived": True, "name": p.name, "summary": ser.world_summary(world)}
+
+
+# ---------------------------------------------------------------------------
+# Trade block & AI-initiated offers (inbox)
+# ---------------------------------------------------------------------------
+@app.post("/api/block")
+def set_block(body: BlockBody, sid: str = Depends(_sid)):
+    world = _world(sid)
+    team = _user_team(world)
+    if body.pid not in team.roster:
+        raise HTTPException(status_code=400, detail="That player is not on your roster.")
+    if body.on and body.pid not in team.block_list:
+        team.block_list.append(body.pid)
+    elif not body.on and body.pid in team.block_list:
+        team.block_list.remove(body.pid)
+    SESSIONS.autosave(sid)
+    return {"pid": body.pid, "on_block": body.pid in team.block_list}
+
+
+@app.get("/api/offers")
+def offers(sid: str = Depends(_sid)):
+    world = _world(sid)
+    _user_team(world)
+    return {"offers": [ser.offer_view(world, o) for o in world.trade_offers]}
+
+
+@app.post("/api/offers/accept")
+def offers_accept(body: OfferBody, sid: str = Depends(_sid)):
+    world = _world(sid)
+    _user_team(world)
+    ok, why = trades.accept_offer(world, body.id)
+    SESSIONS.autosave(sid)
+    return {"executed": ok, "reason": why, "summary": ser.world_summary(world)}
+
+
+@app.post("/api/offers/decline")
+def offers_decline(body: OfferBody, sid: str = Depends(_sid)):
+    world = _world(sid)
+    _user_team(world)
+    trades.decline_offer(world, body.id)
+    SESSIONS.autosave(sid)
+    return {"declined": True, "summary": ser.world_summary(world)}
 
 
 # ---------------------------------------------------------------------------
@@ -409,6 +539,10 @@ def set_tactic(body: TacticBody, sid: str = Depends(_sid)):
 def offseason_pre_draft(sid: str = Depends(_sid)):
     world = _world(sid)
     champ = P.champion(world)
+    # Idempotent: once the draft class exists the offseason has already begun this year, so
+    # never re-run pre_draft (which would age, retire, and expire contracts a second time).
+    if world.draft_class is not None:
+        return {"summary": {"new_fas": 0, "retired": 0}, "champion": champ, "resumed": True}
     summary = offseason.pre_draft(world, champ)
     D.setup_draft(world)
     SESSIONS.autosave(sid)
@@ -441,8 +575,9 @@ def draft_board(sid: str = Depends(_sid)):
                        "player": p.name, "position": p.position, "overall": p.overall})
     if dc.complete:
         D.undrafted_to_free_agents(world)
+        world.phase = Phase.FREE_AGENCY        # advance the offseason past the draft
         SESSIONS.autosave(sid)
-        return {"complete": True, "recent": recent}
+        return {"complete": True, "recent": recent, "summary": ser.world_summary(world)}
     return {"complete": False, "on_clock": True, "pick": dc.current_pick,
             "recent": recent, "board": _draft_board(world, dc)}
 

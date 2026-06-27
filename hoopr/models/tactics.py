@@ -16,6 +16,11 @@ DEF_SCHEME_OPTIONS: Tuple[str, ...] = ("Man", "Switch", "Zone")
 DEF_PRESSURE_OPTIONS: Tuple[str, ...] = ("Balanced", "Conservative", "Aggressive")
 REBOUND_FOCUS_OPTIONS: Tuple[str, ...] = ("Balanced", "Crash Boards", "Get Back")
 
+# Coach-mode end-game instructions (the engine applies these in crunch time).
+CRUNCH_FOUL_OPTIONS: Tuple[str, ...] = ("Auto", "Aggressive", "Never")
+FOUL_UP_3_OPTIONS: Tuple[str, ...] = ("No", "Yes")
+CRUNCH_LINEUP_OPTIONS: Tuple[str, ...] = ("Closers", "Rotation")
+
 SETTINGS: Dict[str, Tuple[str, ...]] = {
     "pace": PACE_OPTIONS,
     "off_focus": OFF_FOCUS_OPTIONS,
@@ -23,6 +28,9 @@ SETTINGS: Dict[str, Tuple[str, ...]] = {
     "def_scheme": DEF_SCHEME_OPTIONS,
     "def_pressure": DEF_PRESSURE_OPTIONS,
     "rebound_focus": REBOUND_FOCUS_OPTIONS,
+    "crunch_foul": CRUNCH_FOUL_OPTIONS,
+    "foul_up_3": FOUL_UP_3_OPTIONS,
+    "crunch_lineup": CRUNCH_LINEUP_OPTIONS,
 }
 
 SETTING_LABELS: Dict[str, str] = {
@@ -32,6 +40,9 @@ SETTING_LABELS: Dict[str, str] = {
     "def_scheme": "Defensive Scheme",
     "def_pressure": "Defensive Pressure",
     "rebound_focus": "Rebounding",
+    "crunch_foul": "Foul When Trailing (late)",
+    "foul_up_3": "Foul Up 3 (last seconds)",
+    "crunch_lineup": "Crunch-Time Lineup",
 }
 
 
@@ -43,6 +54,9 @@ class Tactics:
     def_scheme: str = "Man"
     def_pressure: str = "Balanced"
     rebound_focus: str = "Balanced"
+    crunch_foul: str = "Auto"
+    foul_up_3: str = "No"
+    crunch_lineup: str = "Closers"
 
     def get(self, key: str) -> str:
         return getattr(self, key)

@@ -8,7 +8,8 @@ from typing import List
 from hoopr.config import (DEFAULT_SEASON_PRESET, ROOKIE_AGE_RANGE, SALARY_CAP, SEASON_PRESETS,
                           VETERAN_MINIMUM)
 from hoopr.gen.namegen import NameGenerator
-from hoopr.gen.playergen import make_player
+from hoopr.gen.playergen import _POSITION_WEIGHTS, make_player
+from hoopr.models.attributes import POSITIONS
 from hoopr.models.contract import flat_contract
 from hoopr.models.league import Phase
 from hoopr.models.player import Player
@@ -21,6 +22,28 @@ _TEAMS_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "
 # Talent curve: target overall per roster slot (best -> worst) for a 14-man roster.
 _ROSTER_CURVE = [86, 81, 78, 75, 73, 71, 69, 67, 65, 63, 61, 60, 58, 57]
 _NUM_FREE_AGENTS = 70
+
+# Light roster-building guardrails: every team carries at least this many of each primary
+# position so rosters stay playable and never end up lopsided (e.g. all forwards). Remaining
+# slots are filled by the league-wide weights, leaving room for noise and GM "identity".
+_POSITION_MIN = {"PG": 2, "SG": 2, "SF": 2, "PF": 2, "C": 2}
+
+
+def _roster_positions(rng: Rng, n: int) -> List[str]:
+    """Assign a primary position to each of ``n`` roster slots with minimum coverage.
+
+    Positions are shuffled across the talent curve so a team's best players aren't all
+    forced into the same spot, while team strength noise still produces guard- or big-heavy
+    rosters around the floor.
+    """
+    slots: List[str] = []
+    for pos, lo in _POSITION_MIN.items():
+        slots.extend([pos] * lo)
+    weights = [_POSITION_WEIGHTS[p] for p in POSITIONS]
+    while len(slots) < n:
+        slots.append(rng.weighted_one(POSITIONS, weights))
+    rng.shuffle(slots)
+    return slots[:n]
 
 
 def _load_team_records() -> List[dict]:
@@ -62,12 +85,14 @@ def _build_roster(world: World, team: Team, names: NameGenerator) -> None:
     team_strength = rng.gauss(0.0, 2.8)
     used_jerseys: set = set()
     players: List[Player] = []
+    positions = _roster_positions(rng, len(_ROSTER_CURVE))
 
     for slot, base in enumerate(_ROSTER_CURVE):
         noise = rng.gauss(0.0, 2.5)
         star_bonus = rng.uniform(-2.0, 6.0) if slot == 0 else 0.0
         target = int(max(50, min(95, round(base + team_strength + noise + star_bonus))))
-        p = make_player(world.rng, world.new_pid(), names, target_overall=target)
+        p = make_player(world.rng, world.new_pid(), names,
+                        position=positions[slot], target_overall=target)
         p.team_id = team.tid
         p.jersey = _unique_jersey(rng, used_jerseys)
         players.append(p)
@@ -134,4 +159,7 @@ def build_world(seed: int = None, season_preset: str = DEFAULT_SEASON_PRESET) ->
         _build_roster(world, team, names)
 
     _build_free_agents(world, names)
+
+    from hoopr.systems.draft_system import init_draft_picks
+    init_draft_picks(world)
     return world

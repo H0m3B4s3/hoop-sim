@@ -89,6 +89,29 @@ def trade_value(player: Player) -> float:
     return max(0.1, value + surplus)
 
 
+def pick_value(world: World, pick) -> float:
+    """Asset value of a future draft pick, on the same unitless scale as ``trade_value``.
+
+    Driven by the original team's expected finish (a bad team's first-rounder lands a star),
+    the round, and a discount for picks further out. In-season we use the live record; before
+    games are played we fall back to prestige as a strength proxy.
+    """
+    team = world.find_team(pick.original_tid)
+    if team is not None and team.games_played:
+        strength = team.win_pct                      # 0 (worst) .. 1 (best)
+    elif team is not None:
+        strength = (team.prestige - 1) / 4.0         # prestige 1..5 -> 0..1
+    else:
+        strength = 0.5
+    if pick.round == 1:
+        value = 5.0 + (1.0 - strength) * 17.0        # ~5 (late) .. ~22 (top of a bad team)
+    else:
+        value = 0.5 + (1.0 - strength) * 2.5         # ~0.5 .. ~3.0
+    years_out = max(0, pick.year - world.season_year)
+    value *= 0.85 ** years_out                       # the future is uncertain
+    return round(value, 1)
+
+
 # ---------------------------------------------------------------------------
 # Trade & signing legality
 # ---------------------------------------------------------------------------

@@ -79,6 +79,40 @@ button.primary {
 button.ghost {
   background: transparent;
 }
+button.ghost.danger {
+  color: #fb7185;
+  border-color: rgba(251, 113, 133, 0.4);
+}
+button.ghost.blocked {
+  color: var(--accent);
+  border-color: rgba(245, 158, 11, 0.5);
+  background: rgba(245, 158, 11, 0.1);
+}
+.navBadge {
+  display: inline-block;
+  margin-left: 6px;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #1a1a1a;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 18px;
+}
+button.ghost.danger:hover {
+  background: rgba(251, 113, 133, 0.12);
+}
+.rowActions {
+  display: inline-flex;
+  gap: 6px;
+  white-space: nowrap;
+}
+.rowActions button {
+  padding: 3px 9px;
+  font-size: 12px;
+}
 button.big {
   width: 100%;
   padding: 12px;
@@ -501,6 +535,65 @@ table.dt tr.clickable:hover td {
   color: var(--accent);
   font-weight: 700;
 }
+.depthGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+@media (max-width: 1100px) {
+  .depthGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.depthCol {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.depthHead {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding-bottom: 4px;
+  border-bottom: 2px solid var(--border);
+}
+.depthHead.thin {
+  color: #fb7185;
+  border-bottom-color: rgba(251, 113, 133, 0.5);
+}
+.depthEmpty {
+  color: #fb7185;
+  font-size: 13px;
+  padding: 6px 0;
+}
+.depthCard {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.depthName {
+  font-weight: 600;
+  cursor: pointer;
+}
+.depthName:hover {
+  color: var(--accent);
+}
+.depthMeta {
+  font-size: 13px;
+}
+.pickSection {
+  margin-top: 10px;
+}
+.pickSection h5 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
 .shopping {
   background: rgba(245, 158, 11, 0.08);
   border-left: 3px solid var(--accent);
@@ -534,6 +627,45 @@ table.dt tr.clickable:hover td {
   border-left: 3px solid var(--accent);
   padding: 8px 12px;
   border-radius: 6px;
+}
+.offerList {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.offerRow {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.offerHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.offerHead .right {
+  margin-left: auto;
+}
+.offerPieces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.offerPiece {
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--panel);
+  font-size: 13px;
+}
+.offerPiece:hover {
+  background: rgba(245, 158, 11, 0.12);
+}
+.offerRow > button {
+  justify-self: start;
 }
 select {
   background: var(--panel-2);

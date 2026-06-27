@@ -41,6 +41,7 @@ export interface Summary {
   season_year: number;
   phase: string;
   phase_label: string;
+  offseason_stage?: string | null;
   day: number;
   date: string;
   mode: string;
@@ -54,6 +55,7 @@ export interface Summary {
   trade_deadline_day?: number;
   trade_deadline_passed?: boolean;
   days_to_deadline?: number;
+  open_offers?: number;
   user_team?: TeamBrief;
   record?: string;
   payroll?: number;
@@ -75,12 +77,14 @@ export const api = {
   load: (slot: string) => post<Summary>("/load", { slot }),
 
   roster: (tid: number) => get<any>(`/teams/${tid}/roster`),
+  depthChart: (tid: number) => get<any>(`/teams/${tid}/depth-chart`),
   standings: () => get<any>("/standings"),
   leaders: () => get<any>("/leaders"),
   finances: () => get<any>("/finances"),
   freeAgents: () => get<any>("/freeagents"),
   scouting: () => get<any>("/scouting"),
   tradeBlock: (tid: number) => get<{ tid: number; pids: number[] }>(`/teams/${tid}/trade-block`),
+  teamPicks: (tid: number) => get<{ tid: number; picks: Row[] }>(`/teams/${tid}/picks`),
   player: (pid: number) => get<any>(`/players/${pid}`),
 
   simGame: (watch: boolean) => post<any>(`/sim/game?watch=${watch}`),
@@ -93,8 +97,15 @@ export const api = {
 
   validateTrade: (b: any) => post<any>("/trade/validate", b),
   executeTrade: (b: any) => post<any>("/trade/execute", b),
+  solicitOffers: (pids: number[]) => post<any>("/trade/solicit", { pids }),
+  acceptOffer: (b: any) => post<any>("/trade/accept", b),
   sign: (pid: number) => post<any>("/sign", { pid }),
   extend: (pid: number) => post<any>("/extend", { pid }),
+  waive: (pid: number) => post<any>("/waive", { pid }),
+  setBlock: (pid: number, on: boolean) => post<any>("/block", { pid, on }),
+  offers: () => get<{ offers: Row[] }>("/offers"),
+  offerAccept: (id: number) => post<any>("/offers/accept", { id }),
+  offerDecline: (id: number) => post<any>("/offers/decline", { id }),
 
   setLineup: (starters: number[] | null, auto = false) =>
     post<any>("/lineup", { starters, auto }),

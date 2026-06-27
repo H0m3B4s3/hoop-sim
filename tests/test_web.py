@@ -80,6 +80,175 @@ def test_api_scouting_and_trade_block_endpoints():
     assert blk["tid"] == other and isinstance(blk["pids"], list)
 
 
+def test_api_solicit_and_accept_offer():
+    client = TestClient(app)
+    state = client.post("/api/career/new",
+                        json={"league": "nba", "preset": "Quick", "seed": 8}).json()
+    tid = state["summary"]["teams"][0]["tid"]
+    client.post(f"/api/career/team/{tid}")
+    roster = client.get(f"/api/teams/{tid}/roster").json()
+    target = max(roster["players"], key=lambda p: p["overall"])["pid"]
+    offers = client.post("/api/trade/solicit", json={"pids": [target]}).json()["offers"]
+    assert offers, "expected offers for a top player"
+    top = offers[0]
+    assert top["user_sends"] == [target] and top["pieces"]
+    accepted = client.post("/api/trade/accept", json={
+        "partner_tid": top["partner_tid"],
+        "user_sends": top["user_sends"],
+        "partner_sends": top["partner_sends"],
+    }).json()
+    assert accepted["executed"] is True
+    after = client.get(f"/api/teams/{tid}/roster").json()
+    pids_after = {p["pid"] for p in after["players"]}
+    assert target not in pids_after
+    assert all(pid in pids_after for pid in top["partner_sends"])
+
+
+def test_api_trade_draft_picks():
+    client = TestClient(app)
+    state = client.post("/api/career/new",
+                        json={"league": "nba", "preset": "Quick", "seed": 8}).json()
+    tid = state["summary"]["teams"][0]["tid"]
+    other = next(t["tid"] for t in state["summary"]["teams"] if t["tid"] != tid)
+    client.post(f"/api/career/team/{tid}")
+
+    mine = client.get(f"/api/teams/{tid}/picks").json()["picks"]
+    theirs = client.get(f"/api/teams/{other}/picks").json()["picks"]
+    assert mine and theirs and "label" in mine[0] and "value" in mine[0]
+
+    my_key = mine[0]["key"]
+    their_key = theirs[0]["key"]
+    body = {"partner_tid": other, "user_sends": [], "partner_sends": [],
+            "user_picks": [my_key], "partner_picks": [their_key]}
+    val = client.post("/api/trade/validate", json=body).json()
+    assert val["legal"] is True
+    ex = client.post("/api/trade/accept", json=body).json()
+    assert ex["executed"] is True
+
+    after_mine = {tuple(p["key"]) for p in client.get(f"/api/teams/{tid}/picks").json()["picks"]}
+    assert tuple(their_key) in after_mine and tuple(my_key) not in after_mine
+
+
+def test_api_depth_chart_groups_by_position():
+    client = TestClient(app)
+    state = client.post("/api/career/new",
+                        json={"league": "nba", "preset": "Quick", "seed": 5}).json()
+    tid = state["summary"]["teams"][0]["tid"]
+    client.post(f"/api/career/team/{tid}")
+    dc = client.get(f"/api/teams/{tid}/depth-chart").json()
+    positions = [g["position"] for g in dc["positions"]]
+    assert positions == ["PG", "SG", "SF", "PF", "C"]
+    # every rostered player lands in exactly one position group
+    total = sum(g["count"] for g in dc["positions"])
+    roster = client.get(f"/api/teams/{tid}/roster").json()["players"]
+    assert total == len(roster)
+    # starters are flagged and within their position group sort to the front
+    for g in dc["positions"]:
+        if g["players"]:
+            assert g["players"] == sorted(
+                g["players"], key=lambda p: (p["is_starter"], p["overall"]), reverse=True)
+    assert any(p["is_starter"] for g in dc["positions"] for p in g["players"])
+
+
+def test_api_waive_and_extend():
+    from hoopr.config import ROSTER_MIN
+    client = TestClient(app)
+    state = client.post("/api/career/new",
+                        json={"league": "nba", "preset": "Quick", "seed": 5}).json()
+    tid = state["summary"]["teams"][0]["tid"]
+    client.post(f"/api/career/team/{tid}")
+
+    roster = client.get(f"/api/teams/{tid}/roster").json()["players"]
+    assert len(roster) > ROSTER_MIN
+    # extend a player — response carries the refreshed summary
+    target = min(roster, key=lambda p: p["years_remaining"])["pid"]
+    ext = client.post("/api/extend", json={"pid": target}).json()
+    assert "extended" in ext and "summary" in ext
+
+    # waive down toward the floor, asserting each legal waive succeeds
+    waived = 0
+    while True:
+        cur = client.get(f"/api/teams/{tid}/roster").json()["players"]
+        if len(cur) <= ROSTER_MIN:
+            break
+        assert client.post("/api/waive", json={"pid": cur[0]["pid"]}).json()["waived"] is True
+        waived += 1
+    assert waived >= 1
+    # at the floor the next waive is refused, as is waiving a non-rostered player
+    floor_roster = client.get(f"/api/teams/{tid}/roster").json()["players"]
+    assert client.post("/api/waive", json={"pid": floor_roster[0]["pid"]}).status_code == 400
+    assert client.post("/api/waive", json={"pid": 999999}).status_code == 400
+
+
+def test_offseason_pre_draft_is_idempotent():
+    """Re-entering the offseason wizard must not run the offseason twice (the reported bug)."""
+    from hoopr.models.league import Phase
+    from hoopr.web.session import SESSIONS
+    client = TestClient(app)
+    state = client.post("/api/career/new",
+                        json={"league": "nba", "preset": "Quick", "seed": 5}).json()
+    tid = state["summary"]["teams"][0]["tid"]
+    client.post(f"/api/career/team/{tid}")
+    sid = client.cookies.get("hoopr_sid")
+    world = SESSIONS.require(sid)
+
+    # Simulate "playoffs just ended": offseason available, not yet begun.
+    world.phase = Phase.DRAFT
+    world.draft_class = None
+    assert client.get("/api/state").json()["summary"]["offseason_stage"] == "pre_draft"
+
+    # First begin: ages everyone +1 and sets up the draft.
+    ages0 = {pid: p.age for pid, p in world.players.items()}
+    r1 = client.post("/api/offseason/pre-draft").json()
+    assert not r1.get("resumed")
+    assert client.get("/api/state").json()["summary"]["offseason_stage"] == "draft"
+    aged = {pid: p.age for pid, p in world.players.items() if pid in ages0}
+    assert any(aged[pid] == ages0[pid] + 1 for pid in aged)
+
+    # Second begin (e.g. user left the tab and came back): a no-op, no second aging.
+    snapshot = {pid: p.age for pid, p in world.players.items()}
+    r2 = client.post("/api/offseason/pre-draft").json()
+    assert r2.get("resumed") is True
+    assert {pid: p.age for pid, p in world.players.items()} == snapshot
+
+
+def test_api_block_and_offers_inbox():
+    from hoopr.systems import cap, trades
+    from hoopr.web.session import SESSIONS
+    client = TestClient(app)
+    state = client.post("/api/career/new",
+                        json={"league": "nba", "preset": "Quick", "seed": 8}).json()
+    tid = state["summary"]["teams"][0]["tid"]
+    client.post(f"/api/career/team/{tid}")
+    world = SESSIONS.require(client.cookies.get("hoopr_sid"))
+
+    # put a quality vet on the block via the endpoint
+    pid = max(world.teams[tid].roster, key=lambda p: cap.trade_value(world.players[p]))
+    r = client.post("/api/block", json={"pid": pid, "on": True}).json()
+    assert r["on_block"] is True
+    # roster rows reflect the block flag
+    roster = client.get(f"/api/teams/{tid}/roster").json()["players"]
+    assert next(p for p in roster if p["pid"] == pid)["on_block"] is True
+
+    # generate offers (advance the offer clock directly to avoid simming a full season)
+    for _ in range(60):
+        trades.refresh_offers(world)
+        if world.trade_offers:
+            break
+        world.day += 1
+    assert world.trade_offers
+
+    inbox = client.get("/api/offers").json()["offers"]
+    assert inbox and pid in inbox[0]["user_sends"]
+    assert client.get("/api/state").json()["summary"]["open_offers"] == len(inbox)
+
+    # accept the first offer through the endpoint
+    res = client.post("/api/offers/accept", json={"id": inbox[0]["id"]}).json()
+    assert res["executed"] is True
+    after = {p["pid"] for p in client.get(f"/api/teams/{tid}/roster").json()["players"]}
+    assert pid not in after
+
+
 def test_api_drives_a_short_game_loop():
     client = TestClient(app)
     assert client.get("/api/state").json()["active"] is False

@@ -117,10 +117,13 @@ def post_offseason(world: World) -> None:
     """Fill rosters to the minimum, cull the free-agent pool, grow the cap, and start next year."""
     from hoopr.config import CAP_GROWTH_RATE
     from hoopr.systems import cap
+    from hoopr.systems import draft_system
     fill_rosters(world)
     cull_free_agents(world)
     cap.grow_cap(world, CAP_GROWTH_RATE)
     world.season_year += 1
+    draft_system.roll_draft_picks(world)
+    world.draft_class = None        # retire this year's class so next offseason starts clean
     start_season(world)
 
 

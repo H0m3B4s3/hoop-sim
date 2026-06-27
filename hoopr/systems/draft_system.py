@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from typing import List
 
-from hoopr.config import ROOKIE_CONTRACT_YEARS, ROOKIE_SCALE
+from hoopr.config import FUTURE_PICK_YEARS, ROOKIE_CONTRACT_YEARS, ROOKIE_SCALE
 from hoopr.gen.namegen import NameGenerator
 from hoopr.gen.playergen import make_player
 from hoopr.models.contract import flat_contract
-from hoopr.models.draft import DraftClass
+from hoopr.models.draft import DraftClass, DraftPick
 from hoopr.models.league import Phase
 from hoopr.models.team import auto_set_lineup
 from hoopr.models.world import World
@@ -37,6 +37,37 @@ def prospect_rank(player) -> float:
     return 0.45 * player.overall + 0.55 * player.scouted_potential()
 
 
+# ---------------------------------------------------------------------------
+# Tradeable future picks
+# ---------------------------------------------------------------------------
+def init_draft_picks(world: World) -> None:
+    """Give every team its own first- and second-round picks for the next few drafts."""
+    world.draft_picks = []
+    for tid in world.teams:
+        for year in range(world.season_year, world.season_year + FUTURE_PICK_YEARS):
+            for rnd in (1, 2):
+                world.draft_picks.append(DraftPick(year=year, round=rnd,
+                                                   original_tid=tid, owner_tid=tid))
+
+
+def roll_draft_picks(world: World) -> None:
+    """After a draft year ends: drop spent picks and add a new far-future pick per team.
+
+    Keeps a rolling ``FUTURE_PICK_YEARS`` window of tradeable picks. Traded picks already in
+    the window are untouched; the brand-new far-out picks always start owned by their own team.
+    """
+    if not world.draft_picks:
+        init_draft_picks(world)
+        return
+    world.draft_picks = [p for p in world.draft_picks if p.year >= world.season_year]
+    far = world.season_year + FUTURE_PICK_YEARS - 1
+    for tid in world.teams:
+        for rnd in (1, 2):
+            if world.find_pick(far, rnd, tid) is None:
+                world.draft_picks.append(DraftPick(year=far, round=rnd,
+                                                   original_tid=tid, owner_tid=tid))
+
+
 def _weighted_lottery(world: World, teams_worst_first: list) -> list:
     pool = list(teams_worst_first)
     weights = {t.tid: (len(pool) - i) ** 1.3 for i, t in enumerate(pool)}
@@ -49,6 +80,7 @@ def _weighted_lottery(world: World, teams_worst_first: list) -> list:
 
 
 def compute_draft_order(world: World) -> List[int]:
+    """The original-team slot order (worst-first, lottery for round 1), ignoring ownership."""
     seeds = world.bracket.get("seeds", {}) if world.bracket else {}
     playoff_tids = {int(k) for k in seeds.keys()}
     worst_first = sorted(world.team_list(), key=lambda t: t.win_pct)
@@ -60,10 +92,21 @@ def compute_draft_order(world: World) -> List[int]:
     return round1 + round2
 
 
+def _pick_owner(world: World, year: int, rnd: int, original_tid: int) -> int:
+    """Who actually selects in this slot — the current owner of the pick, else the original team."""
+    pick = world.find_pick(year, rnd, original_tid)
+    return pick.owner_tid if pick is not None else original_tid
+
+
 def setup_draft(world: World) -> DraftClass:
     prospects = generate_draft_class(world)
-    order = compute_draft_order(world)
-    dc = DraftClass(year=world.season_year, prospect_ids=prospects, order=order, current_pick=1)
+    origins = compute_draft_order(world)
+    n_teams = len(world.teams)
+    # First n_teams slots are round 1, the rest round 2 (compute_draft_order builds R1 then R2).
+    order = [_pick_owner(world, world.season_year, 1 if i < n_teams else 2, orig)
+             for i, orig in enumerate(origins)]
+    dc = DraftClass(year=world.season_year, prospect_ids=prospects,
+                    order=order, origins=origins, current_pick=1)
     world.draft_class = dc
     world.phase = Phase.DRAFT
     return dc

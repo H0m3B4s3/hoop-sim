@@ -48,6 +48,19 @@ def test_round_trip_preserves_state():
     assert w2.bracket == w.bracket
 
 
+def test_round_trip_preserves_traded_draft_picks():
+    from hoopr.systems.trades import TradeOffer, execute_trade
+    w = build_world(seed=7)
+    a, b = w.teams[0], w.teams[1]
+    ka = w.find_pick(w.season_year, 1, a.tid).key
+    kb = w.find_pick(w.season_year, 1, b.tid).key
+    execute_trade(w, TradeOffer(a.tid, b.tid, [], [], [ka], [kb]))
+    w2 = world_from_json(world_to_json(w))
+    assert len(w2.draft_picks) == len(w.draft_picks)
+    assert w2.find_pick(*ka).owner_tid == b.tid
+    assert w2.find_pick(*kb).owner_tid == a.tid
+
+
 def test_rng_state_reproduces_simulation():
     w = build_world(seed=9)
     w.user_team_id = 0

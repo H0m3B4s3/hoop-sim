@@ -177,6 +177,7 @@ function TeamSelect({
 const NAV: { key: string; label: string }[] = [
   { key: "play", label: "Play" },
   { key: "roster", label: "Roster" },
+  { key: "depth", label: "Depth Chart" },
   { key: "lineup", label: "Lineup" },
   { key: "tactics", label: "Tactics" },
   { key: "standings", label: "Standings" },
@@ -208,8 +209,13 @@ function Hub({
   const showPlayoffs = inPlayoffs || summary.regular_season_complete;
 
   const nav = [...NAV];
+  if (summary.mode === "nba") {
+    const tradeIdx = nav.findIndex((n) => n.key === "trade");
+    nav.splice(tradeIdx + 1, 0, { key: "offers", label: "Offers" });
+  }
   if (showPlayoffs) nav.push({ key: "playoffs", label: "Playoffs" });
   if (inOffseason) nav.push({ key: "offseason", label: "Offseason" });
+  const openOffers = summary.open_offers ?? 0;
 
   const refresh = (s?: Summary) => {
     if (s) setSummary(s);
@@ -228,35 +234,81 @@ function Hub({
               onClick={() => setTab(n.key)}
             >
               {n.label}
+              {n.key === "offers" && openOffers > 0 && (
+                <span className="navBadge">{openOffers}</span>
+              )}
             </button>
           ))}
         </nav>
         <main className="content">
           {tab === "play" && <PlayPanel summary={summary} refresh={refresh} toast={toast} />}
           {tab === "roster" && (
-            <RosterPanel tid={summary.user_team_id!} mode={summary.mode} onPlayer={setOpenPid} />
+            <RosterPanel
+              tid={summary.user_team_id!}
+              mode={summary.mode}
+              onPlayer={setOpenPid}
+              manage={summary.mode !== "college"}
+              refresh={refresh}
+              toast={toast}
+            />
           )}
-          {tab === "lineup" && <LineupPanel onPlayer={setOpenPid} toast={toast} />}
-          {tab === "tactics" && <TacticsPanel toast={toast} />}
-          {tab === "standings" && <StandingsPanel />}
-          {tab === "leaders" && <LeadersPanel onPlayer={setOpenPid} />}
-          {tab === "finances" && <FinancesPanel onPlayer={setOpenPid} />}
-          {tab === "fa" && (
-            <FreeAgentsPanel onPlayer={setOpenPid} refresh={refresh} toast={toast} />
-          )}
-          {tab === "scout" && <ScoutingPanel onPlayer={setOpenPid} />}
-          {tab === "trade" && (
-            <TradePanel
-              summary={summary}
+          {tab === "depth" && (
+            <DepthChartPanel
+              tid={summary.user_team_id!}
+              mode={summary.mode}
+              manage={summary.mode !== "college"}
               refresh={refresh}
               toast={toast}
               onPlayer={setOpenPid}
             />
           )}
+          {tab === "lineup" && <LineupPanel onPlayer={setOpenPid} toast={toast} />}
+          {tab === "tactics" && <TacticsPanel toast={toast} />}
+          {tab === "standings" && <StandingsPanel />}
+          {tab === "leaders" && <LeadersPanel onPlayer={setOpenPid} />}
+          {tab === "finances" && (
+            <FinancesPanel
+              onPlayer={setOpenPid}
+              mode={summary.mode}
+              refresh={refresh}
+              toast={toast}
+            />
+          )}
+          {tab === "fa" && (
+            <FreeAgentsPanel onPlayer={setOpenPid} refresh={refresh} toast={toast} />
+          )}
+          {tab === "scout" && <ScoutingPanel onPlayer={setOpenPid} />}
+          {tab === "trade" && (
+            <>
+              <TradePanel
+                summary={summary}
+                refresh={refresh}
+                toast={toast}
+                onPlayer={setOpenPid}
+              />
+              <SolicitPanel
+                summary={summary}
+                refresh={refresh}
+                toast={toast}
+                onPlayer={setOpenPid}
+              />
+            </>
+          )}
+          {tab === "offers" && (
+            <OffersPanel refresh={refresh} toast={toast} onPlayer={setOpenPid} />
+          )}
           {tab === "playoffs" && (
             <PlayoffsPanel summary={summary} refresh={refresh} toast={toast} />
           )}
-          {tab === "offseason" && <OffseasonPanel refresh={refresh} toast={toast} />}
+          {tab === "offseason" && (
+            <OffseasonPanel
+              summary={summary}
+              refresh={refresh}
+              toast={toast}
+              onPlayer={setOpenPid}
+              userTid={summary.user_team_id}
+            />
+          )}
         </main>
       </div>
       {openPid != null && (
@@ -337,6 +389,8 @@ function PlayPanel({
       if (r.result) setGame(r.result);
       if (r.season_complete)
         toast("Regular season complete — check Standings, then start the playoffs.");
+      if (r.new_offers > 0)
+        toast(`📨 ${r.new_offers} new trade offer${r.new_offers === 1 ? "" : "s"} — see the Offers tab.`);
       if (r.message) toast(r.message);
     } catch (e) {
       toast(String(e));
@@ -455,7 +509,75 @@ function BoxScore({ result, onClose }: { result: any; onClose: () => void }) {
 // ---------------------------------------------------------------------------
 const OVR = (v: number) => <span style={{ color: ovrColor(v), fontWeight: 600 }}>{v}</span>;
 
-function rosterColumns(mode: string): ColumnDef<Row, any>[] {
+// Block / Extend / Waive controls shared by the Roster, Depth, and Finances views (NBA, your team).
+function PlayerActions({
+  pid,
+  onBlock,
+  reload,
+  refresh,
+  toast,
+}: {
+  pid: number;
+  onBlock?: boolean;
+  reload: () => void;
+  refresh: (s?: Summary) => void;
+  toast: (m: string) => void;
+}) {
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
+  const block = async (e: React.MouseEvent) => {
+    stop(e);
+    const r = await api.setBlock(pid, !onBlock).catch((err) => toast(String(err)));
+    if (!r) return;
+    toast(r.on_block ? "Added to the trade block." : "Removed from the trade block.");
+    reload();
+  };
+  const extend = async (e: React.MouseEvent) => {
+    stop(e);
+    const r = await api.extend(pid).catch((err) => toast(String(err)));
+    if (!r) return;
+    toast(r.extended ? `Extended — ${r.reason}` : `Can't extend — ${r.reason}`);
+    if (r.summary) refresh(r.summary);
+    reload();
+  };
+  const waive = async (e: React.MouseEvent) => {
+    stop(e);
+    if (!window.confirm("Waive this player to free agency? (Dead money is ignored.)")) return;
+    const r = await api.waive(pid).catch((err) => toast(String(err)));
+    if (!r) return;
+    toast(`${r.name} waived.`);
+    refresh(r.summary);
+    reload();
+  };
+  return (
+    <span className="rowActions" onClick={stop}>
+      <button className={onBlock ? "ghost blocked" : "ghost"} onClick={block} title="Trade block">
+        {onBlock ? "★ On Block" : "☆ Block"}
+      </button>
+      <button className="ghost" onClick={extend}>
+        Extend
+      </button>
+      <button className="ghost danger" onClick={waive}>
+        Waive
+      </button>
+    </span>
+  );
+}
+
+function actionsColumn(
+  render: (row: Row) => React.ReactNode
+): ColumnDef<Row, any> {
+  return {
+    id: "actions",
+    header: "",
+    enableSorting: false,
+    cell: (c) => render(c.row.original as Row),
+  };
+}
+
+function rosterColumns(
+  mode: string,
+  actions?: (row: Row) => React.ReactNode
+): ColumnDef<Row, any>[] {
   const cols: ColumnDef<Row, any>[] = [
     { accessorKey: "jersey", header: "#" },
     {
@@ -496,6 +618,7 @@ function rosterColumns(mode: string): ColumnDef<Row, any>[] {
         ""
       ),
   });
+  if (actions) cols.push(actionsColumn(actions));
   return cols;
 }
 
@@ -503,26 +626,118 @@ function RosterPanel({
   tid,
   mode,
   onPlayer,
+  manage,
+  refresh,
+  toast,
 }: {
   tid: number;
   mode: string;
   onPlayer: (pid: number) => void;
+  manage?: boolean;
+  refresh?: (s?: Summary) => void;
+  toast?: (m: string) => void;
 }) {
   const [data, setData] = useState<any | null>(null);
+  const reload = () => api.roster(tid).then(setData).catch(() => {});
   useEffect(() => {
-    api.roster(tid).then(setData).catch(() => {});
+    reload();
   }, [tid]);
   if (!data) return <Loading />;
+  const actions =
+    manage && refresh && toast
+      ? (row: Row) => (
+          <PlayerActions
+            pid={row.pid}
+            onBlock={row.on_block}
+            reload={reload}
+            refresh={refresh}
+            toast={toast}
+          />
+        )
+      : undefined;
   return (
     <div className="card">
       <h3>{data.team.full_name} — Roster</h3>
       <DataTable
         data={data.players}
-        columns={rosterColumns(mode)}
+        columns={rosterColumns(mode, actions)}
         initialSort={[{ id: "overall", desc: true }]}
         onRowClick={(r) => onPlayer((r as Row).pid)}
         searchPlaceholder="Search players…"
       />
+    </div>
+  );
+}
+
+// Roster grouped by position — see where you're deep or thin, with extend/waive inline.
+function DepthChartPanel({
+  tid,
+  mode,
+  manage,
+  refresh,
+  toast,
+  onPlayer,
+  reloadSignal,
+}: {
+  tid: number;
+  mode: string;
+  manage?: boolean;
+  refresh?: (s?: Summary) => void;
+  toast?: (m: string) => void;
+  onPlayer: (pid: number) => void;
+  reloadSignal?: number;
+}) {
+  const [data, setData] = useState<any | null>(null);
+  const reload = () => api.depthChart(tid).then(setData).catch(() => {});
+  useEffect(() => {
+    reload();
+  }, [tid, reloadSignal]);
+  if (!data) return <Loading />;
+  const canManage = !!(manage && refresh && toast && mode !== "college");
+  return (
+    <div className="card">
+      <h3>{data.team.full_name} — Depth Chart</h3>
+      <p className="muted small">
+        ★ = starter · positions with fewer than two players are flagged in red.
+      </p>
+      <div className="depthGrid">
+        {data.positions.map((g: any) => (
+          <div className="depthCol" key={g.position}>
+            <div className={`depthHead${g.count < 2 ? " thin" : ""}`}>
+              {g.position} <span className="muted">({g.count})</span>
+            </div>
+            {g.count === 0 && <div className="depthEmpty">— none —</div>}
+            {g.players.map((p: Row) => (
+              <div className="depthCard" key={p.pid}>
+                <div className="depthName" onClick={() => onPlayer(p.pid)}>
+                  {p.is_starter && <span className="star">★ </span>}
+                  {p.name}
+                  {p.on_block && <span className="blockMark" title="On the trade block"> ✦</span>}
+                </div>
+                <div className="depthMeta">
+                  {OVR(p.overall)} <span className="muted">{p.age}y</span>
+                  {mode !== "college" && (
+                    <span className="muted">
+                      {" "}
+                      · {money(p.salary)} · {p.years_remaining}y
+                    </span>
+                  )}
+                  {p.is_injured && <span className="injury"> OUT</span>}
+                </div>
+                {canManage && (
+                  <PlayerActions
+                    pid={p.pid}
+                    onBlock={p.on_block}
+                    reload={reload}
+                    refresh={refresh!}
+                    toast={toast!}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -605,10 +820,21 @@ function StandingsPanel() {
   );
 }
 
-function FinancesPanel({ onPlayer }: { onPlayer: (pid: number) => void }) {
+function FinancesPanel({
+  onPlayer,
+  mode,
+  refresh,
+  toast,
+}: {
+  onPlayer: (pid: number) => void;
+  mode: string;
+  refresh: (s?: Summary) => void;
+  toast: (m: string) => void;
+}) {
   const [data, setData] = useState<any | null>(null);
+  const reload = () => api.finances().then(setData).catch(() => {});
   useEffect(() => {
-    api.finances().then(setData).catch(() => {});
+    reload();
   }, []);
   if (!data) return <Loading />;
   const cols: ColumnDef<Row, any>[] = [
@@ -629,6 +855,19 @@ function FinancesPanel({ onPlayer }: { onPlayer: (pid: number) => void }) {
       ),
     },
   ];
+  if (mode !== "college") {
+    cols.push(
+      actionsColumn((row) => (
+        <PlayerActions
+          pid={row.pid}
+          onBlock={row.on_block}
+          reload={reload}
+          refresh={refresh}
+          toast={toast}
+        />
+      ))
+    );
+  }
   return (
     <div>
       <div className="statRow">
@@ -654,10 +893,12 @@ function FreeAgentsPanel({
   onPlayer,
   refresh,
   toast,
+  onChange,
 }: {
   onPlayer: (pid: number) => void;
   refresh: (s?: Summary) => void;
   toast: (m: string) => void;
+  onChange?: () => void;
 }) {
   const [data, setData] = useState<any | null>(null);
   const load = () => api.freeAgents().then(setData).catch(() => {});
@@ -671,6 +912,7 @@ function FreeAgentsPanel({
       toast(r.signed ? "Signed!" : r.reason);
       if (r.summary) refresh(r.summary);
       load();
+      if (r.signed) onChange?.();
     } catch (e) {
       toast(String(e));
     }
@@ -949,23 +1191,42 @@ function TradePanel({
   const [theirs, setTheirs] = useState<any | null>(null);
   const [give, setGive] = useState<number[]>([]);
   const [get, setGet] = useState<number[]>([]);
+  const [myPicks, setMyPicks] = useState<Row[]>([]);
+  const [theirPicks, setTheirPicks] = useState<Row[]>([]);
+  const [givePk, setGivePk] = useState<string[]>([]);
+  const [getPk, setGetPk] = useState<string[]>([]);
   const [verdict, setVerdict] = useState<string>("");
   const [block, setBlock] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     api.roster(summary.user_team_id!).then(setMine);
+    api.teamPicks(summary.user_team_id!).then((p) => setMyPicks(p.picks));
   }, [summary.user_team_id]);
   useEffect(() => {
     if (partner) {
       api.roster(partner).then(setTheirs);
+      api.teamPicks(partner).then((p) => setTheirPicks(p.picks));
       api.tradeBlock(partner).then((b) => setBlock(new Set(b.pids))).catch(() => setBlock(new Set()));
       setGet([]);
+      setGetPk([]);
     }
   }, [partner]);
 
   const shopping = (theirs?.players ?? []).filter((p: Row) => block.has(p.pid));
 
-  const reqBody = () => ({ partner_tid: partner, user_sends: give, partner_sends: get });
+  const keyOf = (k: number[]) => k.join("-");
+  const togglePk = (arr: string[], set: (a: string[]) => void, id: string) =>
+    set(arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id]);
+  const keysFrom = (ids: string[], picks: Row[]) =>
+    picks.filter((p) => ids.includes(keyOf(p.key))).map((p) => p.key);
+
+  const reqBody = () => ({
+    partner_tid: partner,
+    user_sends: give,
+    partner_sends: get,
+    user_picks: keysFrom(givePk, myPicks),
+    partner_picks: keysFrom(getPk, theirPicks),
+  });
   const check = async () => {
     const r = await api.validateTrade(reqBody()).catch((e) => toast(String(e)));
     if (r)
@@ -983,8 +1244,12 @@ function TradePanel({
       refresh(r.summary);
       setGive([]);
       setGet([]);
+      setGivePk([]);
+      setGetPk([]);
       api.roster(summary.user_team_id!).then(setMine);
       api.roster(partner).then(setTheirs);
+      api.teamPicks(summary.user_team_id!).then((p) => setMyPicks(p.picks));
+      api.teamPicks(partner).then((p) => setTheirPicks(p.picks));
     } else toast(r.reason);
   };
 
@@ -1024,21 +1289,37 @@ function TradePanel({
         </p>
       )}
       <div className="tradeGrid">
-        <PickList
-          title="You send"
-          data={mine}
-          sel={give}
-          onToggle={(p) => toggle(give, setGive, p)}
-          onPlayer={onPlayer}
-        />
-        <PickList
-          title="You receive"
-          data={theirs}
-          sel={get}
-          onToggle={(p) => toggle(get, setGet, p)}
-          onPlayer={onPlayer}
-          block={block}
-        />
+        <div>
+          <PickList
+            title="You send"
+            data={mine}
+            sel={give}
+            onToggle={(p) => toggle(give, setGive, p)}
+            onPlayer={onPlayer}
+          />
+          <DraftPickList
+            picks={myPicks}
+            sel={givePk}
+            onToggle={(id) => togglePk(givePk, setGivePk, id)}
+            keyOf={keyOf}
+          />
+        </div>
+        <div>
+          <PickList
+            title="You receive"
+            data={theirs}
+            sel={get}
+            onToggle={(p) => toggle(get, setGet, p)}
+            onPlayer={onPlayer}
+            block={block}
+          />
+          <DraftPickList
+            picks={theirPicks}
+            sel={getPk}
+            onToggle={(id) => togglePk(getPk, setGetPk, id)}
+            keyOf={keyOf}
+          />
+        </div>
       </div>
       <div className="toolbar">
         <button onClick={check} disabled={deadlinePassed}>
@@ -1047,12 +1328,160 @@ function TradePanel({
         <button
           className="primary"
           onClick={exec}
-          disabled={deadlinePassed || (!give.length && !get.length)}
+          disabled={
+            deadlinePassed ||
+            (!give.length && !get.length && !givePk.length && !getPk.length)
+          }
         >
           Execute
         </button>
       </div>
       {verdict && <p className="verdict">{verdict}</p>}
+    </div>
+  );
+}
+
+// Shop your own players around the league and collect AI offers.
+function SolicitPanel({
+  summary,
+  refresh,
+  toast,
+  onPlayer,
+}: {
+  summary: Summary;
+  refresh: (s?: Summary) => void;
+  toast: (m: string) => void;
+  onPlayer: (pid: number) => void;
+}) {
+  const [mine, setMine] = useState<any | null>(null);
+  const [sel, setSel] = useState<number[]>([]);
+  const [offers, setOffers] = useState<Row[] | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const reload = () => api.roster(summary.user_team_id!).then(setMine);
+  useEffect(() => {
+    reload();
+  }, [summary.user_team_id]);
+
+  const deadlinePassed = summary.trade_deadline_passed === true;
+  const toggle = (pid: number) =>
+    setSel((s) => (s.includes(pid) ? s.filter((x) => x !== pid) : [...s, pid]));
+
+  const solicit = async () => {
+    setBusy(true);
+    const r = await api.solicitOffers(sel).catch((e) => toast(String(e)));
+    setBusy(false);
+    if (r) setOffers(r.offers);
+  };
+
+  const accept = async (o: Row) => {
+    const r = await api
+      .acceptOffer({
+        partner_tid: o.partner_tid,
+        user_sends: o.user_sends,
+        partner_sends: o.partner_sends,
+        partner_picks: o.partner_picks ?? [],
+      })
+      .catch((e) => toast(String(e)));
+    if (!r) return;
+    toast("Trade completed!");
+    refresh(r.summary);
+    setSel([]);
+    setOffers(null);
+    reload();
+  };
+
+  return (
+    <div className="card">
+      <h3>Shop Your Players</h3>
+      <p className="muted">
+        Dangle your own players — expiring veterans on a rebuilding team are easiest to move —
+        and see what contenders will offer.
+      </p>
+      <PickList
+        title="Players to shop"
+        data={mine}
+        sel={sel}
+        onToggle={toggle}
+        onPlayer={onPlayer}
+      />
+      <div className="toolbar">
+        <button
+          className="primary"
+          onClick={solicit}
+          disabled={deadlinePassed || !sel.length || busy}
+        >
+          {busy ? "Calling around…" : "Solicit offers"}
+        </button>
+      </div>
+      {offers != null &&
+        (offers.length === 0 ? (
+          <p className="verdict">No team made an offer for that package.</p>
+        ) : (
+          <div className="offerList">
+            {offers.map((o, i) => (
+              <div className="offerRow" key={i}>
+                <div className="offerHead">
+                  <b style={{ color: o.partner_color }}>{o.partner_abbrev}</b> offer
+                  <span className="muted right">value {o.value}</span>
+                </div>
+                <div className="offerPieces">
+                  {o.pieces.map((p: Row) => (
+                    <span
+                      key={p.pid}
+                      className="offerPiece"
+                      onClick={() => onPlayer(p.pid)}
+                      title="Scout ratings"
+                    >
+                      {p.name} <span className="muted">{p.position}</span> {OVR(p.overall)}{" "}
+                      <span className="muted">{money(p.salary)}</span>
+                    </span>
+                  ))}
+                  {(o.picks ?? []).map((pk: Row) => (
+                    <span key={pk.label} className="offerPiece">
+                      🎟️ {pk.label} <span className="muted">val {pk.value}</span>
+                    </span>
+                  ))}
+                </div>
+                <button className="primary" onClick={() => accept(o)} disabled={deadlinePassed}>
+                  Accept
+                </button>
+              </div>
+            ))}
+          </div>
+        ))}
+    </div>
+  );
+}
+
+// Selectable list of tradeable future draft picks.
+function DraftPickList({
+  picks,
+  sel,
+  onToggle,
+  keyOf,
+}: {
+  picks: Row[];
+  sel: string[];
+  onToggle: (id: string) => void;
+  keyOf: (k: number[]) => string;
+}) {
+  if (!picks.length) return null;
+  return (
+    <div className="pickSection">
+      <h5>Draft picks</h5>
+      <div className="picklist">
+        {picks.map((p) => {
+          const id = keyOf(p.key);
+          return (
+            <label key={id} className={sel.includes(id) ? "pickrow on" : "pickrow"}>
+              <input type="checkbox" checked={sel.includes(id)} onChange={() => onToggle(id)} />
+              🎟️ {p.label}
+              <span className="muted right">val {p.value}</span>
+            </label>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1101,6 +1530,100 @@ function PickList({
           </label>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Offers inbox — AI-initiated trade offers for your players
+// ---------------------------------------------------------------------------
+function OffersPanel({
+  refresh,
+  toast,
+  onPlayer,
+}: {
+  refresh: (s?: Summary) => void;
+  toast: (m: string) => void;
+  onPlayer: (pid: number) => void;
+}) {
+  const [offers, setOffers] = useState<Row[] | null>(null);
+  const load = () => api.offers().then((r) => setOffers(r.offers)).catch(() => {});
+  useEffect(() => {
+    load();
+  }, []);
+
+  const accept = async (id: number) => {
+    const r = await api.offerAccept(id).catch((e) => toast(String(e)));
+    if (!r) return;
+    toast(r.executed ? "Trade completed!" : `Couldn't complete: ${r.reason}`);
+    if (r.summary) refresh(r.summary);
+    load();
+  };
+  const decline = async (id: number) => {
+    const r = await api.offerDecline(id).catch((e) => toast(String(e)));
+    if (!r) return;
+    if (r.summary) refresh(r.summary);
+    load();
+  };
+
+  if (!offers) return <Loading />;
+  return (
+    <div className="card">
+      <h3>Trade Offers</h3>
+      <p className="muted small">
+        Rival GMs come to you for players on your trade block (and, rarely, your stars). Offers
+        expire after a week and all clear at the deadline.
+      </p>
+      {offers.length === 0 ? (
+        <p className="muted pad">
+          No offers right now. Put players on the block (★ on the Roster, Depth Chart, or Finances
+          tab) to draw interest, then sim toward the deadline.
+        </p>
+      ) : (
+        <div className="offerList">
+          {offers.map((o) => (
+            <div className="offerRow" key={o.id}>
+              <div className="offerHead">
+                <b style={{ color: o.from_color }}>{o.from_abbrev}</b>{" "}
+                {o.unsolicited ? "come calling for" : "offer for"}{" "}
+                {o.wants.map((p: Row) => p.name).join(", ")}
+                <span className="muted right">
+                  value {o.value} · {o.expires_in}d left
+                </span>
+              </div>
+              <div className="offerPieces">
+                {o.gives.length === 0 && o.picks.length === 0 && (
+                  <span className="muted">nothing of note</span>
+                )}
+                {o.gives.map((p: Row) => (
+                  <span
+                    key={p.pid}
+                    className="offerPiece"
+                    onClick={() => onPlayer(p.pid)}
+                    title="Scout ratings"
+                  >
+                    {p.name} <span className="muted">{p.position}</span> {OVR(p.overall)}{" "}
+                    <span className="muted">{money(p.salary)}</span>
+                  </span>
+                ))}
+                {o.picks.map((pk: Row) => (
+                  <span key={pk.label} className="offerPiece">
+                    🎟️ {pk.label} <span className="muted">val {pk.value}</span>
+                  </span>
+                ))}
+              </div>
+              <div className="toolbar">
+                <button className="primary" onClick={() => accept(o.id)}>
+                  Accept
+                </button>
+                <button className="ghost" onClick={() => decline(o.id)}>
+                  Decline
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1269,21 +1792,46 @@ function SeriesCard({
   );
 }
 
+// Resume the offseason from authoritative backend state so the wizard survives tab switches —
+// its progress must never live only in this component, or re-entering re-runs the offseason.
+function offseasonStep(stage?: string | null): "intro" | "draft" | "fa" | "done" {
+  if (stage === "free_agency") return "fa";
+  if (stage === "draft") return "draft";
+  if (stage === "pre_draft") return "intro";
+  return "done";
+}
+
 function OffseasonPanel({
+  summary,
   refresh,
   toast,
+  onPlayer,
+  userTid,
 }: {
+  summary: Summary;
   refresh: (s?: Summary) => void;
   toast: (m: string) => void;
+  onPlayer: (pid: number) => void;
+  userTid: number | null;
 }) {
-  const [step, setStep] = useState<"intro" | "draft" | "fa" | "done">("intro");
+  const [step, setStep] = useState<"intro" | "draft" | "fa" | "done">(() =>
+    offseasonStep(summary.offseason_stage)
+  );
   const [board, setBoard] = useState<any | null>(null);
   const [picks, setPicks] = useState<Row[]>([]);
+
+  // On (re)mount, if we're resuming mid-draft, repopulate the board.
+  useEffect(() => {
+    if (step === "draft") loadBoard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const begin = async () => {
     const r = await api.preDraft().catch((e) => toast(String(e)));
     if (!r) return;
-    toast(`Retired ${r.summary.retired}, ${r.summary.new_fas} reached free agency.`);
+    if (!r.resumed)
+      toast(`Retired ${r.summary.retired}, ${r.summary.new_fas} reached free agency.`);
+    refresh(); // persist the new stage so leaving/returning resumes correctly
     setStep("draft");
     loadBoard();
   };
@@ -1291,6 +1839,7 @@ function OffseasonPanel({
     const b = await api.draftBoard().catch((e) => toast(String(e)));
     if (!b) return;
     if (b.complete) {
+      if (b.summary) refresh(b.summary);
       setStep("fa");
       return;
     }
@@ -1305,12 +1854,11 @@ function OffseasonPanel({
   };
   const runFA = async () => {
     const r = await api.runFA().catch((e) => toast(String(e)));
-    if (r) {
-      toast(`AI made ${r.result.signings} signings.`);
-      const s = await api.finishOffseason();
-      refresh(s);
-      setStep("done");
-    }
+    if (!r) return;
+    toast(`AI made ${r.result.signings} signings.`);
+    const s = await api.finishOffseason();
+    refresh(s);
+    setStep("done");
   };
 
   if (step === "intro")
@@ -1383,22 +1931,95 @@ function OffseasonPanel({
     );
   if (step === "fa")
     return (
-      <div className="card">
-        <h3>Free Agency</h3>
-        <p className="muted">
-          Sign players from the Free Agents tab. When ready, let the rest of the league fill out
-          rosters and start the new season.
-        </p>
-        <button className="primary big" onClick={runFA}>
-          Finish free agency → new season
-        </button>
-      </div>
+      <OffseasonFA
+        userTid={userTid}
+        onPlayer={onPlayer}
+        refresh={refresh}
+        toast={toast}
+        onFinish={runFA}
+      />
     );
   return (
     <div className="card">
       <h3>New season underway!</h3>
       <p className="muted">Head to the Play tab to tip off.</p>
     </div>
+  );
+}
+
+// The free-agency step of the offseason: sign your own targets *here* (so it can't be skipped),
+// then hand off to the AI to fill out the league and start the season.
+function OffseasonFA({
+  userTid,
+  onPlayer,
+  refresh,
+  toast,
+  onFinish,
+}: {
+  userTid: number | null;
+  onPlayer: (pid: number) => void;
+  refresh: (s?: Summary) => void;
+  toast: (m: string) => void;
+  onFinish: () => Promise<void>;
+}) {
+  const [roster, setRoster] = useState<any | null>(null);
+  const [busy, setBusy] = useState(false);
+  const loadRoster = () => {
+    if (userTid != null) api.roster(userTid).then(setRoster).catch(() => {});
+  };
+  useEffect(loadRoster, [userTid]);
+
+  const count = roster?.players.length ?? 0;
+  const max = roster?.roster_max ?? 15;
+  const open = Math.max(0, max - count);
+
+  const finish = async () => {
+    const msg =
+      open > 0
+        ? `You still have ${open} open roster spot${open === 1 ? "" : "s"}. ` +
+          "Finish free agency anyway? The rest of the league will sign players and the new season begins."
+        : "Finish free agency? The rest of the league will fill out their rosters and the new season begins.";
+    if (!window.confirm(msg)) return;
+    setBusy(true);
+    await onFinish();
+    setBusy(false);
+  };
+
+  return (
+    <>
+      <div className="card">
+        <h3>Free Agency — sign your targets</h3>
+        <p className="muted">
+          Sign free agents from the list below <b>now</b>. When you're done, the rest of the league
+          fills out its rosters and the new season tips off.
+        </p>
+        <p className={open > 0 ? "deadline soon" : "deadline"}>
+          {open > 0
+            ? `🟢 ${open} open roster spot${open === 1 ? "" : "s"} (${count}/${max}) — sign someone before you finish.`
+            : `Roster full (${count}/${max}).`}
+        </p>
+        <button className="primary" onClick={finish} disabled={busy}>
+          {busy ? "Starting season…" : "Done signing → start new season"}
+        </button>
+      </div>
+      {userTid != null && (
+        <DepthChartPanel
+          tid={userTid}
+          mode="nba"
+          manage
+          refresh={refresh}
+          toast={toast}
+          onPlayer={onPlayer}
+          reloadSignal={count}
+        />
+      )}
+      <FreeAgentsPanel
+        onPlayer={onPlayer}
+        refresh={refresh}
+        toast={toast}
+        onChange={loadRoster}
+      />
+    </>
   );
 }
 
