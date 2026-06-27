@@ -194,6 +194,42 @@ def depth_chart_view(world: World, team: Team) -> dict:
     return {"team": team_brief(team), "positions": groups, "roster_max": ROSTER_MAX}
 
 
+def _enrich_award(world: World, e) -> dict:
+    """Add a display color to a stored award entry from its (live) team id."""
+    if not isinstance(e, dict):
+        return e
+    team = world.find_team(e.get("tid")) if e.get("tid") is not None else None
+    out = dict(e)
+    out["team_color"] = color_hex(team.color) if team else "#9aa0a6"
+    return out
+
+
+def history_view(world: World) -> List[dict]:
+    """Past seasons (most recent first): champion plus award winners, ready for display."""
+    out: List[dict] = []
+    for entry in reversed(world.history):
+        champ = world.find_team(entry.get("champion")) if entry.get("champion") is not None else None
+        awards = entry.get("awards") or {}
+        enriched: dict = {}
+        for key in ("mvp", "roy", "dpoy", "mip"):
+            if key in awards:
+                enriched[key] = _enrich_award(world, awards[key])
+        if "all_league" in awards:
+            enriched["all_league"] = [[_enrich_award(world, p) for p in team_]
+                                      for team_ in awards["all_league"]]
+        if "leaders" in awards:
+            enriched["leaders"] = {k: _enrich_award(world, v) for k, v in awards["leaders"].items()}
+        out.append({
+            "year": entry.get("year"),
+            "champion": entry.get("champion"),
+            "champion_name": entry.get("champion_name", ""),
+            "champion_abbrev": champ.abbrev if champ else "",
+            "champion_color": color_hex(champ.color) if champ else "#9aa0a6",
+            "awards": enriched,
+        })
+    return out
+
+
 def roster_view(world: World, team: Team) -> dict:
     starters = set(team.starters)
     players = sorted(roster_players(team, world.players), key=lambda p: p.overall, reverse=True)

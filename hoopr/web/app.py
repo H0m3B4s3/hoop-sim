@@ -218,6 +218,12 @@ def scouting(sid: str = Depends(_sid)):
     return ser.scouting_view(_world(sid))
 
 
+@app.get("/api/history")
+def history(sid: str = Depends(_sid)):
+    world = _world(sid)
+    return {"history": ser.history_view(world)}
+
+
 @app.get("/api/teams/{tid}/depth-chart")
 def depth_chart(tid: int, sid: str = Depends(_sid)):
     world = _world(sid)
@@ -546,7 +552,8 @@ def offseason_pre_draft(sid: str = Depends(_sid)):
     summary = offseason.pre_draft(world, champ)
     D.setup_draft(world)
     SESSIONS.autosave(sid)
-    return {"summary": summary, "champion": champ}
+    latest = world.history[-1].get("awards") if world.history else None
+    return {"summary": summary, "champion": champ, "awards": latest}
 
 
 def _draft_board(world: World, dc, limit: int = 14):

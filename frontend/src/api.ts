@@ -83,6 +83,7 @@ export const api = {
   finances: () => get<any>("/finances"),
   freeAgents: () => get<any>("/freeagents"),
   scouting: () => get<any>("/scouting"),
+  history: () => get<{ history: Row[] }>("/history"),
   tradeBlock: (tid: number) => get<{ tid: number; pids: number[] }>(`/teams/${tid}/trade-block`),
   teamPicks: (tid: number) => get<{ tid: number; picks: Row[] }>(`/teams/${tid}/picks`),
   player: (pid: number) => get<any>(`/players/${pid}`),

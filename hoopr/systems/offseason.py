@@ -16,13 +16,17 @@ from hoopr.sim.season import start_season
 
 
 def archive_season(world: World, champion_tid) -> None:
+    from hoopr.systems import awards
     standings = {conf: [t.tid for t in conference_standings(world.team_list(), conf)]
                  for conf in ("East", "West")}
+    # Awards must be computed before careers roll over (rookies still have empty career,
+    # most-improved can still see last season's overall).
     world.history.append({
         "year": world.season_year,
         "champion": champion_tid,
         "champion_name": world.teams[champion_tid].full_name if champion_tid in world.teams else "",
         "standings": standings,
+        "awards": awards.compute_awards(world),
     })
     for p in world.players.values():
         if p.season.gp > 0:

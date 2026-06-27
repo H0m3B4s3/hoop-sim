@@ -131,14 +131,16 @@ that now surfaces missed shots, rebounds, blocks, and assists, and a polished **
 in the web app with full regular-season → postseason progression, and a **trade block + AI-initiated
 offers** (mark players available and rival GMs bring you cap-legal packages — players and/or picks —
 as you sim, surfaced in a non-blocking Offers inbox with a nav badge; offers are capped, expire after
-a week, and clear at the deadline).
+a week, and clear at the deadline), and **end-of-season awards & league history** (MVP, Rookie of the
+Year, Defensive POY, Most Improved, All-League first/second/third teams, and statistical leaders —
+crowned each offseason and browsable in a History tab alongside past champions).
 
 Still on the roadmap:
 
 - **International prospects** entering via the NBA draft and recruitable to college programs.
 - **Transfer portal** for college rosters.
 - **Advanced NBA cap** rules (apron, sign-and-trade), two-way / G-League contracts.
-- **Deeper scouting**, awards / Hall of Fame / history, chemistry and momentum, coaching staff.
+- **Deeper scouting**, Hall of Fame / career milestones, chemistry and momentum, coaching staff.
 - A richer **NIL marketplace** (negotiated endorsement packages, brand events).
 
 ### Future work (not started)

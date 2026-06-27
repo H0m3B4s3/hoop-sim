@@ -249,6 +249,33 @@ def test_api_block_and_offers_inbox():
     assert pid not in after
 
 
+def test_api_history_after_a_season():
+    from hoopr.models.league import Phase
+    from hoopr.sim import playoffs as P
+    from hoopr.systems import offseason
+    from hoopr.web.session import SESSIONS
+    client = TestClient(app)
+    state = client.post("/api/career/new",
+                        json={"league": "nba", "preset": "Quick", "seed": 2}).json()
+    tid = state["summary"]["teams"][0]["tid"]
+    client.post(f"/api/career/team/{tid}")
+    world = SESSIONS.require(client.cookies.get("hoopr_sid"))
+
+    # play the whole season + playoffs, then archive it
+    from hoopr.sim import season as S
+    while not S.regular_season_complete(world):
+        S.advance_one_day(world)
+    P.start_playoffs(world)
+    while not P.playoffs_complete(world):
+        P.advance_playoff_slate(world)
+    offseason.pre_draft(world, P.champion(world))
+
+    hist = client.get("/api/history").json()["history"]
+    assert hist and "champion_abbrev" in hist[0]
+    mvp = hist[0]["awards"]["mvp"]
+    assert mvp["name"] and "team_color" in mvp
+
+
 def test_api_drives_a_short_game_loop():
     client = TestClient(app)
     assert client.get("/api/state").json()["active"] is False

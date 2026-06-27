@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { api, money, type Row, type Summary, type TeamBrief } from "./api";
-import { DataTable, Modal, Pill, ovrColor, useToast } from "./ui";
+import { DataTable, Modal, Pill, useToast } from "./ui";
+import { TeamTag, ovrColor, useTeamText, useTheme } from "./theme";
 import "./index.css";
 
 type View = "setup" | "team" | "hub";
@@ -72,6 +73,9 @@ function Setup({ onReady, toast }: { onReady: () => void; toast: (m: string) => 
   return (
     <div className="center">
       <div className="card setup">
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <ThemeToggle />
+        </div>
         <h1 className="logo">
           HOOP<span>R</span>
         </h1>
@@ -166,8 +170,7 @@ function TeamSelect({
                       api.chooseTeam(t.tid).then(onPick).catch((e) => toast(String(e)))
                     }
                   >
-                    <span className="dot" style={{ background: t.color }} />
-                    <b style={{ color: t.color }}>{t.abbrev}</b> {t.full_name}
+                    <TeamTag abbrev={t.abbrev} color={t.color} name={t.full_name} />
                     <span className="stars">{"★".repeat(t.prestige || t.market_size)}</span>
                   </button>
                 ))}
@@ -190,6 +193,7 @@ const NAV: { key: string; label: string }[] = [
   { key: "tactics", label: "Tactics" },
   { key: "standings", label: "Standings" },
   { key: "leaders", label: "Leaders" },
+  { key: "history", label: "History" },
   { key: "finances", label: "Finances" },
   { key: "fa", label: "Free Agents" },
   { key: "scout", label: "Scouting" },
@@ -274,6 +278,7 @@ function Hub({
           {tab === "tactics" && <TacticsPanel toast={toast} />}
           {tab === "standings" && <StandingsPanel />}
           {tab === "leaders" && <LeadersPanel onPlayer={setOpenPid} />}
+          {tab === "history" && <HistoryPanel onPlayer={setOpenPid} />}
           {tab === "finances" && (
             <FinancesPanel
               onPlayer={setOpenPid}
@@ -347,8 +352,7 @@ function TopBar({
       </div>
       {t && (
         <div className="teamline">
-          <span className="dot" style={{ background: t.color }} />
-          <b style={{ color: t.color }}>{t.full_name}</b>
+          <TeamTag abbrev={t.abbrev} color={t.color} name={t.full_name} />
           <span className="muted"> · {summary.date}</span>
           <Pill>{summary.phase_label}</Pill>
           <span className="muted">{summary.record}</span>
@@ -361,6 +365,7 @@ function TopBar({
             : `Schol ${summary.scholarships_used}/${summary.scholarship_limit}`
           : `Payroll ${money(summary.payroll)} / ${money(summary.salary_cap)}`}
       </div>
+      <ThemeToggle />
       <button className="ghost" onClick={save}>
         💾 Save
       </button>
@@ -387,6 +392,7 @@ function PlayPanel({
   const [game, setGame] = useState<any | null>(null);
   const [busy, setBusy] = useState(false);
   const phase = summary.phase;
+  const teamText = useTeamText();
 
   const run = async (fn: () => Promise<any>) => {
     setBusy(true);
@@ -441,8 +447,8 @@ function PlayPanel({
           <ul className="results">
             {results.map((g) => (
               <li key={g.gid}>
-                <b style={{ color: g.away.color }}>{g.away.abbrev}</b> {g.away_score} @{" "}
-                <b style={{ color: g.home.color }}>{g.home.abbrev}</b> {g.home_score}
+                <b style={{ color: teamText(g.away.color) }}>{g.away.abbrev}</b> {g.away_score} @{" "}
+                <b style={{ color: teamText(g.home.color) }}>{g.home.abbrev}</b> {g.home_score}
               </li>
             ))}
           </ul>
@@ -468,13 +474,15 @@ function BoxScore({ result, onClose }: { result: any; onClose: () => void }) {
   ];
   return (
     <div className="card">
-      <div className="finalLine">
-        <span style={{ color: result.away.color }}>
-          {result.away.abbrev} {result.away_score}
-        </span>{" "}
-        @{" "}
-        <span style={{ color: result.home.color }}>
-          {result.home.abbrev} {result.home_score}
+      <div className="scoreboard">
+        <span className="scoreSide">
+          <TeamTag abbrev={result.away.abbrev} color={result.away.color} />
+          <span className="pts">{result.away_score}</span>
+        </span>
+        <span className="at">@</span>
+        <span className="scoreSide">
+          <TeamTag abbrev={result.home.abbrev} color={result.home.color} />
+          <span className="pts">{result.home_score}</span>
         </span>
         <button className="ghost right" onClick={onClose}>
           Close
@@ -515,7 +523,11 @@ function BoxScore({ result, onClose }: { result: any; onClose: () => void }) {
 // ---------------------------------------------------------------------------
 // Player tables
 // ---------------------------------------------------------------------------
-const OVR = (v: number) => <span style={{ color: ovrColor(v), fontWeight: 600 }}>{v}</span>;
+function OvrCell({ v }: { v: number }) {
+  const { theme } = useTheme();
+  return <span style={{ color: ovrColor(v, theme), fontWeight: 600 }}>{v}</span>;
+}
+const OVR = (v: number) => <OvrCell v={v} />;
 
 // Block / Extend / Waive controls shared by the Roster, Depth, and Finances views (NBA, your team).
 function PlayerActions({
@@ -782,6 +794,105 @@ function LeadersPanel({ onPlayer }: { onPlayer: (pid: number) => void }) {
   );
 }
 
+// League history — champions and end-of-season awards, most recent first.
+function AwardCard({
+  label,
+  e,
+  onPlayer,
+  stat,
+}: {
+  label: string;
+  e: Row;
+  onPlayer: (pid: number) => void;
+  stat?: string;
+}) {
+  const teamText = useTeamText();
+  const line =
+    stat === "reb"
+      ? `${e.rpg} RPG`
+      : stat === "ast"
+      ? `${e.apg} APG`
+      : stat === "pts"
+      ? `${e.ppg} PPG`
+      : `${e.ppg} / ${e.rpg} / ${e.apg}`;
+  return (
+    <div className="awardCard clickable" onClick={() => onPlayer(e.pid)}>
+      <div className="awardLabel">{label}</div>
+      <div className="awardName">
+        <b>{e.name}</b>{" "}
+        <span style={{ color: teamText(e.team_color) }}>{e.team}</span>
+      </div>
+      <div className="muted small">
+        {OVR(e.overall)} {e.position} · {line}
+        {e.improvement != null && ` · +${e.improvement} OVR`}
+      </div>
+    </div>
+  );
+}
+
+function HistoryPanel({ onPlayer }: { onPlayer: (pid: number) => void }) {
+  const teamText = useTeamText();
+  const [data, setData] = useState<Row[] | null>(null);
+  useEffect(() => {
+    api.history().then((r) => setData(r.history)).catch(() => {});
+  }, []);
+  if (!data) return <Loading />;
+  if (data.length === 0)
+    return (
+      <div className="card">
+        <h3>League History</h3>
+        <p className="muted pad">No completed seasons yet — finish a season to crown a champion.</p>
+      </div>
+    );
+  const ALL_LEAGUE_LABEL = ["All-League First Team", "Second Team", "Third Team"];
+  return (
+    <div className="historyList">
+      {data.map((s) => {
+        const a = s.awards ?? {};
+        return (
+          <div className="card" key={s.year}>
+            <div className="champBanner">
+              <span className="muted">{s.year}</span>
+              <span className="champTrophy">🏆</span>
+              <b style={{ color: teamText(s.champion_color) }}>{s.champion_abbrev}</b>
+              <span>{s.champion_name} — Champions</span>
+            </div>
+            {(a.mvp || a.roy || a.dpoy || a.mip) && (
+              <div className="awardGrid">
+                {a.mvp && <AwardCard label="MVP" e={a.mvp} onPlayer={onPlayer} />}
+                {a.roy && <AwardCard label="Rookie of the Year" e={a.roy} onPlayer={onPlayer} />}
+                {a.dpoy && (
+                  <AwardCard label="Defensive POY" e={a.dpoy} onPlayer={onPlayer} />
+                )}
+                {a.mip && <AwardCard label="Most Improved" e={a.mip} onPlayer={onPlayer} />}
+              </div>
+            )}
+            {a.leaders && (
+              <div className="awardGrid">
+                <AwardCard label="Scoring Leader" e={a.leaders.pts} onPlayer={onPlayer} stat="pts" />
+                <AwardCard label="Rebounding Leader" e={a.leaders.reb} onPlayer={onPlayer} stat="reb" />
+                <AwardCard label="Assists Leader" e={a.leaders.ast} onPlayer={onPlayer} stat="ast" />
+              </div>
+            )}
+            {a.all_league?.map((team: Row[], i: number) => (
+              <div key={i} className="allLeagueRow">
+                <span className="allLeagueLabel">{ALL_LEAGUE_LABEL[i] ?? `Team ${i + 1}`}</span>
+                <span className="allLeaguePlayers">
+                  {team.map((p: Row) => (
+                    <span key={p.pid} className="allLeagueChip" onClick={() => onPlayer(p.pid)}>
+                      {p.name} <span style={{ color: teamText(p.team_color) }}>{p.team}</span>
+                    </span>
+                  ))}
+                </span>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function StandingsPanel() {
   const [data, setData] = useState<any | null>(null);
   useEffect(() => {
@@ -795,8 +906,11 @@ function StandingsPanel() {
       header: "Team",
       cell: (c) => (
         <span className={c.row.original.is_user ? "userTeam" : ""}>
-          <b style={{ color: c.row.original.color }}>{c.row.original.abbrev}</b>{" "}
-          {c.getValue() as string}
+          <TeamTag
+            abbrev={c.row.original.abbrev}
+            color={c.row.original.color}
+            name={c.getValue() as string}
+          />
         </span>
       ),
     },
@@ -982,6 +1096,7 @@ function ScoutingPanel({ onPlayer }: { onPlayer: (pid: number) => void }) {
   const [pos, setPos] = useState("All");
   const [team, setTeam] = useState("All");
   const [blockOnly, setBlockOnly] = useState(false);
+  const teamText = useTeamText();
   useEffect(() => {
     api.scouting().then(setData).catch(() => {});
   }, []);
@@ -1001,7 +1116,7 @@ function ScoutingPanel({ onPlayer }: { onPlayer: (pid: number) => void }) {
       accessorKey: "team_abbrev",
       header: "Tm",
       cell: (c) => (
-        <span style={{ color: c.row.original.team_color }}>{c.getValue() as string}</span>
+        <span style={{ color: teamText(c.row.original.team_color) }}>{c.getValue() as string}</span>
       ),
     },
     { accessorKey: "position", header: "Pos" },
@@ -1366,6 +1481,7 @@ function SolicitPanel({
   const [offers, setOffers] = useState<Row[] | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const teamText = useTeamText();
   const reload = () => api.roster(summary.user_team_id!).then(setMine);
   useEffect(() => {
     reload();
@@ -1430,7 +1546,7 @@ function SolicitPanel({
             {offers.map((o, i) => (
               <div className="offerRow" key={i}>
                 <div className="offerHead">
-                  <b style={{ color: o.partner_color }}>{o.partner_abbrev}</b> offer
+                  <b style={{ color: teamText(o.partner_color) }}>{o.partner_abbrev}</b> offer
                   <span className="muted right">value {o.value}</span>
                 </div>
                 <div className="offerPieces">
@@ -1555,6 +1671,7 @@ function OffersPanel({
   onPlayer: (pid: number) => void;
 }) {
   const [offers, setOffers] = useState<Row[] | null>(null);
+  const teamText = useTeamText();
   const load = () => api.offers().then((r) => setOffers(r.offers)).catch(() => {});
   useEffect(() => {
     load();
@@ -1592,7 +1709,7 @@ function OffersPanel({
           {offers.map((o) => (
             <div className="offerRow" key={o.id}>
               <div className="offerHead">
-                <b style={{ color: o.from_color }}>{o.from_abbrev}</b>{" "}
+                <b style={{ color: teamText(o.from_color) }}>{o.from_abbrev}</b>{" "}
                 {o.unsolicited ? "come calling for" : "offer for"}{" "}
                 {o.wants.map((p: Row) => p.name).join(", ")}
                 <span className="muted right">
@@ -1725,6 +1842,7 @@ function Bracket({
   userTid: number | null;
   champion: number | null;
 }) {
+  const teamText = useTeamText();
   const byTid = new Map(teams.map((t) => [t.tid, t]));
   const seedOf = (tid: number): number | undefined => {
     const s = bracket.seeds?.[String(tid)];
@@ -1737,7 +1855,7 @@ function Bracket({
     <div>
       {champTeam && (
         <div className="champ">
-          🏆 <span style={{ color: champTeam.color }}>{champTeam.full_name}</span> — Champions
+          🏆 <span style={{ color: teamText(champTeam.color) }}>{champTeam.full_name}</span> — Champions
         </div>
       )}
       <div className="bracketCols">
@@ -1837,8 +1955,10 @@ function OffseasonPanel({
   const begin = async () => {
     const r = await api.preDraft().catch((e) => toast(String(e)));
     if (!r) return;
-    if (!r.resumed)
+    if (!r.resumed) {
       toast(`Retired ${r.summary.retired}, ${r.summary.new_fas} reached free agency.`);
+      if (r.awards?.mvp) toast(`🏆 ${r.awards.mvp.name} won MVP — see the History tab.`);
+    }
     refresh(); // persist the new stage so leaving/returning resumes correctly
     setStep("draft");
     loadBoard();
@@ -2044,6 +2164,7 @@ function PlayerModal({
   mode: string;
 }) {
   const [p, setP] = useState<any | null>(null);
+  const { theme } = useTheme();
   useEffect(() => {
     api.player(pid).then(setP).catch(() => {});
   }, [pid]);
@@ -2052,7 +2173,7 @@ function PlayerModal({
       title={
         p ? (
           <span>
-            <b style={{ color: ovrColor(p.overall) }}>{p.name}</b>{" "}
+            <b style={{ color: ovrColor(p.overall, theme) }}>{p.name}</b>{" "}
             <span className="muted">
               {p.position} · {p.archetype} · OVR {p.overall} · POT {p.potential}
             </span>
@@ -2089,10 +2210,10 @@ function PlayerModal({
                     <span className="ratingBar">
                       <span
                         className="ratingFill"
-                        style={{ width: `${it.value}%`, background: ovrColor(it.value) }}
+                        style={{ width: `${it.value}%`, background: ovrColor(it.value, theme) }}
                       />
                     </span>
-                    <b style={{ color: ovrColor(it.value) }}>{it.value}</b>
+                    <b style={{ color: ovrColor(it.value, theme) }}>{it.value}</b>
                   </div>
                 ))}
               </div>
@@ -2134,4 +2255,18 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
 
 function Loading() {
   return <p className="muted pad">Loading…</p>;
+}
+
+function ThemeToggle() {
+  const { theme, toggle } = useTheme();
+  return (
+    <button
+      className="ghost themeToggle"
+      onClick={toggle}
+      title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+      aria-label="Toggle color theme"
+    >
+      {theme === "dark" ? "☀" : "☾"}
+    </button>
+  );
 }
