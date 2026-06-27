@@ -377,6 +377,46 @@ function TopBar({
 }
 
 // ---------------------------------------------------------------------------
+// Interactive crunch-time coaching (shared by regular season + playoffs)
+// ---------------------------------------------------------------------------
+function useLiveCoach(
+  refresh: (s?: Summary) => void,
+  toast: (m: string) => void,
+  onFinal: (r: any) => void,
+) {
+  const [coach, setCoach] = useState<any | null>(null);
+  const [feed, setFeed] = useState<any[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Apply a status response from the watch flow: either a pending decision or the final result.
+  const handle = (r: any) => {
+    if (r.summary) refresh(r.summary);
+    if (r.events?.length) setFeed((prev) => [...prev, ...r.events]);
+    if (r.status === "decision") setCoach(r.decision);
+    else if (r.status === "final") {
+      setCoach(null);
+      onFinal(r);
+    }
+  };
+  const begin = (r: any) => {
+    setFeed([]);
+    setCoach(null);
+    handle(r);
+  };
+  const sendOrders = async (orders: any) => {
+    setSubmitting(true);
+    try {
+      handle(await api.coachOrders(orders));
+    } catch (e) {
+      toast(String(e));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  return { coach, feed, submitting, begin, handle, sendOrders };
+}
+
+// ---------------------------------------------------------------------------
 // Play panel — sim controls
 // ---------------------------------------------------------------------------
 function PlayPanel({
@@ -394,6 +434,12 @@ function PlayPanel({
   const phase = summary.phase;
   const teamText = useTeamText();
 
+  const { coach, feed, submitting, begin, sendOrders } = useLiveCoach(refresh, toast, (r) => {
+    setGame(r.result);
+    if (r.new_offers > 0)
+      toast(`📨 ${r.new_offers} new trade offer${r.new_offers === 1 ? "" : "s"} — see the Offers tab.`);
+  });
+
   const run = async (fn: () => Promise<any>) => {
     setBusy(true);
     try {
@@ -406,6 +452,23 @@ function PlayPanel({
       if (r.new_offers > 0)
         toast(`📨 ${r.new_offers} new trade offer${r.new_offers === 1 ? "" : "s"} — see the Offers tab.`);
       if (r.message) toast(r.message);
+    } catch (e) {
+      toast(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const watchGame = async () => {
+    setBusy(true);
+    setGame(null);
+    try {
+      const r = await api.simGame(true);
+      if (r.status) begin(r);
+      else {
+        if (r.summary) refresh(r.summary);
+        if (r.message) toast(r.message);
+      }
     } catch (e) {
       toast(String(e));
     } finally {
@@ -427,19 +490,22 @@ function PlayPanel({
   return (
     <div>
       <div className="toolbar">
-        <button className="primary" disabled={busy} onClick={() => run(() => api.simGame(true))}>
-          ▶ Watch next game
+        <button className="primary" disabled={busy || !!coach} onClick={watchGame}>
+          ▶ Watch &amp; coach next game
         </button>
-        <button disabled={busy} onClick={() => run(() => api.simGame(false))}>
+        <button disabled={busy || !!coach} onClick={() => run(() => api.simGame(false))}>
           ⏩ Quick-sim next game
         </button>
-        <button disabled={busy} onClick={() => run(() => api.simWeek(4))}>
+        <button disabled={busy || !!coach} onClick={() => run(() => api.simWeek(4))}>
           📅 Sim a week
         </button>
-        <button disabled={busy} onClick={() => run(() => api.advanceDay())}>
+        <button disabled={busy || !!coach} onClick={() => run(() => api.advanceDay())}>
           ⏭ Advance a day
         </button>
       </div>
+      {coach && (
+        <CoachPanel decision={coach} feed={feed} busy={submitting} onSubmit={sendOrders} />
+      )}
       {game && <BoxScore result={game} onClose={() => setGame(null)} />}
       {results.length > 0 && (
         <div className="card">
@@ -454,6 +520,173 @@ function PlayPanel({
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+function CoachPanel({
+  decision,
+  feed,
+  busy,
+  onSubmit,
+}: {
+  decision: any;
+  feed: any[];
+  busy: boolean;
+  onSubmit: (orders: any) => void;
+}) {
+  const teamText = useTeamText();
+  const [lineup, setLineup] = useState<number[]>(decision.on_court.map((p: any) => p.pid));
+  const [timeout, setTimeout_] = useState(false);
+  const [tempo, setTempo] = useState("normal");
+  const [foul, setFoul] = useState("auto");
+
+  // Reset the working orders whenever a new possession (decision) arrives.
+  useEffect(() => {
+    setLineup(decision.on_court.map((p: any) => p.pid));
+    setTimeout_(false);
+    setTempo("normal");
+    setFoul("auto");
+  }, [decision]);
+
+  const byPid: Record<number, any> = {};
+  for (const p of [...decision.on_court, ...decision.bench]) byPid[p.pid] = p;
+
+  const changed = lineup.join(",") !== decision.on_court.map((p: any) => p.pid).join(",");
+  const lead = decision.user_lead;
+  const leadText = lead > 0 ? `up ${lead}` : lead < 0 ? `down ${-lead}` : "tied";
+  const leadColor = lead > 0 ? "var(--good, #3fb950)" : lead < 0 ? "var(--bad, #f85149)" : "#d29922";
+  const t = decision.user_team;
+
+  const swap = (idx: number, pid: number) => {
+    const next = [...lineup];
+    next[idx] = pid;
+    setLineup(next);
+  };
+
+  const submit = () =>
+    onSubmit({
+      timeout,
+      tempo,
+      defensive_foul: foul,
+      lineup: changed ? lineup : null,
+    });
+
+  const fatigueTag = (f: number) =>
+    f >= 70 ? ["gassed", "#f85149"] : f >= 45 ? ["tiring", "#d29922"] : ["fresh", "#7d8590"];
+
+  return (
+    <div className="card coachPanel">
+      <div className="coachHead">
+        <span className="coachClock">
+          {decision.period_label === "half" ? "H" : "Q"}
+          {decision.quarter} · {decision.clock_str}
+        </span>
+        <TeamTag abbrev={t.abbrev} color={t.color} />
+        <b style={{ color: leadColor }}>{leadText}</b>
+        <span className="muted">
+          {decision.user_on_offense ? "you have the ball" : "on defense"}
+        </span>
+        <span className="coachTOs">
+          ⏱ {t.abbrev} {decision.user_timeouts} · opp {decision.opp_timeouts}
+        </span>
+        {decision.user_in_bonus && <Pill color="#3fb950">bonus</Pill>}
+        {decision.opp_in_bonus && <Pill color="#f85149">opp bonus</Pill>}
+      </div>
+
+      {feed.length > 0 && (
+        <ul className="coachFeed">
+          {feed.slice(-7).map((e, i) => (
+            <li key={i}>
+              {e.abbrev && (
+                <b style={{ color: e.color ? teamText(e.color) : undefined }}>{e.abbrev} </b>
+              )}
+              {e.text}{" "}
+              <span className="muted">
+                ({e.away_score}-{e.home_score})
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="coachLineup">
+        <div className="muted small">On the floor — swap any spot for a bench player</div>
+        {lineup.map((pid, i) => {
+          const p = byPid[pid];
+          if (!p) return null;
+          const [ftag, fcol] = fatigueTag(p.fatigue);
+          const options = [p, ...decision.bench.filter((b: any) => !lineup.includes(b.pid))];
+          return (
+            <div className="coachRow" key={i}>
+              <select value={pid} disabled={busy} onChange={(e) => swap(i, Number(e.target.value))}>
+                {options.map((o: any) => (
+                  <option key={o.pid} value={o.pid}>
+                    {o.name} ({o.pos} {o.overall})
+                  </option>
+                ))}
+              </select>
+              <span className={p.fouls >= 5 ? "bad" : "muted"}>{p.fouls} PF</span>
+              <span style={{ color: fcol as string }}>{ftag}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="coachControls">
+        {decision.user_on_offense ? (
+          <div className="segGroup">
+            <span className="muted small">Tempo</span>
+            {[
+              ["normal", "Run offense"],
+              ["bleed", "Bleed clock"],
+              ["hold", "Hold for last shot"],
+              ["quick3", "Quick 3"],
+            ].map(([v, label]) => (
+              <button
+                key={v}
+                className={tempo === v ? "seg on" : "seg"}
+                disabled={busy}
+                onClick={() => setTempo(v)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="segGroup">
+            <span className="muted small">Defense</span>
+            {[
+              ["auto", "Auto"],
+              ["foul", "Foul now"],
+              ["no", "Don't foul"],
+            ].map(([v, label]) => (
+              <button
+                key={v}
+                className={foul === v ? "seg on" : "seg"}
+                disabled={busy}
+                onClick={() => setFoul(v)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <label className={decision.user_timeouts === 0 ? "muted toBox" : "toBox"}>
+          <input
+            type="checkbox"
+            checked={timeout}
+            disabled={busy || decision.user_timeouts === 0}
+            onChange={(e) => setTimeout_(e.target.checked)}
+          />
+          Call timeout
+        </label>
+
+        <button className="primary" disabled={busy} onClick={submit}>
+          ▶ Run the possession{changed ? " (lineup changed)" : ""}
+        </button>
+      </div>
     </div>
   );
 }
@@ -1771,6 +2004,13 @@ function PlayoffsPanel({
   useEffect(() => {
     load();
   }, []);
+
+  const { coach, feed, submitting, begin, sendOrders } = useLiveCoach(refresh, toast, (r) => {
+    setData(r);
+    setGame(r.result);
+    if (r.complete && r.champion != null) toast("🏆 Champions crowned! Start the offseason.");
+  });
+
   const start = async () => {
     const r = await api.playoffsStart().catch((e) => toast(String(e)));
     if (r) {
@@ -1781,6 +2021,11 @@ function PlayoffsPanel({
   const advance = async (watch: boolean) => {
     const r = await api.playoffsAdvance(watch).catch((e) => toast(String(e)));
     if (!r) return;
+    if (r.status) {
+      setGame(null);
+      begin(r);
+      return;
+    }
     setData(r);
     if (r.result) setGame(r.result);
     if (r.complete && r.champion != null) toast("🏆 Champions crowned! Start the offseason.");
@@ -1799,14 +2044,19 @@ function PlayoffsPanel({
         )}
         {hasBracket && !data.complete && (
           <>
-            <button className="primary" onClick={() => advance(true)}>
-              ▶ Watch next
+            <button className="primary" disabled={!!coach} onClick={() => advance(true)}>
+              ▶ Watch &amp; coach next
             </button>
-            <button onClick={() => advance(false)}>⏩ Sim slate</button>
+            <button disabled={!!coach} onClick={() => advance(false)}>
+              ⏩ Sim slate
+            </button>
           </>
         )}
         {data.complete && <Pill>Playoffs complete</Pill>}
       </div>
+      {coach && (
+        <CoachPanel decision={coach} feed={feed} busy={submitting} onSubmit={sendOrders} />
+      )}
       {game && <BoxScore result={game} onClose={() => setGame(null)} />}
       {hasBracket ? (
         <Bracket

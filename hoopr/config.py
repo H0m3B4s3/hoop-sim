@@ -43,9 +43,9 @@ SHOT_CLOCK = 24
 # at a slower pace (30-second shot clock), so possessions run longer.
 GAME_FORMATS = {
     "nba": {"periods": 4, "period_seconds": 12 * 60, "label": "quarter", "abbr": "Q",
-            "base_poss_seconds": 14.5},
+            "base_poss_seconds": 14.5, "timeouts": 7, "shot_clock": 24.0},
     "college": {"periods": 2, "period_seconds": 20 * 60, "label": "half", "abbr": "H",
-                "base_poss_seconds": 18.0},
+                "base_poss_seconds": 18.0, "timeouts": 4, "shot_clock": 30.0},
 }
 
 

@@ -3,15 +3,25 @@ from __future__ import annotations
 
 from hoopr.gen.leaguegen import build_world
 from hoopr.models.tactics import Tactics
-from hoopr.sim.engine import GameSim, simulate_game
+from hoopr.sim.coach import Coach, CoachOrders
+from hoopr.sim.engine import DRAW_PLAY_BONUS, GameSim, simulate_game
 
 
-def _sim(seed=1, *, collect_pbp=False):
+def _sim(seed=1, *, collect_pbp=False, coach=None):
     w = build_world(seed=seed)
     h, a = w.teams[0], w.teams[1]
-    sim = GameSim(w, h, a, collect_pbp=collect_pbp)
+    sim = GameSim(w, h, a, collect_pbp=collect_pbp, coach=coach,
+                  coach_tid=h.tid if coach is not None else None)
     sim.quarter = sim.periods            # final period for end-game logic
     return w, sim
+
+
+class _StubCoach(Coach):
+    """Returns a canned CoachOrders so engine wiring can be tested headlessly."""
+    def __init__(self, orders):
+        self.orders = orders
+    def decide(self, view):
+        return self.orders
 
 
 def _ready_lineups(sim):
@@ -82,6 +92,119 @@ def test_rotation_crunch_lineup_keeps_games_legal():
     assert r.home_score != r.away_score
     # box still reconciles with team score
     assert sum(r.box[p].pts for p in a.roster if p in r.box) == r.away_score
+
+
+# --- interactive live coaching --------------------------------------------
+def test_coach_engaged_window():
+    _, sim = _sim(coach=Coach())
+    sim.result.home_score, sim.result.away_score = 100, 98   # within margin
+    sim.clock = 60.0
+    assert sim._coach_engaged(sim.home, sim.away)
+    sim.clock = 200.0                                        # too early
+    assert not sim._coach_engaged(sim.home, sim.away)
+    sim.clock = 60.0
+    sim.result.away_score = 70                               # blowout (margin > 12)
+    assert not sim._coach_engaged(sim.home, sim.away)
+    sim.quarter = 1                                          # not the final period
+    sim.result.away_score = 98
+    assert not sim._coach_engaged(sim.home, sim.away)
+
+
+def test_coach_timeout_consumes_and_arms_draw_play():
+    coach = _StubCoach(CoachOrders(timeout=True))
+    _, sim = _sim(coach=coach)
+    _ready_lineups(sim)
+    start = sim.home.timeouts
+    for pid in sim.home.on_court:
+        sim.home.fatigue[pid] = 50.0
+    sim._consult_coach(sim.home, sim.away)
+    assert sim.home.timeouts == start - 1
+    assert sim._draw_play_tid == sim.home.team.tid
+    assert all(sim.home.fatigue[pid] < 50.0 for pid in sim.home.on_court)  # rested
+    # the armed possession gets the make boost, then it's spent
+    sim._resolve_possession(sim.home, sim.away)
+    assert sim._draw_play_tid is None
+
+
+def test_coach_timeout_ignored_when_none_left():
+    coach = _StubCoach(CoachOrders(timeout=True))
+    _, sim = _sim(coach=coach)
+    _ready_lineups(sim)
+    sim.home.timeouts = 0
+    sim._consult_coach(sim.home, sim.away)
+    assert sim.home.timeouts == 0
+    assert sim._draw_play_tid is None
+
+
+def test_coach_forced_foul_overrides_auto():
+    # Home leads by 5 on offense: defense would normally never foul here.
+    auto = _StubCoach(CoachOrders(defensive_foul="auto"))
+    _, sim = _sim(coach=auto)
+    sim.coach_tid = sim.away.team.tid                       # user coaches the defense
+    sim.clock = 20.0
+    sim.result.home_score, sim.result.away_score = 105, 100
+    intentional, _, _ = sim._plan_possession(sim.home, sim.away, CoachOrders(defensive_foul="auto"))
+    assert not intentional
+    intentional, _, _ = sim._plan_possession(sim.home, sim.away, CoachOrders(defensive_foul="foul"))
+    assert intentional
+
+
+def test_coach_hold_drains_clock_to_last_shot():
+    _, sim = _sim(coach=Coach())
+    sim.clock = 18.0
+    _, _, secs = sim._plan_possession(sim.home, sim.away, CoachOrders(tempo="hold"))
+    assert 15.0 <= secs <= 17.0                             # milks most of the clock
+    # never holds past the shot clock
+    sim.clock = 90.0
+    _, _, secs = sim._plan_possession(sim.home, sim.away, CoachOrders(tempo="hold"))
+    assert secs <= sim.shot_clock
+
+
+def test_coach_quick3_is_fast_and_forces_threes():
+    _, sim = _sim(coach=Coach())
+    sim.clock = 40.0
+    for _ in range(20):
+        _, _, secs = sim._plan_possession(sim.home, sim.away, CoachOrders(tempo="quick3"))
+        assert 3.0 <= secs <= 6.0
+    # quick3 arms a strong bias toward shooting a three this trip
+    assert sim._three_bias > 0.5
+    _ready_lineups(sim)
+    shooter = sim.home.cache.players[0]
+    threes = sum(sim._pick_shot_type(shooter, sim.home, putback=False) == "three"
+                 for _ in range(200))
+    assert threes > 120                                     # ~70% forced threes
+
+
+def test_coach_bleed_chews_shot_clock():
+    _, sim = _sim(coach=Coach())
+    sim.clock = 200.0                                       # plenty of game clock left
+    for _ in range(20):
+        _, _, secs = sim._plan_possession(sim.home, sim.away, CoachOrders(tempo="bleed"))
+        assert sim.shot_clock - 4.0 <= secs <= sim.shot_clock   # ~20-23s, milks the shot clock
+    # a normal possession clears the three bias again
+    sim._plan_possession(sim.home, sim.away, CoachOrders(tempo="normal"))
+    assert sim._three_bias == 0.0
+
+
+def test_coach_lineup_lock_is_honored():
+    coach = Coach()
+    _, sim = _sim(coach=coach)
+    _ready_lineups(sim)
+    bench = [pid for pid in sim.home.available if pid not in sim.home.on_court]
+    assert bench
+    new_five = sim.home.on_court[:4] + [bench[0]]
+    sim.coach = _StubCoach(CoachOrders(lineup=new_five))
+    sim._consult_coach(sim.home, sim.away)
+    assert set(sim.home.on_court) == set(new_five)
+    # a normal rotation re-pick keeps honoring the lock
+    sim.home.choose_lineup(sim.game_secs)
+    assert set(sim.home.on_court) == set(new_five)
+
+
+def test_timeouts_initialized_from_format():
+    _, sim = _sim()
+    assert sim.home.timeouts == 7        # nba default
+    assert sim.shot_clock == 24.0
 
 
 # --- tactics serialization defaults ---------------------------------------

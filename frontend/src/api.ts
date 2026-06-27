@@ -89,6 +89,7 @@ export const api = {
   player: (pid: number) => get<any>(`/players/${pid}`),
 
   simGame: (watch: boolean) => post<any>(`/sim/game?watch=${watch}`),
+  coachOrders: (orders: any) => post<any>("/sim/coach", orders),
   simWeek: (days = 4) => post<any>(`/sim/week?days=${days}`),
   advanceDay: () => post<any>("/sim/advance-day"),
 

@@ -61,6 +61,10 @@ late-game intentional fouling**.
   and rebounding. Tactics genuinely shift outcomes in the engine.
 - **Play possession-by-possession games** — watch a streaming play-by-play with a running score,
   or quick-sim. Every game produces a full, reconciled box score.
+- **Coach the finish live** — when you watch your own game, take the bench over in crunch time:
+  substitutions, timeouts (a tracked resource), tempo (run / bleed clock / hold for the last shot /
+  quick 3), and deliberate fouling — possession by possession. Available in the terminal (NBA &
+  college, regular season + postseason) and the web app (regular season + NBA playoffs).
 - **Run a season** — an 82-game (or Quick 30-game) schedule, live standings with tiebreakers,
   play-in tournament, and a best-of-7 playoff bracket through to a champion.
 - **Work the front office** — propose cap-legal trades (with an AI that values players by
@@ -135,6 +139,13 @@ a week, and clear at the deadline), and **end-of-season awards & league history*
 Year, Defensive POY, Most Improved, All-League first/second/third teams, and statistical leaders —
 crowned each offseason and browsable in a History tab alongside past champions).
 
+The newest addition is **live crunch-time coaching**: when you watch your own game you can take the
+bench over possession-by-possession in the closing window — substitutions, timeouts (now a tracked
+resource), tempo (run / bleed clock / hold for the last shot / quick 3), and deliberate fouling. The
+game engine is a resumable generator, so the terminal blocks on your input while the web app drives
+the very same simulation across HTTP requests; it runs in the terminal (NBA & college, regular
+season + postseason) and the web app (regular season + NBA playoffs).
+
 Still on the roadmap:
 
 - **International prospects** entering via the NBA draft and recruitable to college programs.
@@ -149,8 +160,8 @@ Trades & draft assets
 - **Pick protections & swaps** (conditional picks, top-N protections rolling to the next year).
 
 Coach mode — end-of-game situations (NBA & CBB)
-- **In-the-moment interactive coaching** (pause the watched game to make the call yourself, rather
-  than setting the instruction beforehand).
+- **Interactive crunch-time coaching is now built** (terminal: NBA & college incl. postseason;
+  web: regular season + NBA playoffs). Remaining: the college tournament in the web app.
 
 NBA free agency — rounds
 - **Rounds of free agency**: pursue a primary target; if he signs elsewhere (better offer — possibly

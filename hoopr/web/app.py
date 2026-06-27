@@ -9,19 +9,22 @@ from __future__ import annotations
 import os
 import random
 import webbrowser
-from typing import List, Optional
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
 
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from hoopr.config import ROSTER_MIN, SEASON_PRESETS
-from hoopr.models.league import Phase
+from hoopr.models.league import Game, Phase
 from hoopr.models.team import auto_set_lineup
 from hoopr.models.tactics import SETTINGS
 from hoopr.models.world import World
 from hoopr.sim import playoffs as P
 from hoopr.sim import season as S
+from hoopr.sim.coach import Coach, CoachOrders
+from hoopr.sim.engine import GameSim
 from hoopr.systems import cap, draft_system as D, freeagency, offseason, trades
 from hoopr.web import serializers as ser
 from hoopr.web.session import SESSIONS
@@ -119,6 +122,14 @@ class TacticBody(BaseModel):
 
 class DraftPickBody(BaseModel):
     pid: Optional[int] = None              # None -> best available
+
+
+class CoachOrdersBody(BaseModel):
+    """One possession's crunch-time decision from the browser."""
+    timeout: bool = False
+    tempo: str = "normal"                  # normal | hold | quick (offense)
+    defensive_foul: str = "auto"           # auto | foul | no (defense)
+    lineup: Optional[List[int]] = None     # new on-court five, or None to leave it
 
 
 # ---------------------------------------------------------------------------
@@ -262,6 +273,82 @@ def player(pid: int, sid: str = Depends(_sid)):
 # ---------------------------------------------------------------------------
 # Simulation (regular season) — mirrors ui.app_ui._play_user_game / _sim_span
 # ---------------------------------------------------------------------------
+# -- interactive crunch-time coaching ---------------------------------------
+class _WebCoach(Coach):
+    """Server-side coach for an in-progress game: it never decides (the browser does, out of
+    band) but collects the play-by-play of each coached possession so the API can stream it."""
+    def __init__(self) -> None:
+        self.events: list = []
+
+    def narrate(self, events) -> None:
+        self.events.extend(events)
+
+    def drain(self) -> list:
+        out, self.events = self.events, []
+        return out
+
+
+@dataclass
+class _LiveGame:
+    sim: GameSim
+    driver: object
+    coach: _WebCoach
+    game: Game
+    finalize: object        # (world, result) -> dict of mode-specific "final" payload fields
+
+
+_LIVE: Dict[str, _LiveGame] = {}
+
+
+def _play_other_games_today(world: World) -> None:
+    """Sim every non-user game on the current day; the user's is played interactively."""
+    uid = world.user_team_id
+    for g in S.games_on_day(world, world.day):
+        if uid is None or not g.involves(uid):
+            S.sim_one(world, g)
+
+
+def _start_live_game(world: World, sid: str, game: Game, finalize) -> dict:
+    """Set up the user's game for interactive coaching and pump to the first decision/final."""
+    home, away = world.teams[game.home], world.teams[game.away]
+    auto_set_lineup(home, world.players)
+    auto_set_lineup(away, world.players)
+    coach = _WebCoach()
+    sim = GameSim(world, home, away, collect_pbp=True, coach=coach,
+                  coach_tid=world.user_team_id)
+    live = _LIVE[sid] = _LiveGame(sim=sim, driver=sim.coach_session(), coach=coach,
+                                  game=game, finalize=finalize)
+    return _pump(world, sid, live, orders=None)
+
+
+def _pump(world: World, sid: str, live: _LiveGame, orders: Optional[CoachOrders]) -> dict:
+    """Advance the live game to its next decision (or the final), returning a JSON payload."""
+    try:
+        view = next(live.driver) if orders is None else live.driver.send(orders)
+    except StopIteration:
+        return _finish_live_game(world, sid, live)
+    return {
+        "status": "decision",
+        "events": [ser.coach_event_view(world, e) for e in live.coach.drain()],
+        "decision": ser.coach_view_json(world, view),
+        "summary": ser.world_summary(world),
+    }
+
+
+def _finish_live_game(world: World, sid: str, live: _LiveGame) -> dict:
+    events = [ser.coach_event_view(world, e) for e in live.coach.drain()]
+    extra = live.finalize(world, live.sim.result)   # applies result + advances structures
+    _LIVE.pop(sid, None)
+    SESSIONS.autosave(sid)
+    return {
+        "status": "final",
+        "played": True,
+        "events": events,
+        "result": ser.game_result_view(world, live.sim.result),
+        **extra,
+    }
+
+
 @app.post("/api/sim/game")
 def sim_game(watch: bool = False, sid: str = Depends(_sid)):
     world = _world(sid)
@@ -274,13 +361,37 @@ def sim_game(watch: bool = False, sid: str = Depends(_sid)):
                 "summary": ser.world_summary(world)}
     while world.day < game.day:
         S.advance_one_day(world)
-    _, user_result = S.advance_one_day(world, watch_user=True)
+
+    if watch:
+        # Interactive: play the rest of today's slate, then coach the user's game live.
+        _play_other_games_today(world)
+
+        def finalize(w: World, result, _game=game) -> dict:
+            S._apply_result(w, _game, result, is_playoff=False)
+            S._heal_injuries(w)
+            w.day += 1
+            return {"summary": ser.world_summary(w), "new_offers": trades.refresh_offers(w)}
+
+        return _start_live_game(world, sid, game, finalize)
+
+    _, user_result = S.advance_one_day(world, watch_user=False)
     new_offers = trades.refresh_offers(world)
     SESSIONS.autosave(sid)
     out = {"played": True, "summary": ser.world_summary(world), "new_offers": new_offers}
     if user_result is not None:
         out["result"] = ser.game_result_view(world, user_result)
     return out
+
+
+@app.post("/api/sim/coach")
+def sim_coach(body: CoachOrdersBody, sid: str = Depends(_sid)):
+    world = _world(sid)
+    live = _LIVE.get(sid)
+    if live is None:
+        raise HTTPException(status_code=409, detail="No game is currently in progress.")
+    orders = CoachOrders(timeout=body.timeout, tempo=body.tempo,
+                         defensive_foul=body.defensive_foul, lineup=body.lineup)
+    return _pump(world, sid, live, orders=orders)
 
 
 @app.post("/api/sim/week")
@@ -332,18 +443,37 @@ def playoffs_start(sid: str = Depends(_sid)):
     return {"log": log, "bracket": world.bracket}
 
 
+def _playoff_slate_out(world: World, results) -> dict:
+    return {"bracket": world.bracket, "complete": P.playoffs_complete(world),
+            "champion": P.champion(world),
+            "slate": [{"status": P.series_status(world, s),
+                       "away": world.find_team(r.away_tid).abbrev,
+                       "home": world.find_team(r.home_tid).abbrev,
+                       "away_score": r.away_score, "home_score": r.home_score}
+                      for s, r in results]}
+
+
 @app.post("/api/playoffs/advance")
 def playoffs_advance(watch: bool = False, sid: str = Depends(_sid)):
     world = _world(sid)
+    if watch:
+        series = P.user_series(world)
+        if series is not None:
+            # Play the rest of this round's slate, then coach the user's series game live.
+            other = P.play_nonuser_slate(world)
+            game = P.start_user_series_game(world, series)
+
+            def finalize(w: World, result, _s=series, _game=game, _other=other) -> dict:
+                P.finish_user_series_game(w, _s, _game, result)
+                out = _playoff_slate_out(w, list(_other))
+                out["summary"] = ser.world_summary(w)
+                return out
+
+            return _start_live_game(world, sid, game, finalize)
+
     results, user_result = P.advance_playoff_slate(world, watch_user=watch)
     SESSIONS.autosave(sid)
-    out = {"bracket": world.bracket, "complete": P.playoffs_complete(world),
-           "champion": P.champion(world),
-           "slate": [{"status": P.series_status(world, s),
-                      "away": world.find_team(r.away_tid).abbrev,
-                      "home": world.find_team(r.home_tid).abbrev,
-                      "away_score": r.away_score, "home_score": r.home_score}
-                     for s, r in results]}
+    out = _playoff_slate_out(world, results)
     if watch and user_result is not None:
         out["result"] = ser.game_result_view(world, user_result)
     return out

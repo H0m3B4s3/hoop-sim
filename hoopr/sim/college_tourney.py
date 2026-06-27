@@ -111,7 +111,31 @@ def _build_national_field(world: World) -> None:
 # ---------------------------------------------------------------------------
 # Advancement
 # ---------------------------------------------------------------------------
-def _play_round_slate(world: World, bracket: dict, watch_user: bool
+def _round_matches(bracket: dict):
+    """Yield the (home, away, match) of every undecided game in the bracket's active round."""
+    rnd = _active_round(bracket)
+    for m in (rnd or []):
+        if m["winner"] is None:
+            yield m["a"], m["b"], m
+
+
+def user_next_matchup(world: World) -> Optional[Tuple[int, int]]:
+    """(home_tid, away_tid) for the user's next college-tournament game, or None."""
+    uid = world.user_team_id
+    if uid is None or not world.bracket:
+        return None
+    b = world.bracket
+    brackets = list(b["conf"].values()) if b["stage"] == "conf" else [b.get("national")]
+    for cb in brackets:
+        if not cb:
+            continue
+        for home, away, _ in _round_matches(cb):
+            if uid in (home, away):
+                return home, away
+    return None
+
+
+def _play_round_slate(world: World, bracket: dict, watch_user: bool, coach=None
                       ) -> Tuple[List[Tuple[dict, GameResult]], Optional[GameResult]]:
     rnd = _active_round(bracket)
     if rnd is None:
@@ -126,7 +150,9 @@ def _play_round_slate(world: World, bracket: dict, watch_user: bool
         is_user = uid in (home, away)
         g = Game(gid=world.new_gid(), day=world.day, home=home, away=away, is_playoff=True)
         world.schedule.append(g)
-        res = sim_one(world, g, is_playoff=True, collect_pbp=watch_user and is_user)
+        res = sim_one(world, g, is_playoff=True, collect_pbp=watch_user and is_user,
+                      coach=coach if is_user else None,
+                      coach_tid=uid if is_user else None)
         m["gid"] = g.gid
         m["a_score"], m["b_score"] = res.home_score, res.away_score
         m["winner"] = home if res.home_score > res.away_score else away
@@ -137,7 +163,7 @@ def _play_round_slate(world: World, bracket: dict, watch_user: bool
     return results, user_result
 
 
-def advance_college_slate(world: World, *, watch_user: bool = False
+def advance_college_slate(world: World, *, watch_user: bool = False, coach=None
                           ) -> Tuple[List[Tuple[dict, GameResult]], Optional[GameResult]]:
     b = world.bracket
     if b["stage"] == "conf":
@@ -145,7 +171,7 @@ def advance_college_slate(world: World, *, watch_user: bool = False
         user_result = None
         for cb in b["conf"].values():
             if cb["champion"] is None:
-                r, ur = _play_round_slate(world, cb, watch_user)
+                r, ur = _play_round_slate(world, cb, watch_user, coach)
                 results += r
                 user_result = ur or user_result
         if all(cb["champion"] is not None for cb in b["conf"].values()):
@@ -153,7 +179,7 @@ def advance_college_slate(world: World, *, watch_user: bool = False
             b["stage"] = "national"
         return results, user_result
     if b["stage"] == "national":
-        r, ur = _play_round_slate(world, b["national"], watch_user)
+        r, ur = _play_round_slate(world, b["national"], watch_user, coach)
         if b["national"]["champion"] is not None:
             b["champion"] = b["national"]["champion"]
             b["stage"] = "done"

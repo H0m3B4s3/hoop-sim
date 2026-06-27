@@ -275,6 +275,15 @@ def _front_office(world: World) -> None:
             return
 
 
+def _make_live_coach(world: World, game: Game):
+    """A live crunch-time coach for the user's own game (regular season or playoffs)."""
+    uid = world.user_team_id
+    if uid is None or not game.involves(uid):
+        return None
+    from hoopr.ui.screens.live_coach import LiveCoach
+    return LiveCoach(world, uid, game.home, game.away)
+
+
 def _play_user_game(world: World, watch: bool) -> None:
     game = S.user_next_game(world)
     if game is None:
@@ -287,8 +296,10 @@ def _play_user_game(world: World, watch: bool) -> None:
     with console.status("[accent]Simulating up to your game…[/accent]"):
         while world.day < game.day:
             S.advance_one_day(world)
-        _, user_result = S.advance_one_day(world, watch_user=watch)
-    present_result(world, game, user_result, watched=watch)
+    coach = _make_live_coach(world, game) if watch else None
+    _, user_result = S.advance_one_day(world, watch_user=watch, coach=coach)
+    present_result(world, game, user_result, watched=watch,
+                   coached=bool(coach and coach.engaged))
 
 
 def _sim_span(world: World, days: int) -> None:
@@ -396,13 +407,25 @@ def _playoffs_menu(world: World) -> Optional[str]:
 
 
 def _advance_playoffs(world: World, watch: bool) -> None:
-    with console.status("[accent]Simulating playoff games…[/accent]"):
-        results, user_result = P.advance_playoff_slate(world, watch_user=watch)
+    coach = None
+    if watch:
+        matchup = P.user_next_matchup(world)
+        if matchup is not None:
+            from hoopr.ui.screens.live_coach import LiveCoach
+            home, away = matchup
+            coach = LiveCoach(world, world.user_team_id, home, away)
+    if coach is not None:
+        # Live coaching prints to the console, so it can't run under a status spinner.
+        results, user_result = P.advance_playoff_slate(world, watch_user=watch, coach=coach)
+    else:
+        with console.status("[accent]Simulating playoff games…[/accent]"):
+            results, user_result = P.advance_playoff_slate(world, watch_user=watch)
     if watch and user_result is not None:
         # find the user's game object for presentation
         game = _last_user_playoff_game(world)
         if game is not None:
-            present_result(world, game, user_result, watched=True)
+            present_result(world, game, user_result, watched=True,
+                           coached=bool(coach and coach.engaged))
             return
     clear()
     header(world)

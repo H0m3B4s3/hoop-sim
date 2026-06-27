@@ -14,6 +14,7 @@ from hoopr.models.player import Player
 from hoopr.models.team import Team
 from hoopr.sim import ratings as R
 from hoopr.sim.boxscore import GameResult, PBPEvent
+from hoopr.sim.coach import Coach, CoachOrders, CoachView, PlayerView
 from hoopr.sim.ratings import LineupCache, build_lineup_cache
 
 # -- tunables (calibrated so PPP ~1.10 and pace ~99) -------------------------
@@ -23,6 +24,13 @@ FATIGUE_MAKE_PENALTY = 0.00060
 SUB_INTERVAL = 168          # game-seconds between rotation checks
 FOUL_OUT = 6
 MAX_PUTBACKS = 3
+BONUS_FOULS = 5             # team fouls in a period that put the opponent in the bonus
+
+# -- interactive end-game coaching window -----------------------------------
+COACH_WINDOW_SECONDS = 120.0   # final-period clock at/under which the coach is consulted
+COACH_MARGIN = 12              # only when the game is within this many points
+TIMEOUT_FATIGUE_RELIEF = 0.55  # on-court fatigue multiplier after a timeout
+DRAW_PLAY_BONUS = 0.05         # make-probability edge on the possession after a timeout
 
 
 def _stamina_factor(p: Player) -> float:
@@ -49,6 +57,9 @@ class _TeamState:
         self.target_secs: Dict[int, float] = {
             pid: team.minutes_target.get(pid, 0) * 60.0 for pid in self.available}
         self.cache: Optional[LineupCache] = None
+        self.timeouts: int = game_format(team.league)["timeouts"]
+        self.period_fouls: int = 0                      # team fouls in the current period
+        self.locked_lineup: Optional[List[int]] = None  # coach-pinned on-court five
 
     def players_on_court(self) -> List[Player]:
         return [self.players[pid] for pid in self.on_court]
@@ -62,6 +73,14 @@ class _TeamState:
             self.on_court = list(candidates)
             self.rebuild_cache()
             return
+
+        if self.locked_lineup is not None:
+            locked = [pid for pid in self.locked_lineup if pid in candidates]
+            if len(locked) == 5:
+                self.on_court = locked
+                self.rebuild_cache()
+                return
+            self.locked_lineup = None    # foul-out/injury broke the pinned five; auto-fill again
 
         if clutch:
             # Crunch time: ride your best closers regardless of how many minutes they've banked
@@ -100,16 +119,20 @@ class _TeamState:
 
 
 class GameSim:
-    def __init__(self, world, home: Team, away: Team, *, collect_pbp: bool = False) -> None:
+    def __init__(self, world, home: Team, away: Team, *, collect_pbp: bool = False,
+                 coach: Optional[Coach] = None, coach_tid: Optional[int] = None) -> None:
         self.world = world
         self.rng = world.rng
-        self.collect_pbp = collect_pbp
+        self.collect_pbp = collect_pbp or coach is not None
+        self.coach = coach
+        self.coach_tid = coach_tid if coach is not None else None
         self.home = _TeamState(world, home, is_home=True)
         self.away = _TeamState(world, away, is_home=False)
         fmt = game_format(home.league)
         self.periods = fmt["periods"]
         self.period_seconds = fmt["period_seconds"]
         self.base_poss_seconds = fmt["base_poss_seconds"]
+        self.shot_clock = fmt["shot_clock"]
         self.result = GameResult(home_tid=home.tid, away_tid=away.tid,
                                  period_label=fmt["label"])
         self.quarter = 1
@@ -117,9 +140,34 @@ class GameSim:
         self.game_secs = 0.0
         self._next_sub = SUB_INTERVAL
         self._prev_crunch = False
+        self._draw_play_tid: Optional[int] = None   # team that just took a timeout (one-poss boost)
+        self._play_boost = 0.0
+        self._three_bias = 0.0                       # chance this trip is forced into a three
+        self._first_engagement = True
 
     # -- public -------------------------------------------------------------
     def play(self) -> GameResult:
+        """Play the whole game, driving any blocking ``coach`` synchronously."""
+        driver = self.coach_session()
+        try:
+            view = next(driver)
+            while True:
+                orders = self.coach.decide(view) if self.coach is not None else None
+                view = driver.send(orders)
+        except StopIteration:
+            pass
+        return self.result
+
+    def coach_session(self):
+        """A generator driving the game that suspends at each user crunch-time decision.
+
+        Pump it with ``next()`` and ``gen.send(orders)``: every yielded value is a
+        :class:`~hoopr.sim.coach.CoachView` to act on, resumed with the user's
+        :class:`~hoopr.sim.coach.CoachOrders`. When it raises ``StopIteration`` the finished
+        :class:`~hoopr.sim.boxscore.GameResult` is on ``self.result``. With no coach (or in a
+        blowout that never reaches the window) it simply never yields. Possession narration is
+        delivered through ``coach.narrate`` as each trip resolves.
+        """
         for state, starters in ((self.home, self.home.team.starters),
                                 (self.away, self.away.team.starters)):
             state.on_court = [pid for pid in starters if pid in state.available][:5]
@@ -133,15 +181,14 @@ class GameSim:
         offense, defense = (self.home, self.away) if self.rng.chance(0.5) else (self.away, self.home)
         for q in range(1, self.periods + 1):
             self.quarter = q
-            offense, defense = self._play_period(offense, defense, self.period_seconds)
+            offense, defense = yield from self._play_period(offense, defense, self.period_seconds)
 
         while self.result.home_score == self.result.away_score:
             self.quarter += 1
             self.result.overtimes += 1
-            offense, defense = self._play_period(offense, defense, OT_SECONDS)
+            offense, defense = yield from self._play_period(offense, defense, OT_SECONDS)
 
         self._finalize()
-        return self.result
 
     # -- period loop --------------------------------------------------------
     def _set_lineups(self) -> None:
@@ -154,35 +201,46 @@ class GameSim:
         return self._is_crunch() and state.team.tactics.crunch_lineup != "Rotation"
 
     def _play_period(self, offense: _TeamState, defense: _TeamState, length: int):
+        """Possession loop for one period. A generator: it yields a CoachView at each user
+        crunch decision and resumes with the CoachOrders sent back in."""
         self.clock = length
         period_home = self.result.home_score
         period_away = self.result.away_score
+        self.home.period_fouls = 0
+        self.away.period_fouls = 0
         self._set_lineups()
 
         while self.clock > 0:
-            intentional = self._should_intentional_foul(offense, defense)
-            foul_up_3 = (not intentional) and self._should_foul_up_3(offense, defense)
-            if intentional or foul_up_3:
-                poss_secs = self.rng.uniform(2.5, 5.0)
-            else:
-                poss_secs = self._possession_seconds(offense, defense)
-            if poss_secs > self.clock:
-                poss_secs = self.clock
-            self.clock -= poss_secs
-            self.game_secs += poss_secs
-
             crunch = self._is_crunch()
             if self.game_secs >= self._next_sub or crunch != self._prev_crunch:
                 self._set_lineups()
                 self._next_sub = self.game_secs + SUB_INTERVAL
                 self._prev_crunch = crunch
 
+            orders = None
+            if self.coach is not None and self._coach_engaged(offense, defense):
+                user = offense if offense.team.tid == self.coach_tid else defense
+                orders = yield self._build_view(offense, defense, user)
+                if orders is None:
+                    orders = CoachOrders()
+                self._apply_orders(orders, offense, defense)
+                self._ai_timeout(offense, defense)
+
+            intentional, foul_up_3, poss_secs = self._plan_possession(offense, defense, orders)
+            if poss_secs > self.clock:
+                poss_secs = self.clock
+            self.clock -= poss_secs
+            self.game_secs += poss_secs
+
+            pbp_mark = len(self.result.pbp)
             if intentional:
                 self._intentional_foul(offense, defense)
             elif foul_up_3:
                 self._foul_up_3(offense, defense)
             else:
                 self._resolve_possession(offense, defense)
+            if orders is not None:
+                self.coach.narrate(self.result.pbp[pbp_mark:])
             self._apply_fatigue(poss_secs)
             self._injury_check(offense)
             self._injury_check(defense)
@@ -191,6 +249,123 @@ class GameSim:
         self.result.line_score.append(
             (self.result.home_score - period_home, self.result.away_score - period_away))
         return offense, defense
+
+    # -- interactive coaching ----------------------------------------------
+    def _coach_engaged(self, offense: _TeamState, defense: _TeamState) -> bool:
+        """True when the human coach should be consulted before this possession."""
+        if self.coach_tid is None or self.quarter < self.periods:
+            return False
+        if offense.team.tid != self.coach_tid and defense.team.tid != self.coach_tid:
+            return False
+        margin = abs(self.result.home_score - self.result.away_score)
+        return self.clock <= COACH_WINDOW_SECONDS and margin <= COACH_MARGIN
+
+    def _plan_possession(self, offense, defense, orders):
+        """Decide whether this trip is a deliberate foul and how long it should run."""
+        user_off = offense.team.tid == self.coach_tid
+        user_def = defense.team.tid == self.coach_tid
+        foul_order = orders.defensive_foul if (orders is not None and user_def) else "auto"
+
+        if foul_order == "foul":
+            intentional = True
+        elif foul_order == "no":
+            intentional = False
+        else:
+            intentional = self._should_intentional_foul(offense, defense)
+        foul_up_3 = (not intentional) and foul_order != "no" \
+            and self._should_foul_up_3(offense, defense)
+
+        self._three_bias = 0.0
+        if intentional or foul_up_3:
+            return intentional, foul_up_3, self.rng.uniform(2.5, 5.0)
+
+        tempo = orders.tempo if (orders is not None and user_off) else "normal"
+        if tempo == "hold":
+            poss_secs = self._hold_seconds()
+        elif tempo == "bleed":
+            poss_secs = self._bleed_seconds()
+        elif tempo == "quick3":
+            # Trailing and need points fast: get a quick shot up, and make it a three.
+            self._three_bias = 0.70
+            poss_secs = self.rng.uniform(3.0, 6.0)
+        else:
+            poss_secs = self._possession_seconds(offense, defense)
+        return False, False, poss_secs
+
+    def _hold_seconds(self) -> float:
+        """Hold for the last shot: drain to the buzzer, but never past the shot clock."""
+        target = self.clock - self.rng.uniform(1.0, 3.0)
+        return max(4.0, min(self.shot_clock - 1.0, target))
+
+    def _bleed_seconds(self) -> float:
+        """Leading: chew the shot clock down before still taking a decent look."""
+        return max(4.0, min(self.clock, self.shot_clock - self.rng.uniform(1.0, 4.0)))
+
+    def _consult_coach(self, offense: _TeamState, defense: _TeamState):
+        """Blocking-coach convenience: ask the coach and apply the orders. Used by the
+        synchronous :meth:`play` driver path and by tests; the generator inlines these steps
+        around a ``yield`` so the web layer can supply the orders out-of-band."""
+        user = offense if offense.team.tid == self.coach_tid else defense
+        orders = self.coach.decide(self._build_view(offense, defense, user))
+        self._apply_orders(orders, offense, defense)
+        return orders
+
+    def _apply_orders(self, orders: CoachOrders, offense: _TeamState, defense: _TeamState) -> None:
+        """Apply a possession's coaching orders (substitution + timeout) to the user team."""
+        user = offense if offense.team.tid == self.coach_tid else defense
+        if orders.lineup:
+            valid = [pid for pid in orders.lineup
+                     if pid in user.available and pid not in user.unavailable]
+            if len(valid) == 5:
+                user.locked_lineup = list(valid)
+                user.choose_lineup(self.game_secs, clutch=self._clutch_for(user))
+
+        if orders.timeout and user.timeouts > 0:
+            user.timeouts -= 1
+            for pid in user.on_court:
+                user.fatigue[pid] *= TIMEOUT_FATIGUE_RELIEF
+            self._draw_play_tid = user.team.tid
+            self._log(user.team.tid,
+                      f"{user.team.abbrev} call timeout ({user.timeouts} left)")
+        self._first_engagement = False
+
+    def _ai_timeout(self, offense: _TeamState, defense: _TeamState) -> None:
+        """The AI opponent burns a timeout to settle things when trailing late on offense."""
+        opp = offense if offense.team.tid != self.coach_tid else None
+        if opp is None or opp.timeouts <= 0:
+            return
+        off_score, def_score = self._scores(offense)
+        if -9 <= (off_score - def_score) < 0 and self.clock <= 45.0 and self.rng.chance(0.15):
+            opp.timeouts -= 1
+            for pid in opp.on_court:
+                opp.fatigue[pid] *= TIMEOUT_FATIGUE_RELIEF
+            self._draw_play_tid = opp.team.tid
+            self._log(opp.team.tid, f"{opp.team.abbrev} call timeout ({opp.timeouts} left)")
+
+    def _build_view(self, offense: _TeamState, defense: _TeamState,
+                    user: _TeamState) -> CoachView:
+        opp = defense if user is offense else offense
+
+        def pv(state: _TeamState, pid: int) -> PlayerView:
+            p = state.players[pid]
+            return PlayerView(pid=pid, name=p.short_name, pos=p.position, overall=p.overall,
+                              fouls=state.fouls.get(pid, 0), fatigue=state.fatigue.get(pid, 0.0),
+                              secs=state.secs_played.get(pid, 0.0),
+                              fouled_out=pid in state.unavailable)
+
+        on_court = [pv(user, pid) for pid in user.on_court]
+        bench = [pv(user, pid) for pid in user.available
+                 if pid not in user.on_court and pid not in user.unavailable]
+        return CoachView(
+            quarter=self.quarter, periods=self.periods, clock=self.clock,
+            period_label=self.result.period_label,
+            home_abbrev=self.home.abbrev, away_abbrev=self.away.abbrev,
+            home_score=self.result.home_score, away_score=self.result.away_score,
+            user_is_home=user.is_home, user_on_offense=user is offense,
+            user_timeouts=user.timeouts, opp_timeouts=opp.timeouts,
+            user_in_bonus=opp.period_fouls >= BONUS_FOULS,
+            opp_in_bonus=user.period_fouls >= BONUS_FOULS,
+            on_court=on_court, bench=bench, first_engagement=self._first_engagement)
 
     def _is_crunch(self) -> bool:
         """Final period / OT, close game, under three minutes — ride your best lineup."""
@@ -289,6 +464,12 @@ class GameSim:
     def _resolve_possession(self, off: _TeamState, deff: _TeamState) -> None:
         if not off.on_court or not deff.on_court:
             return
+        # A timeout buys the team that called it one drawn-up possession with a small edge.
+        if self._draw_play_tid is not None and off.team.tid == self._draw_play_tid:
+            self._play_boost = DRAW_PLAY_BONUS
+            self._draw_play_tid = None
+        else:
+            self._play_boost = 0.0
         oc, dc = off.cache, deff.cache
         scheme = R.DEF_SCHEME[deff.team.tactics.def_scheme]
         pressure = R.DEF_PRESSURE[deff.team.tactics.def_pressure]
@@ -312,7 +493,7 @@ class GameSim:
 
     def _maybe_turnover(self, off, deff, oc, dc, scheme, pressure) -> bool:
         to_p = 0.135 - (off.ball_security() - 70) * 0.0011 \
-            + (dc.avg_steal - 70) * 0.0011 + pressure[2]
+            + (dc.avg_steal - 70) * 0.0011 + pressure[2] - self._play_boost * 0.5
         to_p = max(0.05, min(0.22, to_p))
         if not self.rng.chance(to_p):
             return False
@@ -342,7 +523,7 @@ class GameSim:
         off_margin = ((self.result.home_score - self.result.away_score) if off.is_home
                       else (self.result.away_score - self.result.home_score))
         comeback = max(-0.030, min(0.030, -off_margin * 0.0011))
-        edge = home_edge - fat_pen + comeback
+        edge = home_edge - fat_pen + comeback + self._play_boost
         r = shooter.ratings
         if shot_type == "rim":
             make_p = (0.578 + (r["finishing"] - 70) * 0.0030 - (dc.interior_anchor - 70) * 0.0026
@@ -424,6 +605,8 @@ class GameSim:
     def _pick_shot_type(self, shooter: Player, off, putback) -> str:
         if putback:
             return "rim"
+        if self._three_bias and self.rng.chance(self._three_bias):
+            return "three"
         r = shooter.ratings
         focus_rim, focus_three = R.OFF_FOCUS_SHOT[off.team.tactics.off_focus]
         rim = max(0.03, 0.36 + (r["finishing"] - 70) * 0.004 + (r["athleticism"] - 70) * 0.002
@@ -487,6 +670,7 @@ class GameSim:
         fouler = dc.players[idx]
         self.result.line(fouler.pid).pf += 1
         deff.fouls[fouler.pid] = deff.fouls.get(fouler.pid, 0) + 1
+        deff.period_fouls += 1
         if deff.fouls[fouler.pid] >= FOUL_OUT:
             deff.unavailable.add(fouler.pid)
             if fouler.pid in deff.on_court:
@@ -576,6 +760,8 @@ class GameSim:
                         line.gs = 1
 
 
-def simulate_game(world, home: Team, away: Team, *, collect_pbp: bool = False) -> GameResult:
+def simulate_game(world, home: Team, away: Team, *, collect_pbp: bool = False,
+                  coach: Optional[Coach] = None, coach_tid: Optional[int] = None) -> GameResult:
     """Convenience wrapper: simulate one game and return its result."""
-    return GameSim(world, home, away, collect_pbp=collect_pbp).play()
+    return GameSim(world, home, away, collect_pbp=collect_pbp,
+                   coach=coach, coach_tid=coach_tid).play()

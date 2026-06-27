@@ -1027,3 +1027,72 @@ select:focus-visible {
     transition: none !important;
   }
 }
+
+/* ---- crunch-time coach panel ------------------------------------------ */
+.coachPanel {
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.coachHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.coachClock {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+.coachTOs {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.coachFeed {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+  border-radius: 8px;
+  max-height: 150px;
+  overflow-y: auto;
+  font-size: 0.9rem;
+}
+.coachFeed li {
+  padding: 1px 0;
+}
+.coachLineup {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+.coachRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.coachRow select {
+  min-width: 220px;
+}
+.coachControls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.segGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.toBox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.small {
+  font-size: 0.82rem;
+}

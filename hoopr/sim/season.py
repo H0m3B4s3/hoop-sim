@@ -69,13 +69,14 @@ def _apply_result(world: World, game: Game, result: GameResult, is_playoff: bool
 
 
 def sim_one(world: World, game: Game, *, collect_pbp: bool = False,
-            is_playoff: bool = False) -> GameResult:
+            is_playoff: bool = False, coach=None, coach_tid=None) -> GameResult:
     """Simulate and apply a single scheduled game."""
     home, away = world.teams[game.home], world.teams[game.away]
     # Make sure lineups reflect the current healthy roster.
     auto_set_lineup(home, world.players)
     auto_set_lineup(away, world.players)
-    result = simulate_game(world, home, away, collect_pbp=collect_pbp)
+    result = simulate_game(world, home, away, collect_pbp=collect_pbp,
+                           coach=coach, coach_tid=coach_tid)
     _apply_result(world, game, result, is_playoff)
     return result
 
@@ -112,8 +113,12 @@ def user_next_game(world: World) -> Optional[Game]:
     return min(pending, key=lambda g: g.day) if pending else None
 
 
-def advance_one_day(world: World, *, watch_user: bool = False) -> Tuple[DayResults, Optional[GameResult]]:
-    """Simulate every unplayed regular-season game on the current day, then heal + advance."""
+def advance_one_day(world: World, *, watch_user: bool = False,
+                    coach=None) -> Tuple[DayResults, Optional[GameResult]]:
+    """Simulate every unplayed regular-season game on the current day, then heal + advance.
+
+    Pass ``coach`` to let the user take over crunch-time decisions in their own game.
+    """
     day = world.day
     todays = games_on_day(world, day)
     results: DayResults = []
@@ -121,7 +126,9 @@ def advance_one_day(world: World, *, watch_user: bool = False) -> Tuple[DayResul
     uid = world.user_team_id
     for g in todays:
         is_user = uid is not None and g.involves(uid)
-        res = sim_one(world, g, collect_pbp=watch_user and is_user)
+        res = sim_one(world, g, collect_pbp=watch_user and is_user,
+                      coach=coach if is_user else None,
+                      coach_tid=uid if is_user else None)
         results.append((g, res))
         if is_user:
             user_result = res

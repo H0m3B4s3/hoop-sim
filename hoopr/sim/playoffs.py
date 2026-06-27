@@ -11,7 +11,7 @@ from hoopr.config import CONFERENCES
 from hoopr.models.league import Game, Phase, conference_standings
 from hoopr.models.world import World
 from hoopr.sim.boxscore import GameResult
-from hoopr.sim.season import sim_one
+from hoopr.sim.season import _apply_result, sim_one
 
 BEST_OF = 7
 WINS_NEEDED = BEST_OF // 2 + 1            # 4
@@ -96,6 +96,18 @@ def active_series(world: World) -> List[dict]:
     return [s for s in world.bracket["series"] if s["winner"] is None]
 
 
+def user_next_matchup(world: World) -> Optional[Tuple[int, int]]:
+    """(home_tid, away_tid) for the user's next playoff game, or None if they aren't playing."""
+    uid = world.user_team_id
+    if uid is None:
+        return None
+    for s in active_series(world):
+        home, away = _series_next_home_away(s)
+        if uid in (home, away):
+            return home, away
+    return None
+
+
 def series_status(world: World, s: dict) -> str:
     hi, lo = _abbr(world, s["hi"]), _abbr(world, s["lo"])
     return f"{hi} {s['hi_w']}-{s['lo_w']} {lo}"
@@ -108,7 +120,20 @@ def _series_next_home_away(s: dict) -> Tuple[int, int]:
     return s["lo"], s["hi"]
 
 
-def advance_playoff_slate(world: World, *, watch_user: bool = False
+def _record_series_game(s: dict, home: int, away: int, res: GameResult) -> None:
+    """Tally a finished series game: bump the winner's count and close the series at 4 wins."""
+    winner = home if res.home_score > res.away_score else away
+    if winner == s["hi"]:
+        s["hi_w"] += 1
+    else:
+        s["lo_w"] += 1
+    if s["hi_w"] >= WINS_NEEDED:
+        s["winner"] = s["hi"]
+    elif s["lo_w"] >= WINS_NEEDED:
+        s["winner"] = s["lo"]
+
+
+def advance_playoff_slate(world: World, *, watch_user: bool = False, coach=None
                           ) -> Tuple[List[Tuple[dict, GameResult]], Optional[GameResult]]:
     """Play the next game of every undecided series in the current round."""
     results: List[Tuple[dict, GameResult]] = []
@@ -120,20 +145,11 @@ def advance_playoff_slate(world: World, *, watch_user: bool = False
         g = Game(gid=world.new_gid(), day=world.day, home=home, away=away, is_playoff=True,
                  series_id=s["sid"])
         world.schedule.append(g)
-        res = sim_one(world, g, is_playoff=True, collect_pbp=watch_user and is_user)
+        res = sim_one(world, g, is_playoff=True, collect_pbp=watch_user and is_user,
+                      coach=coach if is_user else None,
+                      coach_tid=uid if is_user else None)
         s["games"].append(g.gid)
-        if res.home_score > res.away_score:
-            winner = home
-        else:
-            winner = away
-        if winner == s["hi"]:
-            s["hi_w"] += 1
-        else:
-            s["lo_w"] += 1
-        if s["hi_w"] >= WINS_NEEDED:
-            s["winner"] = s["hi"]
-        elif s["lo_w"] >= WINS_NEEDED:
-            s["winner"] = s["lo"]
+        _record_series_game(s, home, away, res)
         results.append((s, res))
         if is_user:
             user_result = res
@@ -141,6 +157,57 @@ def advance_playoff_slate(world: World, *, watch_user: bool = False
     if not active_series(world):
         _build_next_round(world)
     return results, user_result
+
+
+# -- interactive (web) coaching: defer the user's series game -----------------
+def user_series(world: World) -> Optional[dict]:
+    """The active series the user is playing in, or None."""
+    uid = world.user_team_id
+    if uid is None:
+        return None
+    for s in active_series(world):
+        if uid in (s["hi"], s["lo"]):
+            return s
+    return None
+
+
+def play_nonuser_slate(world: World) -> List[Tuple[dict, GameResult]]:
+    """Play this round's next game for every active series EXCEPT the user's. The user's series
+    is left untouched so it can be coached live, then closed out by :func:`finish_user_series_game`.
+    """
+    uid = world.user_team_id
+    results: List[Tuple[dict, GameResult]] = []
+    for s in list(active_series(world)):
+        home, away = _series_next_home_away(s)
+        if uid is not None and uid in (home, away):
+            continue
+        g = Game(gid=world.new_gid(), day=world.day, home=home, away=away, is_playoff=True,
+                 series_id=s["sid"])
+        world.schedule.append(g)
+        res = sim_one(world, g, is_playoff=True)
+        s["games"].append(g.gid)
+        _record_series_game(s, home, away, res)
+        results.append((s, res))
+    return results
+
+
+def start_user_series_game(world: World, s: dict) -> Game:
+    """Create (but don't play) the user's next series game, for the interactive engine to drive."""
+    home, away = _series_next_home_away(s)
+    g = Game(gid=world.new_gid(), day=world.day, home=home, away=away, is_playoff=True,
+             series_id=s["sid"])
+    world.schedule.append(g)
+    s["games"].append(g.gid)
+    return g
+
+
+def finish_user_series_game(world: World, s: dict, game: Game, result: GameResult) -> None:
+    """Apply a coached user series game's result + series bookkeeping; build the next round if the
+    round is now complete."""
+    _apply_result(world, game, result, is_playoff=True)
+    _record_series_game(s, game.home, game.away, result)
+    if not active_series(world):
+        _build_next_round(world)
 
 
 def _seed(world: World, tid: int) -> int:

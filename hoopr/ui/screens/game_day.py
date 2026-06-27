@@ -7,15 +7,20 @@ from hoopr.ui.console import clear, confirm, console, pause
 from hoopr.ui.widgets import box_score_table, header, line_score_panel, play_by_play
 
 
-def present_result(world: World, game: Game, result, *, watched: bool) -> None:
+def present_result(world: World, game: Game, result, *, watched: bool,
+                   coached: bool = False) -> None:
     away, home = world.teams[result.away_tid], world.teams[result.home_tid]
+    if coached:
+        pause("Press Enter for the final")
     clear()
     header(world)
     console.print()
     console.print(line_score_panel(world, result))
 
+    # When the user coached the finish live they've already seen the crunch, so the full
+    # replay is offered but defaults to off.
     if watched and result.pbp:
-        if confirm("Watch the play-by-play?", default=True):
+        if confirm("Watch the full play-by-play?", default=not coached):
             clear()
             console.rule(f"[title]{away.abbrev} @ {home.abbrev}[/title]", style="muted")
             play_by_play(world, result)

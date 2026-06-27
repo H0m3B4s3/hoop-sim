@@ -515,6 +515,49 @@ def game_result_view(world: World, result: GameResult) -> dict:
     }
 
 
+def _clock_str(secs) -> str:
+    secs = max(0, int(secs))
+    m, s = divmod(secs, 60)
+    return f"{m}:{s:02d}"
+
+
+def coach_event_view(world: World, e) -> dict:
+    """One crunch-time play-by-play line, with the acting team's identity for coloring."""
+    team = world.find_team(e.tid) if e.tid is not None else None
+    return {
+        "quarter": e.quarter, "clock": e.clock, "text": e.text,
+        "home_score": e.home_score, "away_score": e.away_score,
+        "tid": e.tid,
+        "abbrev": team.abbrev if team else None,
+        "color": color_hex(team.color) if team else None,
+    }
+
+
+def coach_view_json(world: World, view) -> dict:
+    """Serialize a :class:`~hoopr.sim.coach.CoachView` for the browser crunch-time panel."""
+    def pj(p) -> dict:
+        return {"pid": p.pid, "name": p.name, "pos": p.pos, "overall": p.overall,
+                "fouls": p.fouls, "fatigue": round(p.fatigue, 1), "secs": int(p.secs),
+                "fouled_out": p.fouled_out}
+
+    user = world.teams[world.user_team_id]
+    return {
+        "quarter": view.quarter, "periods": view.periods,
+        "clock": int(view.clock), "clock_str": _clock_str(view.clock),
+        "period_label": view.period_label,
+        "home_abbrev": view.home_abbrev, "away_abbrev": view.away_abbrev,
+        "home_score": view.home_score, "away_score": view.away_score,
+        "user_is_home": view.user_is_home, "user_on_offense": view.user_on_offense,
+        "user_score": view.user_score, "opp_score": view.opp_score, "user_lead": view.user_lead,
+        "user_timeouts": view.user_timeouts, "opp_timeouts": view.opp_timeouts,
+        "user_in_bonus": view.user_in_bonus, "opp_in_bonus": view.opp_in_bonus,
+        "on_court": [pj(p) for p in view.on_court],
+        "bench": [pj(p) for p in view.bench],
+        "user_team": team_brief(user),
+        "first_engagement": view.first_engagement,
+    }
+
+
 def schedule_result(world: World, game) -> dict:
     """A one-line played-game summary (for recent-results lists)."""
     home, away = world.find_team(game.home), world.find_team(game.away)

@@ -145,12 +145,23 @@ def _postseason_menu(world: World) -> Optional[str]:
 
 
 def _advance(world: World, watch: bool) -> None:
-    with console.status("[accent]Simulating tournament games…[/accent]"):
-        results, user_result = CT.advance_college_slate(world, watch_user=watch)
+    coach = None
+    if watch:
+        matchup = CT.user_next_matchup(world)
+        if matchup is not None:
+            from hoopr.ui.screens.live_coach import LiveCoach
+            home, away = matchup
+            coach = LiveCoach(world, world.user_team_id, home, away)
+    if coach is not None:
+        results, user_result = CT.advance_college_slate(world, watch_user=watch, coach=coach)
+    else:
+        with console.status("[accent]Simulating tournament games…[/accent]"):
+            results, user_result = CT.advance_college_slate(world, watch_user=watch)
     if watch and user_result is not None:
         game = app_ui._last_user_playoff_game(world)
         if game is not None:
-            present_result(world, game, user_result, watched=True)
+            present_result(world, game, user_result, watched=True,
+                           coached=bool(coach and coach.engaged))
             return
     clear()
     header(world)
