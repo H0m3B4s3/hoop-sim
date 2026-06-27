@@ -1,5 +1,5 @@
 /* ===========================================================================
-   HoopR — Front Office Console
+   HoopSim — Front Office Console
    Type: IBM Plex Sans (UI) + IBM Plex Mono (numbers, abbreviations, scoreboard).
    Theme: tokens are defined for dark by default and overridden for light via
    [data-theme="light"]. Every team color is contrast-corrected in JS (see
