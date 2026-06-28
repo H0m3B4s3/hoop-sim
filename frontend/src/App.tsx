@@ -214,6 +214,14 @@ function Hub({
   const [tab, setTab] = useState("play");
   const [openPid, setOpenPid] = useState<number | null>(null);
   const [sideOpen, setSideOpen] = useState(false);
+
+  useEffect(() => {
+    if (!sideOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setSideOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sideOpen]);
+
   const phase = summary.phase;
   const inPlayoffs = phase === "playoffs" || phase === "play_in";
   const inOffseason = ["draft", "free_agency", "offseason"].includes(phase);
@@ -239,7 +247,7 @@ function Hub({
     <div className="hub">
       <TopBar summary={summary} toast={toast} onQuit={onQuit} onMenuToggle={() => setSideOpen((o) => !o)} />
       <div className="body">
-        {sideOpen && <div className="sideOverlay" onClick={() => setSideOpen(false)} />}
+        <div className={sideOpen ? "sideOverlay open" : "sideOverlay"} onClick={() => setSideOpen(false)} />
         <nav className={sideOpen ? "side open" : "side"}>
           {nav.map((n) => (
             <button
