@@ -31,6 +31,7 @@ class Team:
     block_list: List[int] = field(default_factory=list)    # pids the GM has made available
     minutes_target: Dict[int, int] = field(default_factory=dict)  # pid -> target minutes
     auto_lineup: bool = True                               # False -> user set the starting five
+    rotation: List[int] = field(default_factory=list)      # user-pinned rotation beyond the starters; [] -> automatic
     tactics: Tactics = field(default_factory=Tactics)
     coach: Optional[Coach] = None                          # head coach (rotation/tactics identity)
 
@@ -92,6 +93,8 @@ class Team:
             self.roster.remove(pid)
         if pid in self.starters:
             self.starters.remove(pid)
+        if pid in self.rotation:
+            self.rotation.remove(pid)
         self.minutes_target.pop(pid, None)
 
     # -- results ------------------------------------------------------------
@@ -131,6 +134,7 @@ class Team:
             "block_list": list(self.block_list),
             "minutes_target": {str(k): v for k, v in self.minutes_target.items()},
             "auto_lineup": self.auto_lineup,
+            "rotation": list(self.rotation),
             "tactics": self.tactics.to_dict(),
             "coach": self.coach.to_dict() if self.coach else None,
             "wins": self.wins,
@@ -165,6 +169,7 @@ class Team:
             block_list=list(d.get("block_list", [])),
             minutes_target={int(k): v for k, v in d.get("minutes_target", {}).items()},
             auto_lineup=d.get("auto_lineup", True),
+            rotation=list(d.get("rotation", [])),
             tactics=Tactics.from_dict(d.get("tactics", {})),
             coach=Coach.from_dict(d["coach"]) if d.get("coach") else None,
             wins=d.get("wins", 0),
@@ -236,6 +241,10 @@ def assign_positions(five: List[Player]) -> List[int]:
     return ordered
 
 
+# Cap how deep a user can spread minutes so a pinned rotation stays meaningful (not a 15-man mob).
+MAX_ROTATION = 12       # starters + pinned reserves
+
+
 def auto_set_lineup(team: Team, players: Dict[int, Player]) -> None:
     """Set the starting five and rotation minutes.
 
@@ -261,10 +270,38 @@ def auto_set_lineup(team: Team, players: Dict[int, Player]) -> None:
     set_auto_minutes(team, players)
 
 
-def set_auto_minutes(team: Team, players: Dict[int, Player]) -> None:
-    """Distribute 240 player-minutes across healthy players, weighted by overall.
+def rotation_pool(team: Team, players: Dict[int, Player]) -> List[Player]:
+    """The available players who should draw minutes, best-first (starters lead).
 
-    Starters get a floor; depth beyond ~10 players gets none. Targets are advisory — the
+    With a user-pinned ``team.rotation`` the membership is the user's call — starters plus the
+    pinned players, and nobody else — so a coach can hand a raw rookie real run over a higher-rated
+    veteran parked at the end of the bench, even if that means a deliberately short rotation. The
+    only override is an injury safety net: if availability drops the pinned group below a fieldable
+    five, the next-best players backfill so a lineup can still take the floor. With no manual
+    rotation we fall back to the head coach's automatic shape (top ``rotation_size`` by overall).
+    """
+    pool = available_players(team, players)
+    if not pool:
+        return []
+    prof = profile_for(team)                       # rotation shape comes from the head coach
+    pool.sort(key=lambda p: (p.pid in team.starters, p.overall), reverse=True)
+    if not team.rotation:
+        return pool[:prof.rotation_size]
+    pinned = set(team.starters) | set(team.rotation)
+    chosen = [p for p in pool if p.pid in pinned]
+    if len(chosen) < STARTERS:                      # injuries gutted the rotation; backfill to a five
+        for p in pool:
+            if p.pid not in pinned:
+                chosen.append(p)
+                if len(chosen) >= STARTERS:
+                    break
+    return chosen
+
+
+def set_auto_minutes(team: Team, players: Dict[int, Player]) -> None:
+    """Distribute 240 player-minutes across the rotation, weighted by overall.
+
+    Starters get a floor; players outside the rotation get none. Targets are advisory — the
     engine still adjusts for in-game fatigue and foul trouble.
     """
     pool = available_players(team, players)
@@ -272,8 +309,7 @@ def set_auto_minutes(team: Team, players: Dict[int, Player]) -> None:
         team.minutes_target = {}
         return
     prof = profile_for(team)                       # rotation shape comes from the head coach
-    pool.sort(key=lambda p: (p.pid in team.starters, p.overall), reverse=True)
-    rotation = pool[:prof.rotation_size]
+    rotation = rotation_pool(team, players)
     weights = [max(1.0, p.overall - 55) ** prof.star_reliance for p in rotation]
     total_w = sum(weights)
     minutes = game_minutes(team.league)            # 48 (NBA) or 40 (college)

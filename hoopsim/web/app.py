@@ -117,6 +117,10 @@ class LineupBody(BaseModel):
     auto: bool = False
 
 
+class RotationBody(BaseModel):
+    rotation: Optional[List[int]] = None   # pids beyond the starters; None -> revert to automatic
+
+
 class TacticBody(BaseModel):
     key: str
     value: str
@@ -699,6 +703,28 @@ def set_lineup(body: LineupBody, sid: str = Depends(_sid)):
             raise HTTPException(status_code=400, detail="Need exactly five players on the roster.")
         team.starters = ids
         team.auto_lineup = False
+    auto_set_lineup(team, world.players)
+    SESSIONS.autosave(sid)
+    return ser.roster_view(world, team)
+
+
+@app.post("/api/rotation")
+def set_rotation(body: RotationBody, sid: str = Depends(_sid)):
+    """Pin which non-starters draw minutes (Rotation vs End of Bench), or revert to automatic."""
+    from hoopsim.models.team import MAX_ROTATION
+    world = _world(sid)
+    team = _user_team(world)
+    if body.rotation is None:
+        team.rotation = []                 # back to the head coach's automatic rotation
+    else:
+        starters = set(team.starters)
+        seen: set = set()
+        ids = []
+        for pid in body.rotation:          # de-dupe, drop starters/strangers, keep order
+            if pid in team.roster and pid not in starters and pid not in seen:
+                seen.add(pid)
+                ids.append(pid)
+        team.rotation = ids[:max(0, MAX_ROTATION - len(team.starters))]
     auto_set_lineup(team, world.players)
     SESSIONS.autosave(sid)
     return ser.roster_view(world, team)

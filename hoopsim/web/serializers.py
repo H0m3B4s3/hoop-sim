@@ -16,7 +16,7 @@ from hoopsim.config import CONFERENCES, ROSTER_MAX, SCHOLARSHIP_LIMIT
 from hoopsim.models.attributes import COMPOSITES, POSITIONS, RATING_GROUPS, all_composites
 from hoopsim.models.league import Phase, conference_standings
 from hoopsim.models.player import Player
-from hoopsim.models.team import Team, roster_players, team_salary
+from hoopsim.models.team import MAX_ROTATION, Team, roster_players, rotation_pool, team_salary
 from hoopsim.models.world import World
 from hoopsim.sim.boxscore import GameResult
 from hoopsim.sim.season import game_date, regular_season_complete
@@ -250,6 +250,8 @@ def history_view(world: World) -> List[dict]:
 
 def roster_view(world: World, team: Team) -> dict:
     starters = set(team.starters)
+    # Effective rotation (beyond the starters) — who actually draws minutes, manual or automatic.
+    rotation = [p.pid for p in rotation_pool(team, world.players) if p.pid not in starters]
     players = sorted(roster_players(team, world.players), key=lambda p: p.overall, reverse=True)
     rows = []
     for p in players:
@@ -263,6 +265,9 @@ def roster_view(world: World, team: Team) -> dict:
         "roster_max": ROSTER_MAX,
         "starters": list(team.starters),
         "auto_lineup": team.auto_lineup,
+        "rotation": rotation,
+        "manual_rotation": bool(team.rotation),
+        "max_rotation": MAX_ROTATION,
     }
 
 

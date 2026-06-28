@@ -1509,6 +1509,26 @@ function LineupPanel({
     const r = await api.setLineup(five, false).catch((e) => toast(String(e)));
     if (r) setData(r);
   };
+  // Rotation tiers beyond the starting five. The backend hands back the *effective* rotation
+  // (manual or coach-automatic); editing it freezes that into an explicit pinned list with the
+  // one change, so the first promote/demote seamlessly takes the rotation off auto-pilot.
+  const rotationIds: number[] = data.rotation ?? [];
+  const maxRotation: number = (data.max_rotation ?? 12) - 5; // pinned reserves allowed
+  const byId = (pid: number) => data.players.find((x: Row) => x.pid === pid);
+  const benchIds: number[] = [...data.players]
+    .filter((p: Row) => !starters.includes(p.pid) && !rotationIds.includes(p.pid))
+    .sort((a: Row, b: Row) => b.overall - a.overall)
+    .map((p: Row) => p.pid);
+  const saveRotation = async (ids: number[] | null) => {
+    const r = await api.setRotation(ids).catch((e) => toast(String(e)));
+    if (r) setData(r);
+  };
+  const promote = (pid: number) => {
+    if (rotationIds.length >= maxRotation)
+      return toast("Rotation is full — move someone to the bench first.");
+    saveRotation([...rotationIds, pid]);
+  };
+  const demote = (pid: number) => saveRotation(rotationIds.filter((x) => x !== pid));
   return (
     <div className="card">
       <div className="finalLine">
@@ -1559,11 +1579,107 @@ function LineupPanel({
           })}
         </tbody>
       </table>
-      {starters[0] != null && (
-        <button className="ghost" onClick={() => onPlayer(starters[0])}>
-          View {data.players.find((x: Row) => x.pid === starters[0])?.name}
-        </button>
-      )}
+
+      <div className="finalLine" style={{ marginTop: 20 }}>
+        <h3>Rotation {data.manual_rotation ? "(manual)" : "(automatic)"}</h3>
+        {data.manual_rotation && (
+          <button className="ghost right" onClick={() => saveRotation(null)}>
+            ↩ Auto rotation
+          </button>
+        )}
+      </div>
+      <p className="muted" style={{ marginTop: 0 }}>
+        Rotation players share the bench minutes; End of Bench players sit unless injuries force
+        them in. Promote a young player here to give him run over a deeper veteran.
+      </p>
+      <table className="dt">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Pos</th>
+            <th>OVR</th>
+            <th>POT</th>
+            <th>MIN</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rotationIds.map((pid) => {
+            const p = byId(pid);
+            if (!p) return null;
+            return (
+              <tr key={pid}>
+                <td>
+                  <span className="clickable" onClick={() => onPlayer(pid)}>
+                    {p.name}
+                  </span>
+                </td>
+                <td>{posLabel(p)}</td>
+                <td>{OVR(p.overall)}</td>
+                <td>{p.potential}</td>
+                <td>{p.minutes}</td>
+                <td>
+                  <button className="mini" onClick={() => demote(pid)}>
+                    ↓ Bench
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+          {rotationIds.length === 0 && (
+            <tr>
+              <td colSpan={6} className="muted">
+                No rotation players — promote someone from the bench below.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+
+      <h3 style={{ marginTop: 20 }}>End of Bench</h3>
+      <table className="dt">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Pos</th>
+            <th>OVR</th>
+            <th>POT</th>
+            <th>MIN</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {benchIds.map((pid) => {
+            const p = byId(pid);
+            if (!p) return null;
+            return (
+              <tr key={pid}>
+                <td>
+                  <span className="clickable" onClick={() => onPlayer(pid)}>
+                    {p.name}
+                  </span>
+                </td>
+                <td>{posLabel(p)}</td>
+                <td>{OVR(p.overall)}</td>
+                <td>{p.potential}</td>
+                <td>{p.minutes}</td>
+                <td>
+                  <button className="mini" onClick={() => promote(pid)}>
+                    ↑ Rotation
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+          {benchIds.length === 0 && (
+            <tr>
+              <td colSpan={6} className="muted">
+                Everyone's in the rotation.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }

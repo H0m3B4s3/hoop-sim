@@ -111,6 +111,7 @@ export const api = {
 
   setLineup: (starters: number[] | null, auto = false) =>
     post<any>("/lineup", { starters, auto }),
+  setRotation: (rotation: number[] | null) => post<any>("/rotation", { rotation }),
   getTactics: () => get<any>("/tactics"),
   setTactic: (key: string, value: string) => post<any>("/tactics", { key, value }),
 

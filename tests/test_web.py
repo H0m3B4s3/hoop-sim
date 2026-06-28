@@ -180,6 +180,35 @@ def test_api_waive_and_extend():
     assert client.post("/api/waive", json={"pid": 999999}).status_code == 400
 
 
+def test_api_rotation_pins_minutes():
+    """Pinning a deep-bench player via /api/rotation gives him minutes and zeroes the rest."""
+    client = TestClient(app)
+    state = client.post("/api/career/new",
+                        json={"league": "nba", "preset": "Quick", "seed": 5}).json()
+    tid = state["summary"]["teams"][0]["tid"]
+    client.post(f"/api/career/team/{tid}")
+
+    roster = client.get(f"/api/teams/{tid}/roster").json()
+    starters = set(roster["starters"])
+    assert roster["manual_rotation"] is False
+    bench = sorted((p for p in roster["players"] if p["pid"] not in starters),
+                   key=lambda p: p["overall"])
+    rookie = bench[0]                                  # lowest-overall reserve, likely 0 minutes
+
+    view = client.post("/api/rotation", json={"rotation": [rookie["pid"]]}).json()
+    assert view["manual_rotation"] is True
+    assert rookie["pid"] in view["rotation"]
+    mins = {p["pid"]: p["minutes"] for p in view["players"]}
+    assert mins[rookie["pid"]] > 0
+    # every non-starter who wasn't pinned is parked at the end of the bench
+    for p in view["players"]:
+        if p["pid"] not in starters and p["pid"] != rookie["pid"]:
+            assert p["minutes"] == 0
+
+    cleared = client.post("/api/rotation", json={"rotation": None}).json()
+    assert cleared["manual_rotation"] is False
+
+
 def test_offseason_pre_draft_is_idempotent():
     """Re-entering the offseason wizard must not run the offseason twice (the reported bug)."""
     from hoopsim.models.league import Phase
