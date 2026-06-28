@@ -790,6 +790,11 @@ function OvrCell({ v }: { v: number }) {
 }
 const OVR = (v: number) => <OvrCell v={v} />;
 
+// Position label including a dual-position player's secondary slot (e.g. "PG/SG"), matching
+// the college recruiting board. The roster/FA/scouting tables otherwise drop it entirely.
+const posLabel = (p: Row) =>
+  p.position + (p.secondary_position ? `/${p.secondary_position}` : "");
+
 // Block / Extend / Waive controls shared by the Roster, Depth, and Finances views (NBA, your team).
 function PlayerActions({
   pid,
@@ -884,7 +889,7 @@ function rosterColumns(
         </span>
       ),
     },
-    { accessorKey: "position", header: "Pos" },
+    { accessorKey: "position", header: "Pos", cell: (c) => posLabel(c.row.original) },
     mode === "college"
       ? {
           accessorKey: "class_year",
@@ -1237,7 +1242,7 @@ function FinancesPanel({
   if (!data) return <Loading />;
   const cols: ColumnDef<Row, any>[] = [
     { accessorKey: "name", header: "Player" },
-    { accessorKey: "position", header: "Pos" },
+    { accessorKey: "position", header: "Pos", cell: (c) => posLabel(c.row.original) },
     { accessorKey: "age", header: "Age" },
     { accessorKey: "overall", header: "OVR", cell: (c) => OVR(c.getValue() as number) },
     { accessorKey: "salary", header: "Salary", cell: (c) => money(c.getValue() as number) },
@@ -1322,7 +1327,7 @@ function FreeAgentsPanel({
   };
   const cols: ColumnDef<Row, any>[] = [
     { accessorKey: "name", header: "Name" },
-    { accessorKey: "position", header: "Pos" },
+    { accessorKey: "position", header: "Pos", cell: (c) => posLabel(c.row.original) },
     { accessorKey: "age", header: "Age" },
     { accessorKey: "overall", header: "OVR", cell: (c) => OVR(c.getValue() as number) },
     { accessorKey: "potential", header: "POT" },
@@ -1406,7 +1411,7 @@ function ScoutingPanel({ onPlayer }: { onPlayer: (pid: number) => void }) {
         <span style={{ color: teamText(c.row.original.team_color) }}>{c.getValue() as string}</span>
       ),
     },
-    { accessorKey: "position", header: "Pos" },
+    { accessorKey: "position", header: "Pos", cell: (c) => posLabel(c.row.original) },
     { accessorKey: "age", header: "Age" },
     { accessorKey: "overall", header: "OVR", cell: (c) => OVR(c.getValue() as number) },
     { accessorKey: "potential", header: "POT" },
@@ -2939,7 +2944,7 @@ function PlayerModal({
           <span>
             <b style={{ color: ovrColor(p.overall, theme) }}>{p.name}</b>{" "}
             <span className="muted">
-              {p.position} · {p.archetype} · OVR {p.overall} · POT {p.potential}
+              {posLabel(p)} · {p.archetype} · OVR {p.overall} · POT {p.potential}
             </span>
           </span>
         ) : (
