@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Dict, List, Optional
 
 from hoopsim.config import (DEFAULT_COLLEGE_ECONOMY, FIRST_APRON, LUXURY_TAX_LINE, SALARY_CAP,
-                          SCHEMA_VERSION)
+                          SCHEMA_VERSION, VETERAN_MINIMUM)
 from hoopsim.models.contract import Contract
 from hoopsim.models.draft import DraftClass, DraftPick
 from hoopsim.models.league import Game, Phase
@@ -134,14 +134,46 @@ class World:
         self.teams[tid].add_player(pid)
 
     def release_player(self, pid: int) -> None:
-        """Waive a player to free agency (dead money is ignored in Phase 1)."""
+        """Waive a player to free agency.
+
+        Guaranteed money owed to an above-minimum contract becomes dead money on the team's
+        books, stretched over ``2 * years_remaining + 1`` seasons (the NBA stretch provision).
+        Minimum deals carry no dead money — cutting fringe players stays free.
+        """
         player = self.players[pid]
-        if player.team_id is not None and player.team_id in self.teams:
-            self.teams[player.team_id].remove_player(pid)
+        team = self.teams.get(player.team_id) if player.team_id is not None else None
+        if team is not None:
+            self._charge_dead_money(team, player.contract)
+            team.remove_player(pid)
         player.team_id = None
         player.contract = Contract.free_agent()
         if pid not in self.free_agents:
             self.free_agents.append(pid)
+
+    @staticmethod
+    def dead_money_schedule(contract: Contract) -> List[int]:
+        """Per-season dead money a waive would create, stretched over ``2*years + 1`` seasons.
+
+        Returns an empty list for minimum deals (which carry no dead money). Index 0 is the
+        current season. Used both to charge the ledger and to preview the hit before waiving.
+        """
+        if contract.current_salary <= VETERAN_MINIMUM:
+            return []
+        owed = sum(sal for sal, gtd in zip(contract.salaries, contract.guaranteed) if gtd)
+        if owed <= 0:
+            return []
+        spread = 2 * contract.years_remaining + 1
+        per_year = owed // spread
+        remainder = owed - per_year * spread        # keep the ledger exact
+        return [per_year + (remainder if i == 0 else 0) for i in range(spread)]
+
+    def _charge_dead_money(self, team: Team, contract: Contract) -> None:
+        """Stretch the contract's remaining guaranteed money onto the team's dead-money ledger."""
+        schedule = self.dead_money_schedule(contract)
+        if len(team.dead_money) < len(schedule):
+            team.dead_money.extend([0] * (len(schedule) - len(team.dead_money)))
+        for i, amount in enumerate(schedule):
+            team.dead_money[i] += amount
 
     def transfer_player(self, pid: int, to_tid: int) -> None:
         """Move a player between teams keeping their contract (used by trades)."""

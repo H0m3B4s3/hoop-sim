@@ -631,12 +631,15 @@ def waive(body: WaiveBody, sid: str = Depends(_sid)):
                             detail=f"Roster is at the minimum ({ROSTER_MIN}); "
                                    "sign or trade before waiving.")
     p = world.players[body.pid]
+    schedule = world.dead_money_schedule(p.contract)
     world.release_player(body.pid)
     if body.pid in team.block_list:
         team.block_list.remove(body.pid)
     auto_set_lineup(team, world.players)
     SESSIONS.autosave(sid)
-    return {"waived": True, "name": p.name, "summary": ser.world_summary(world)}
+    return {"waived": True, "name": p.name,
+            "dead_money": sum(schedule), "dead_money_years": len(schedule),
+            "summary": ser.world_summary(world)}
 
 
 # ---------------------------------------------------------------------------
@@ -730,7 +733,8 @@ def offseason_pre_draft(sid: str = Depends(_sid)):
     # Idempotent: once the draft class exists the offseason has already begun this year, so
     # never re-run pre_draft (which would age, retire, and expire contracts a second time).
     if world.draft_class is not None:
-        return {"summary": {"new_fas": 0, "retired": 0}, "champion": champ, "resumed": True}
+        return {"summary": {"new_fas": 0, "retired": 0, "resigned": 0},
+                "champion": champ, "resumed": True}
     summary = offseason.pre_draft(world, champ)
     D.setup_draft(world)
     SESSIONS.autosave(sid)

@@ -131,6 +131,15 @@ def world_summary(world: World) -> dict:
 # ---------------------------------------------------------------------------
 # Players
 # ---------------------------------------------------------------------------
+def off_def_ratings(ratings: Dict[str, int]) -> Dict[str, int]:
+    """Two at-a-glance summary numbers: offense (scoring+playmaking) and defense."""
+    comps = all_composites(ratings)
+    return {
+        "off": round(0.6 * comps["scoring"] + 0.4 * comps["playmaking"]),
+        "def": round(comps["defense"]),
+    }
+
+
 def player_row(world: World, p: Player, *, is_starter: bool = False) -> dict:
     """A roster/list row (mirrors ui.widgets.roster_table). Raw numbers; UI formats them."""
     s = p.season
@@ -161,6 +170,7 @@ def player_row(world: World, p: Player, *, is_starter: bool = False) -> dict:
         "team_abbrev": (team.abbrev if team else "FA"),
         "team_color": (color_hex(team.color) if team else "#9aa0a6"),
         "on_block": bool(team is not None and p.pid in team.block_list),
+        "dead_money_if_waived": (sum(World.dead_money_schedule(p.contract)) if team else 0),
     }
 
 
@@ -241,7 +251,12 @@ def history_view(world: World) -> List[dict]:
 def roster_view(world: World, team: Team) -> dict:
     starters = set(team.starters)
     players = sorted(roster_players(team, world.players), key=lambda p: p.overall, reverse=True)
-    rows = [player_row(world, p, is_starter=p.pid in starters) for p in players]
+    rows = []
+    for p in players:
+        row = player_row(world, p, is_starter=p.pid in starters)
+        row.update(off_def_ratings(p.ratings))                  # off/def at-a-glance (lineup page)
+        row["minutes"] = team.minutes_target.get(p.pid, 0)      # projected rotation minutes
+        rows.append(row)
     return {
         "team": team_brief(team),
         "players": rows,
@@ -370,6 +385,7 @@ def finances_view(world: World, team: Team) -> dict:
             "years_remaining": p.contract.years_remaining,
             "market_value": market,
             "surplus": market - p.contract.current_salary,
+            "dead_money_if_waived": sum(World.dead_money_schedule(p.contract)),
         })
     return {
         "team": team_brief(team),
@@ -379,6 +395,8 @@ def finances_view(world: World, team: Team) -> dict:
         "luxury_tax_line": world.luxury_tax_line,
         "luxury_tax": cap.luxury_tax(world, team),
         "owner_budget": team.owner_budget,
+        "dead_money": (team.dead_money[0] if team.dead_money else 0),
+        "dead_money_future": sum(team.dead_money[1:]) if len(team.dead_money) > 1 else 0,
         "contracts": rows,
     }
 
@@ -544,9 +562,17 @@ def coach_event_view(world: World, e) -> dict:
 def coach_view_json(world: World, view) -> dict:
     """Serialize a :class:`~hoopr.sim.coach.CoachView` for the browser crunch-time panel."""
     def pj(p) -> dict:
-        return {"pid": p.pid, "name": p.name, "pos": p.pos, "overall": p.overall,
-                "fouls": p.fouls, "fatigue": round(p.fatigue, 1), "secs": int(p.secs),
-                "fouled_out": p.fouled_out}
+        row = {"pid": p.pid, "name": p.name, "pos": p.pos, "overall": p.overall,
+               "fouls": p.fouls, "fatigue": round(p.fatigue, 1), "secs": int(p.secs),
+               "fouled_out": p.fouled_out}
+        player = world.players.get(p.pid)
+        if player is not None:                       # off/def + key skills to inform subs
+            r = player.ratings
+            row.update(off_def_ratings(r))
+            row["skills"] = {"finishing": r["finishing"], "three": r["three_point"],
+                             "perimeter_def": r["perimeter_def"],
+                             "interior_def": r["interior_def"], "iq": r["basketball_iq"]}
+        return row
 
     user = world.teams[world.user_team_id]
     return {

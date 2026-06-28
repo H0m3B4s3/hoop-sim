@@ -502,6 +502,7 @@ def _run_offseason(world: World) -> None:
     console.print(Panel(
         f"Season {world.season_year} is underway.\n"
         f"[dim]Retired this offseason: {summary['retired']} · "
+        f"Re-signed by their teams: {summary.get('resigned', 0)} · "
         f"Players who reached free agency: {summary['new_fas']}[/dim]",
         title="[good]New Season[/good]", border_style="good"))
     pause()

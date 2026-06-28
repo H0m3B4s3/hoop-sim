@@ -643,12 +643,19 @@ function CoachPanel({
               <select value={pid} disabled={busy} onChange={(e) => swap(i, Number(e.target.value))}>
                 {options.map((o: any) => (
                   <option key={o.pid} value={o.pid}>
-                    {o.name} ({o.pos} {o.overall})
+                    {o.name} ({o.pos} {o.overall}
+                    {o.off != null ? ` · O${o.off}/D${o.def}` : ""})
                   </option>
                 ))}
               </select>
               <span className={p.fouls >= 5 ? "bad" : "muted"}>{p.fouls} PF</span>
               <span style={{ color: fcol as string }}>{ftag}</span>
+              {p.off != null && (
+                <span className="muted small" title="Offense · Defense rating">
+                  <b style={{ opacity: decision.user_on_offense ? 1 : 0.5 }}>O{p.off}</b>{" "}
+                  <b style={{ opacity: decision.user_on_offense ? 0.5 : 1 }}>D{p.def}</b>
+                </span>
+              )}
             </div>
           );
         })}
@@ -787,12 +794,14 @@ const OVR = (v: number) => <OvrCell v={v} />;
 function PlayerActions({
   pid,
   onBlock,
+  deadMoney,
   reload,
   refresh,
   toast,
 }: {
   pid: number;
   onBlock?: boolean;
+  deadMoney?: number;
   reload: () => void;
   refresh: (s?: Summary) => void;
   toast: (m: string) => void;
@@ -815,10 +824,21 @@ function PlayerActions({
   };
   const waive = async (e: React.MouseEvent) => {
     stop(e);
-    if (!window.confirm("Waive this player to free agency? (Dead money is ignored.)")) return;
+    const hit = deadMoney ?? 0;
+    const msg =
+      hit > 0
+        ? `Waive this player to free agency? Their guaranteed money leaves ${money(
+            hit
+          )} in dead cap, stretched across future seasons.`
+        : "Waive this player to free agency? (Minimum deal — no dead cap.)";
+    if (!window.confirm(msg)) return;
     const r = await api.waive(pid).catch((err) => toast(String(err)));
     if (!r) return;
-    toast(`${r.name} waived.`);
+    toast(
+      r.dead_money > 0
+        ? `${r.name} waived — ${money(r.dead_money)} dead cap over ${r.dead_money_years} seasons.`
+        : `${r.name} waived.`
+    );
     refresh(r.summary);
     reload();
   };
@@ -923,6 +943,7 @@ function RosterPanel({
           <PlayerActions
             pid={row.pid}
             onBlock={row.on_block}
+            deadMoney={row.dead_money_if_waived}
             reload={reload}
             refresh={refresh}
             toast={toast}
@@ -1002,6 +1023,7 @@ function DepthChartPanel({
                   <PlayerActions
                     pid={p.pid}
                     onBlock={p.on_block}
+                    deadMoney={p.dead_money_if_waived}
                     reload={reload}
                     refresh={refresh!}
                     toast={toast!}
@@ -1237,6 +1259,7 @@ function FinancesPanel({
         <PlayerActions
           pid={row.pid}
           onBlock={row.on_block}
+          deadMoney={row.dead_money_if_waived}
           reload={reload}
           refresh={refresh}
           toast={toast}
@@ -1252,6 +1275,7 @@ function FinancesPanel({
         <Stat label="Cap Space" value={money(data.cap_space)} />
         <Stat label="Tax Line" value={money(data.luxury_tax_line)} />
         <Stat label="Tax Owed" value={money(data.luxury_tax)} />
+        {data.dead_money > 0 && <Stat label="Dead Cap" value={money(data.dead_money)} />}
       </div>
       <div className="card">
         <DataTable
@@ -1460,6 +1484,7 @@ function LineupPanel({
   if (!data) return <Loading />;
   const POS = ["PG", "SG", "SF", "PF", "C"];
   const starters: number[] = data.starters ?? [];
+  const options: Row[] = [...data.players].sort((a, b) => b.overall - a.overall);
   const setSlot = async (idx: number, pid: number) => {
     const next = [...starters];
     const existingIdx = next.indexOf(pid);
@@ -1485,6 +1510,10 @@ function LineupPanel({
             <th>Player</th>
             <th>Pos</th>
             <th>OVR</th>
+            <th>POT</th>
+            <th>OFF</th>
+            <th>DEF</th>
+            <th>MIN</th>
           </tr>
         </thead>
         <tbody>
@@ -1498,15 +1527,19 @@ function LineupPanel({
                 </td>
                 <td>
                   <select value={pid ?? ""} onChange={(e) => setSlot(i, Number(e.target.value))}>
-                    {data.players.map((x: Row) => (
+                    {options.map((x: Row) => (
                       <option key={x.pid} value={x.pid}>
-                        {x.name} (OVR {x.overall})
+                        {x.name} · {x.position} · OVR {x.overall} / POT {x.potential}
                       </option>
                     ))}
                   </select>
                 </td>
                 <td>{p?.position}</td>
                 <td>{p && OVR(p.overall)}</td>
+                <td>{p?.potential}</td>
+                <td>{p?.off}</td>
+                <td>{p?.def}</td>
+                <td>{p?.minutes}</td>
               </tr>
             );
           })}
@@ -2400,7 +2433,10 @@ function OffseasonPanel({
     const r = await api.preDraft().catch((e) => toast(String(e)));
     if (!r) return;
     if (!r.resumed) {
-      toast(`Retired ${r.summary.retired}, ${r.summary.new_fas} reached free agency.`);
+      toast(
+        `Retired ${r.summary.retired}, ${r.summary.new_fas} reached free agency` +
+          (r.summary.resigned ? `, ${r.summary.resigned} re-signed by their teams.` : ".")
+      );
       if (r.awards?.mvp) toast(`🏆 ${r.awards.mvp.name} won MVP — see the History tab.`);
     }
     refresh(); // persist the new stage so leaving/returning resumes correctly
