@@ -12,6 +12,68 @@ from hoopsim.systems import cap
 
 TARGET_ROSTER = 14
 
+# --- Tiered free agency ----------------------------------------------------
+# Free agency resolves in waves: the top tier (max-contract caliber) opens first, and each
+# subsequent wave widens the open pool to the next caliber down. Players who go unsigned as their
+# tier sits on the market re-price downward each wave (the market cools), so a star nobody could
+# afford in wave 0 eventually becomes a bargain. ``World.fa_wave`` is the current wave index while
+# the offseason market is live, or ``None`` outside it (the in-season waiver wire, where deals are
+# at full price).
+FA_WAVE_THRESHOLDS = [80, 75, 70, 0]   # overall floor that opens each successive wave
+FA_WAVE_NAMES = ["Max-contract targets", "Starters", "Rotation players", "Depth & minimums"]
+NUM_FA_WAVES = len(FA_WAVE_THRESHOLDS)
+WAVE_DISCOUNT = 0.07                    # price a still-unsigned FA cools each wave past their tier
+MIN_DISCOUNT_FACTOR = 0.6              # a cooling market never drops a player below 60% of value
+
+
+def natural_wave(player: Player) -> int:
+    """The wave in which this player's tier first opens, by overall rating."""
+    for i, floor in enumerate(FA_WAVE_THRESHOLDS):
+        if player.overall >= floor:
+            return i
+    return NUM_FA_WAVES - 1
+
+
+def wave_market_salary(world: World, player: Player) -> int:
+    """A free agent's asking price, cooled by how long their tier has sat unsigned.
+
+    Outside the offseason market (``world.fa_wave is None``) this is just the full market value.
+    """
+    base = cap.market_salary(player)
+    if world.fa_wave is None:
+        return max(VETERAN_MINIMUM, base)
+    steps = max(0, world.fa_wave - natural_wave(player))
+    factor = max(MIN_DISCOUNT_FACTOR, 1.0 - WAVE_DISCOUNT * steps)
+    return max(VETERAN_MINIMUM, int(round(base * factor / 100_000) * 100_000))
+
+
+def fa_wave_pool(world: World) -> List[Player]:
+    """Free agents whose tier has opened in the current wave (highest overall first)."""
+    wave = world.fa_wave if world.fa_wave is not None else NUM_FA_WAVES - 1
+    pool = [p for p in world.free_agent_players() if natural_wave(p) <= wave]
+    return sorted(pool, key=lambda p: p.overall, reverse=True)
+
+
+def start_fa_market(world: World) -> None:
+    """Open the tiered offseason free-agent market at the top wave."""
+    world.fa_wave = 0
+
+
+def end_fa_market(world: World) -> None:
+    """Close the offseason market; later signings (waivers) are at full price again."""
+    world.fa_wave = None
+
+
+def advance_fa_wave(world: World) -> bool:
+    """Move to the next wave. Returns ``True`` if a wave remains, ``False`` once the board clears."""
+    if world.fa_wave is None:
+        return False
+    world.fa_wave += 1
+    if world.fa_wave >= NUM_FA_WAVES:
+        end_fa_market(world)
+        return False
+    return True
+
 
 def contract_years_for(player: Player) -> int:
     if player.age < 30:
@@ -26,9 +88,10 @@ def offer_for(world: World, team: Team, player: Player) -> Tuple[int, int]:
 
     A free agent commands their market value; a capped-out team simply may not be able to fit it
     (that legality is enforced in :func:`sign_free_agent`). The price is *not* silently reduced to
-    the minimum — you can't land a star for a veteran-minimum deal.
+    the minimum — you can't land a star for a veteran-minimum deal. During the offseason the price
+    reflects the current wave's cooled market (see :func:`wave_market_salary`).
     """
-    return max(VETERAN_MINIMUM, cap.market_salary(player)), contract_years_for(player)
+    return wave_market_salary(world, player), contract_years_for(player)
 
 
 def sign_free_agent(world: World, team: Team, pid: int, salary: int, years: int
@@ -37,7 +100,7 @@ def sign_free_agent(world: World, team: Team, pid: int, salary: int, years: int
     player = world.players[pid]
     if player.team_id is not None:
         return False, "Player is not a free agent."
-    asking = cap.market_salary(player)
+    asking = wave_market_salary(world, player)
     if salary < asking:
         return False, f"{player.short_name} won't sign for that — they want about " \
                       f"${asking // 1_000_000}M."
@@ -91,14 +154,16 @@ def run_retention(world: World) -> dict:
     return {"resigned": resigned}
 
 
-def run_free_agency(world: World) -> dict:
-    """AI teams sign available free agents to fill needs within their cap. User is excluded."""
+def run_fa_wave(world: World) -> dict:
+    """AI teams bid on the tier open in the current wave, within their cap. User is excluded.
+
+    Players whose tier has not opened yet are left for a later wave; ones already passed over carry
+    forward at the cooled price (:func:`wave_market_salary`).
+    """
     ai_teams = [t for t in world.team_list() if t.tid != world.user_team_id]
-    free = sorted(world.free_agents, key=lambda pid: world.players[pid].overall, reverse=True)
     signings = 0
-    for pid in free:
-        player = world.players[pid]
-        salary = cap.market_salary(player)
+    for player in fa_wave_pool(world):
+        salary = wave_market_salary(world, player)
         years = contract_years_for(player)
         candidates: List[Team] = [t for t in ai_teams if len(t.roster) < TARGET_ROSTER
                                   and cap.can_sign(world, t, salary)[0]]
@@ -107,8 +172,20 @@ def run_free_agency(world: World) -> dict:
         team = max(candidates, key=lambda t: cap.cap_space(world, t))
         if cap.uses_exception(world, team, salary):
             team.mle_used = True
-        world.sign_player(pid, team.tid, flat_contract(salary, years, world.season_year))
+        world.sign_player(player.pid, team.tid, flat_contract(salary, years, world.season_year))
         signings += 1
     for t in ai_teams:
         auto_set_lineup(t, world.players)
+    return {"signings": signings}
+
+
+def run_free_agency(world: World) -> dict:
+    """Headless: AI teams work the whole tiered market, wave by wave. User is excluded."""
+    start_fa_market(world)
+    signings = 0
+    while True:
+        signings += run_fa_wave(world)["signings"]
+        if not advance_fa_wave(world):
+            break
+    end_fa_market(world)
     return {"signings": signings}

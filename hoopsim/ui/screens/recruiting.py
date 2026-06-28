@@ -19,15 +19,17 @@ _PAGE = 18
 
 
 def recruiting_screen(world: World) -> Dict[int, object]:
-    """Let the user make offers, then resolve recruiting. Returns the resolve summary."""
+    """Let the user make offers wave by wave, resolving each tier. Returns the aggregate summary."""
     team = world.user_team
     nil = world.college_economy == "nil"
     offers: Dict[int, object] = {}
     pos_filter = "All"
     page = 0
+    recruiting.start_recruiting(world)
+    all_signings: List[int] = []
+    grand_total = 0
     while True:
-        recruits = sorted(world.recruit_players(), key=lambda p: p.scouted_potential(),
-                          reverse=True)
+        recruits = recruiting.recruit_wave_pool(world)
         if pos_filter != "All":
             recruits = [p for p in recruits
                         if p.position == pos_filter or p.secondary_position == pos_filter]
@@ -38,6 +40,10 @@ def recruiting_screen(world: World) -> Dict[int, object]:
 
         clear()
         header(world)
+        wave = world.recruit_wave
+        console.print(f"[title]Wave {wave + 1}/{recruiting.NUM_RECRUIT_WAVES} — "
+                      f"{recruiting.RECRUIT_WAVE_NAMES[wave]}[/title]   "
+                      f"[dim]top tiers commit first; missed targets stay on the board[/dim]")
         _intro(world, team, nil)
         console.print(f"Filter: [accent]{pos_filter}[/accent]\n")
         console.print(_board(shown, offers, start))
@@ -50,10 +56,12 @@ def recruiting_screen(world: World) -> Dict[int, object]:
             opts.append(("next", "▶  Next page"))
         if page > 0:
             opts.append(("prev", "◀  Previous page"))
+        last = wave + 1 >= recruiting.NUM_RECRUIT_WAVES
         opts += [("filter", "🔎  Filter by position"),
                  ("depth", "📋  View your depth chart"),
                  ("remove", "✖  Withdraw an offer"),
-                 ("sign", "📝 Signing Day — resolve recruiting")]
+                 ("sign", "📝 Signing Day — resolve this wave" if not last
+                  else "📝 Signing Day — resolve final wave")]
         action = choose("", opts)
         if action == "offer":
             n = ask_int("Recruit # to offer", default=0)
@@ -82,7 +90,15 @@ def recruiting_screen(world: World) -> Dict[int, object]:
             if pid is not None:
                 offers.pop(pid, None)
         elif action == "sign":
-            return _sign_day(world, offers)
+            summary = _sign_day(world, offers)
+            all_signings.extend(summary["user_signings"])
+            grand_total += summary["total"]
+            for pid in list(offers):                    # drop offers to recruits no longer in pool
+                if pid not in world.recruits:
+                    offers.pop(pid, None)
+            if not recruiting.advance_recruit_wave(world):
+                return {"user_signings": all_signings, "total": grand_total}
+            page = 0
 
 
 def _intro(world: World, team, nil: bool) -> None:
@@ -174,12 +190,12 @@ def _show_depth_chart(world: World, team) -> None:
 
 
 def _sign_day(world: World, offers) -> dict:
-    summary = recruiting.resolve_recruiting(world, offers)
+    summary = recruiting.resolve_recruiting_wave(world, offers)
     clear()
     header(world)
     signed = summary["user_signings"]
     if signed:
-        table = Table(title="Your Signing Class", title_style="title", header_style="label")
+        table = Table(title="Recruits Signed This Wave", title_style="title", header_style="label")
         for col in ("Recruit", "Pos", "Stars", "OVR", "POT"):
             table.add_column(col, justify="right" if col in ("OVR", "POT", "Stars") else "left")
         for pid in signed:
@@ -189,8 +205,9 @@ def _sign_day(world: World, offers) -> dict:
         console.print(table)
         console.print(f"[good]Signed {len(signed)} recruit(s)![/good]")
     else:
-        console.print(Panel("[warn]You didn't land any recruits this cycle.[/warn]\n"
+        console.print(Panel("[warn]You didn't land anyone in this wave.[/warn]\n"
                             "[dim]Higher-prestige programs and bigger NIL offers win battles for "
-                            "top talent.[/dim]", border_style="warn"))
+                            "top talent — pivot to the next tier as the board opens up.[/dim]",
+                            border_style="warn"))
     pause()
     return summary

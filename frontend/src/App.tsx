@@ -1294,18 +1294,21 @@ function FreeAgentsPanel({
   refresh,
   toast,
   onChange,
+  reloadSignal,
 }: {
   onPlayer: (pid: number) => void;
   refresh: (s?: Summary) => void;
   toast: (m: string) => void;
   onChange?: () => void;
+  reloadSignal?: number;
 }) {
   const [data, setData] = useState<any | null>(null);
   const load = () => api.freeAgents().then(setData).catch(() => {});
   useEffect(() => {
     load();
-  }, []);
+  }, [reloadSignal]);
   if (!data) return <Loading />;
+  const wave = data.wave?.active ? data.wave : null;
   const sign = async (pid: number) => {
     try {
       const r = await api.sign(pid);
@@ -1346,6 +1349,12 @@ function FreeAgentsPanel({
   return (
     <div className="card">
       <h3>Free Agents</h3>
+      {wave && (
+        <p className="deadline soon">
+          🌊 Wave {wave.wave}/{wave.total} — {wave.name}. Prices cool each wave as players go
+          unsigned; pursue your targets before rival GMs bid.
+        </p>
+      )}
       <DataTable
         data={data.free_agents}
         columns={cols}
@@ -2460,10 +2469,9 @@ function OffseasonPanel({
       loadBoard();
     }
   };
-  const runFA = async () => {
-    const r = await api.runFA().catch((e) => toast(String(e)));
-    if (!r) return;
-    toast(`AI made ${r.result.signings} signings.`);
+  // The tiered market already ran AI bidding wave by wave (OffseasonFA), so finishing only
+  // finalizes rosters and tips off the new season.
+  const finishFA = async () => {
     const s = await api.finishOffseason();
     refresh(s);
     setStep("done");
@@ -2544,7 +2552,7 @@ function OffseasonPanel({
         onPlayer={onPlayer}
         refresh={refresh}
         toast={toast}
-        onFinish={runFA}
+        onFinish={finishFA}
       />
     );
   return (
@@ -2572,42 +2580,59 @@ function OffseasonFA({
 }) {
   const [roster, setRoster] = useState<any | null>(null);
   const [busy, setBusy] = useState(false);
+  const [wave, setWave] = useState<any | null>(null);
   const loadRoster = () => {
     if (userTid != null) api.roster(userTid).then(setRoster).catch(() => {});
   };
   useEffect(loadRoster, [userTid]);
+  // Open the tiered market on entry (idempotent; resumes the open wave on a tab switch).
+  useEffect(() => {
+    api.faStart().then(setWave).catch((e) => toast(String(e)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const count = roster?.players.length ?? 0;
   const max = roster?.roster_max ?? 15;
   const open = Math.max(0, max - count);
+  const lastWave = wave && wave.active && wave.wave >= wave.total;
 
-  const finish = async () => {
-    const msg =
-      open > 0
-        ? `You still have ${open} open roster spot${open === 1 ? "" : "s"}. ` +
-          "Finish free agency anyway? The rest of the league will sign players and the new season begins."
-        : "Finish free agency? The rest of the league will fill out their rosters and the new season begins.";
-    if (!window.confirm(msg)) return;
+  const advance = async () => {
     setBusy(true);
-    await onFinish();
+    const r = await api.faAdvance().catch((e) => toast(String(e)));
     setBusy(false);
+    if (!r) return;
+    toast(`Rival GMs signed ${r.signings} free agent${r.signings === 1 ? "" : "s"} this wave.`);
+    if (r.done) {
+      await onFinish();             // market closed — fill rosters and tip off the season
+    } else {
+      setWave(r.next);
+      loadRoster();
+    }
   };
 
   return (
     <>
       <div className="card">
-        <h3>Free Agency — sign your targets</h3>
+        <h3>Free Agency — work the board</h3>
         <p className="muted">
-          Sign free agents from the list below <b>now</b>. When you're done, the rest of the league
-          fills out its rosters and the new season tips off.
+          The market opens in waves: the top tier signs first, then each wave widens to the next
+          caliber down. Sign your targets from the list <b>now</b>; players you pass on may be gone
+          once rival GMs bid, and whoever lingers re-prices downward.
         </p>
-        <p className={open > 0 ? "deadline soon" : "deadline"}>
-          {open > 0
-            ? `🟢 ${open} open roster spot${open === 1 ? "" : "s"} (${count}/${max}) — sign someone before you finish.`
-            : `Roster full (${count}/${max}).`}
-        </p>
-        <button className="primary" onClick={finish} disabled={busy}>
-          {busy ? "Starting season…" : "Done signing → start new season"}
+        {wave?.active && (
+          <p className="deadline soon">
+            🌊 Wave {wave.wave}/{wave.total} — <b>{wave.name}</b>
+            {open > 0
+              ? ` · ${open} open roster spot${open === 1 ? "" : "s"} (${count}/${max})`
+              : ` · roster full (${count}/${max})`}
+          </p>
+        )}
+        <button className="primary" onClick={advance} disabled={busy || !wave?.active}>
+          {busy
+            ? "Rival GMs bidding…"
+            : lastWave
+            ? "Done signing → start new season"
+            : "Done with this wave → let rival GMs bid"}
         </button>
       </div>
       {userTid != null && (
@@ -2626,6 +2651,7 @@ function OffseasonFA({
         refresh={refresh}
         toast={toast}
         onChange={loadRoster}
+        reloadSignal={wave?.wave ?? 0}
       />
     </>
   );
@@ -2694,11 +2720,16 @@ function CollegeOffseason({
     if (!r) return;
     toast(
       r.signed.length
-        ? `Signing Day: you signed ${r.signed.length} recruit(s)!`
-        : "Signing Day complete — you didn't land anyone this cycle."
+        ? `Signed ${r.signed.length} recruit(s) this wave!`
+        : "No commitments this wave — pivot to the next tier."
     );
-    refresh(r.summary);
-    setStep("done");
+    if (r.done) {
+      refresh(r.summary);
+      setStep("done");
+    } else {
+      setOffers({});            // offers to now-committed/gone recruits no longer apply
+      setBoard(r.recruiting);
+    }
   };
 
   if (step === "intro")
@@ -2782,9 +2813,17 @@ function CollegeOffseason({
     const offeredCount = Object.keys(offers).length;
     const totalNil = Object.values(offers).reduce((a, b) => a + b, 0);
     const overBudget = nil && totalNil > (board.nil_available ?? 0);
+    const rwave = board.wave?.active ? board.wave : null;
+    const lastWave = rwave && rwave.wave >= rwave.total;
     return (
       <div className="card">
         <h3>Recruiting — Signing Day</h3>
+        {rwave && (
+          <p className="deadline soon">
+            ⭐ Wave {rwave.wave}/{rwave.total} — {rwave.name}. Top tiers commit first; missed
+            targets stay on the board, so you can pivot down a tier.
+          </p>
+        )}
         {nil ? (
           <p className={overBudget ? "deadline soon" : "muted"}>
             NIL budget: {money(board.nil_available ?? 0)} available · offered {money(totalNil)} to{" "}
@@ -2798,7 +2837,11 @@ function CollegeOffseason({
         )}
         <div className="toolbar">
           <button className="primary" disabled={busy} onClick={sign}>
-            {busy ? "Resolving…" : "📝 Signing Day → resolve & start next season"}
+            {busy
+              ? "Resolving…"
+              : lastWave
+              ? "📝 Resolve final wave → start next season"
+              : "📝 Resolve this wave → open the next tier"}
           </button>
         </div>
         <table className="dt">

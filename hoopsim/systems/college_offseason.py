@@ -134,6 +134,8 @@ def pre_recruiting(world: World, champion_tid) -> dict:
 
 
 def post_recruiting(world: World) -> None:
+    recruiting.end_recruiting(world)        # close any open wave (interactive path)
+    world.recruits = []                     # uncommitted recruits leave; a fresh class next year
     recruiting.fill_college_rosters(world)
     world.season_year += 1
     start_season(world)

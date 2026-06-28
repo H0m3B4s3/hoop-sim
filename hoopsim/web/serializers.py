@@ -484,18 +484,35 @@ def solicited_offer_view(world: World, so) -> dict:
 # Free agents
 # ---------------------------------------------------------------------------
 def free_agents_view(world: World) -> dict:
+    from hoopsim.systems import freeagency
     team = world.user_team
-    fas = sorted(world.free_agent_players(), key=lambda p: p.overall, reverse=True)
+    if world.fa_wave is not None:
+        fas = freeagency.fa_wave_pool(world)            # only the open tier, cooled pricing
+    else:
+        fas = sorted(world.free_agent_players(), key=lambda p: p.overall, reverse=True)
     rows = []
     for p in fas:
-        ask = cap.market_salary(p)
+        ask = freeagency.wave_market_salary(world, p)
         can_sign, reason = (cap.can_sign(world, team, ask) if team else (False, ""))
         row = player_row(world, p)
         row["ask"] = ask
         row["can_sign"] = can_sign
         row["sign_reason"] = reason
         rows.append(row)
-    return {"free_agents": rows}
+    return {"free_agents": rows, "wave": fa_wave_view(world)}
+
+
+def fa_wave_view(world: World) -> dict:
+    """The tiered free-agency banner: which wave is open, or inactive outside the offseason."""
+    from hoopsim.systems import freeagency
+    if world.fa_wave is None:
+        return {"active": False}
+    return {
+        "active": True,
+        "wave": world.fa_wave + 1,
+        "total": freeagency.NUM_FA_WAVES,
+        "name": freeagency.FA_WAVE_NAMES[world.fa_wave],
+    }
 
 
 # ---------------------------------------------------------------------------

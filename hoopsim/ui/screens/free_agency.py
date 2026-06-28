@@ -20,7 +20,11 @@ def free_agent_screen(world: World) -> None:
     pos_filter = "All"
     page = 0
     while True:
-        fas = sorted(world.free_agent_players(), key=lambda p: p.overall, reverse=True)
+        wave_active = world.fa_wave is not None
+        if wave_active:
+            fas = freeagency.fa_wave_pool(world)
+        else:
+            fas = sorted(world.free_agent_players(), key=lambda p: p.overall, reverse=True)
         if pos_filter != "All":
             fas = [p for p in fas if p.position == pos_filter or p.secondary_position == pos_filter]
         pages = max(1, (len(fas) + _PAGE - 1) // _PAGE)
@@ -33,6 +37,11 @@ def free_agent_screen(world: World) -> None:
         space = cap.cap_space(world, team)
         full = len(team.roster) >= ROSTER_MAX
         mle = "[bad]used[/bad]" if team.mle_used else "[good]available[/good]"
+        if wave_active:
+            wave = world.fa_wave
+            console.print(f"[title]Wave {wave + 1}/{freeagency.NUM_FA_WAVES} — "
+                          f"{freeagency.FA_WAVE_NAMES[wave]}[/title]   "
+                          f"[dim]prices cool as players go unsigned[/dim]")
         console.print(f"Cap space: [good]{money(space)}[/good]   "
                       f"Roster: {'[bad]' if full else ''}{len(team.roster)}/{ROSTER_MAX}"
                       f"{'[/bad] (full — waive someone to sign)' if full else ''}   "
@@ -50,7 +59,8 @@ def free_agent_screen(world: World) -> None:
             opts.append(("prev", "◀  Previous page"))
         opts += [("filter", "🔎  Filter by position"),
                  ("waive", "🗑   Waive a player (free a roster spot)"),
-                 ("back", "← Back")]
+                 ("back", "⏭  Done with this wave — let rival GMs bid" if wave_active
+                  else "← Back")]
         action = choose("", opts)
         if action == "sign":
             n = ask_int("Player # to sign", default=0)
@@ -86,7 +96,7 @@ def _fa_table(world: World, team, players, start: int) -> Table:
     table.add_column("Asking", justify="right")
     table.add_column("Sign?", justify="left")
     for i, p in enumerate(players, start=1):
-        salary = cap.market_salary(p)
+        salary = freeagency.wave_market_salary(world, p)
         ok, _ = cap.can_sign(world, team, salary)
         pos = p.position + (f"/{p.secondary_position}" if p.secondary_position else "")
         table.add_row(str(i), p.name, pos, str(p.age),

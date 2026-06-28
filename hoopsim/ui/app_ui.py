@@ -512,13 +512,31 @@ def _offseason_free_agency(world: World) -> None:
     from hoopsim.systems import freeagency
     clear()
     header(world)
-    console.print(Panel("[title]Free Agency[/title]\n[dim]Sign players to your roster. When you're "
-                        "done, the rest of the league fills out their rosters.[/dim]",
-                        border_style="accent"))
+    console.print(Panel(
+        "[title]Free Agency[/title]\n[dim]The market opens in waves — the top tier signs first, then "
+        "each wave widens to the next caliber down. Pursue your targets each wave; players you pass "
+        "on may be gone when rival GMs bid, and whoever lingers re-prices downward.[/dim]",
+        border_style="accent"))
     pause()
-    free_agent_screen(world)
-    with console.status("[accent]Rival teams signing free agents…[/accent]"):
-        freeagency.run_free_agency(world)
+    freeagency.start_fa_market(world)
+    while world.fa_wave is not None:
+        wave = world.fa_wave
+        free_agent_screen(world)            # user works the open tier; "Done" exits the screen
+        with console.status(f"[accent]Rival GMs bidding — wave {wave + 1} "
+                            f"({freeagency.FA_WAVE_NAMES[wave]})…[/accent]"):
+            signed = freeagency.run_fa_wave(world)["signings"]
+        more = freeagency.advance_fa_wave(world)
+        clear()
+        header(world)
+        msg = f"[dim]Rival GMs signed {signed} free agent(s) in this wave.[/dim]"
+        if more:
+            console.print(Panel(f"{msg}\nThe next wave opens — "
+                                f"[accent]{freeagency.FA_WAVE_NAMES[world.fa_wave]}[/accent].",
+                                border_style="accent"))
+            pause("Press Enter for the next wave")
+        else:
+            console.print(Panel(f"{msg}\nFree agency is closed.", border_style="good"))
+            pause()
 
 
 # ---------------------------------------------------------------------------

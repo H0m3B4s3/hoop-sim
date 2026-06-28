@@ -118,6 +118,8 @@ export const api = {
   draftBoard: () => get<any>("/draft/board"),
   draftPick: (pid: number | null) => post<any>("/draft/pick", { pid }),
   runFA: () => post<any>("/offseason/run-fa"),
+  faStart: () => post<any>("/offseason/fa/start"),
+  faAdvance: () => post<any>("/offseason/fa/advance"),
   finishOffseason: () => post<Summary>("/offseason/finish"),
 
   collegeBegin: () => post<any>("/offseason/college/begin"),

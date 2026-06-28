@@ -52,6 +52,11 @@ class World:
         self.recruits: List[int] = []
         self.pipeline: Optional[dict] = None         # JSON-native college->NBA draft results
 
+        # Tiered offseason markets resolve in waves; the index of the open wave while a market is
+        # live, or ``None`` outside it. (FA = NBA free agency, recruit = college Signing Day.)
+        self.fa_wave: Optional[int] = None
+        self.recruit_wave: Optional[int] = None
+
         self._next_pid: int = 1
         self._next_gid: int = 1
         self._next_offer_id: int = 1
@@ -212,6 +217,8 @@ class World:
             "other_teams": {str(t): team.to_dict() for t, team in self.other_teams.items()},
             "recruits": list(self.recruits),
             "pipeline": self.pipeline,
+            "fa_wave": self.fa_wave,
+            "recruit_wave": self.recruit_wave,
             "history": list(self.history),
             "next_pid": self._next_pid,
             "next_gid": self._next_gid,
@@ -245,6 +252,8 @@ class World:
         w.other_teams = {int(t): Team.from_dict(td) for t, td in d.get("other_teams", {}).items()}
         w.recruits = list(d.get("recruits", []))
         w.pipeline = d.get("pipeline")
+        w.fa_wave = d.get("fa_wave")
+        w.recruit_wave = d.get("recruit_wave")
         w.history = list(d.get("history", []))
         w._next_pid = d.get("next_pid", max(w.players, default=0) + 1)
         w._next_gid = d.get("next_gid", 1)

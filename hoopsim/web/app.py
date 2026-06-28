@@ -793,8 +793,34 @@ def draft_pick(body: DraftPickBody, sid: str = Depends(_sid)):
                        "potential": p.scouted_potential()}}
 
 
+@app.post("/api/offseason/fa/start")
+def offseason_fa_start(sid: str = Depends(_sid)):
+    """Open the tiered free-agent market (idempotent: resuming mid-market keeps the open wave)."""
+    world = _world(sid)
+    offseason.enforce_roster_max(world)
+    if world.fa_wave is None:
+        freeagency.start_fa_market(world)
+        SESSIONS.autosave(sid)
+    return ser.fa_wave_view(world)
+
+
+@app.post("/api/offseason/fa/advance")
+def offseason_fa_advance(sid: str = Depends(_sid)):
+    """User is done with the open wave: rival GMs bid on it, then the next wave opens."""
+    world = _world(sid)
+    if world.fa_wave is None:
+        freeagency.start_fa_market(world)
+    wave = world.fa_wave
+    result = freeagency.run_fa_wave(world)
+    more = freeagency.advance_fa_wave(world)
+    SESSIONS.autosave(sid)
+    return {"signings": result["signings"], "wave": wave + 1, "done": not more,
+            "next": ser.fa_wave_view(world)}
+
+
 @app.post("/api/offseason/run-fa")
 def offseason_run_fa(sid: str = Depends(_sid)):
+    """Headless fallback: resolve the whole tiered market in one pass (AI for every team)."""
     world = _world(sid)
     offseason.enforce_roster_max(world)
     result = freeagency.run_free_agency(world)
@@ -829,14 +855,19 @@ def _pipeline_view(world: World) -> dict:
 
 
 def _recruiting_view(world: World) -> dict:
-    """The recruiting board: unsigned prospects + the user's budget/scholarship state."""
+    """The recruiting board: the open tier of prospects + the user's budget/scholarship state."""
     from hoopsim.gen.collegegen import star_rating
     team = world.user_team
-    recruits = sorted(world.recruit_players(), key=lambda p: p.scouted_potential(), reverse=True)
+    if world.recruit_wave is not None:
+        recruits = recruiting.recruit_wave_pool(world)
+    else:
+        recruits = sorted(world.recruit_players(), key=lambda p: p.scouted_potential(),
+                          reverse=True)
     rows = [{"pid": p.pid, "name": p.name, "position": p.position,
              "secondary_position": p.secondary_position, "stars": star_rating(p),
              "overall": p.overall, "potential": p.scouted_potential()} for p in recruits]
-    out: dict = {"economy": world.college_economy, "recruits": rows}
+    out: dict = {"economy": world.college_economy, "recruits": rows,
+                 "wave": _recruit_wave_view(world)}
     if team is not None:
         if world.college_economy == "nil":
             out["nil_budget"] = team.nil_budget
@@ -844,6 +875,15 @@ def _recruiting_view(world: World) -> dict:
         else:
             out["scholarships_open"] = collegefin.scholarships_open(team)
     return out
+
+
+def _recruit_wave_view(world: World) -> dict:
+    """The phased-recruiting banner: which tier is open, or inactive outside Signing Day."""
+    if world.recruit_wave is None:
+        return {"active": False}
+    return {"active": True, "wave": world.recruit_wave + 1,
+            "total": recruiting.NUM_RECRUIT_WAVES,
+            "name": recruiting.RECRUIT_WAVE_NAMES[world.recruit_wave]}
 
 
 @app.post("/api/offseason/college/begin")
@@ -856,9 +896,12 @@ def college_offseason_begin(sid: str = Depends(_sid)):
     champ = CT.national_champion(world)
     begun = world.pipeline is not None and world.pipeline.get("year") == world.season_year
     if begun:
+        if world.recruit_wave is None:          # resume an in-progress board at the top wave
+            recruiting.start_recruiting(world)
         return {"resumed": True, "champion": champ, "pipeline": _pipeline_view(world),
                 "recruiting": _recruiting_view(world)}
     summary = CO.pre_recruiting(world, champ)
+    recruiting.start_recruiting(world)          # open Signing Day at the five-star wave
     SESSIONS.autosave(sid)
     return {"resumed": False, "summary": summary, "champion": champ,
             "pipeline": _pipeline_view(world), "recruiting": _recruiting_view(world)}
@@ -874,21 +917,31 @@ def recruiting_board(sid: str = Depends(_sid)):
 
 @app.post("/api/recruiting/sign")
 def recruiting_sign(body: RecruitSignBody, sid: str = Depends(_sid)):
-    """Signing Day: resolve the user's offers against AI programs, then roll into next season."""
+    """Signing Day, one wave at a time: resolve the open tier against AI programs. The top tier
+    commits first; missed targets stay on the board. Once the final wave clears, roll into the
+    next season."""
     world = _world(sid)
     if world.mode != "college" or world.phase != Phase.DRAFT:
         raise HTTPException(status_code=409, detail="Recruiting is not active.")
+    if world.recruit_wave is None:
+        recruiting.start_recruiting(world)
     if world.college_economy == "nil":
         offers: Dict[int, object] = {pid: int(amt) for pid, amt in body.offers.items()
                                      if amt and int(amt) > 0}
     else:
         offers = {pid: True for pid in body.offers}
-    result = recruiting.resolve_recruiting(world, offers)
-    CO.post_recruiting(world)               # fill rosters, season_year += 1, start next season
-    SESSIONS.autosave(sid)
+    result = recruiting.resolve_recruiting_wave(world, offers)
     signed = [ser.player_row(world, world.players[pid]) for pid in result["user_signings"]
               if pid in world.players]
-    return {"signed": signed, "total": result["total"], "summary": ser.world_summary(world)}
+    more = recruiting.advance_recruit_wave(world)
+    if not more:
+        CO.post_recruiting(world)           # fill rosters, season_year += 1, start next season
+        SESSIONS.autosave(sid)
+        return {"signed": signed, "total": result["total"], "done": True,
+                "summary": ser.world_summary(world)}
+    SESSIONS.autosave(sid)
+    return {"signed": signed, "total": result["total"], "done": False,
+            "recruiting": _recruiting_view(world)}
 
 
 # ---------------------------------------------------------------------------
