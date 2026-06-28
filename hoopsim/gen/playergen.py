@@ -63,20 +63,25 @@ def make_player(rng: Rng, pid: int, names: NameGenerator, *,
         age = (rng.randint(*ROOKIE_AGE_RANGE) if is_prospect
                else int(min(36, max(19, round(rng.triangular(19, 36, 26))))))
     if target_overall is None:
-        target_overall = int(min(92, max(58, round(rng.gauss(72, 8)))))
+        # Mean sits at 70 — the engine's league-average anchor — so a freshly generated league
+        # scores at target PPP. The 90 cap keeps the very top end scarce; stars are earned through
+        # development, not handed out at generation.
+        target_overall = int(min(90, max(55, round(rng.gauss(70, 8)))))
 
-    # Base ratings around the target, then carve out the archetype identity.
+    # Build a bland player and calibrate him to the target overall FIRST, then carve out the
+    # archetype identity. Skewing after the calibration shift keeps signature spikes spiked and
+    # weaknesses deep — a Rim Protector's jumper or a Sharpshooter's defense survives instead of
+    # being averaged back toward the target. The overall is allowed to drift a few points from the
+    # target as a result: a one-dimensional specialist is genuinely worth less than his peak skill.
     ratings = {r: clamp_rating(rng.gauss(target_overall, 7.0)) for r in SKILL_RATINGS}
-    for key, delta in archetype.skews.items():
-        if key in ratings:
-            ratings[key] = clamp_rating(ratings[key] + delta)
-
-    # Additive correction to hit the target overall (exact before clamping).
     current = overall(ratings, position)
     shift = target_overall - current
     if shift:
         for r in SKILL_RATINGS:
             ratings[r] = clamp_rating(ratings[r] + shift)
+    for key, delta in archetype.skews.items():
+        if key in ratings:
+            ratings[key] = clamp_rating(ratings[key] + delta)
 
     # Marketability group is dormant in Phase 1 but populated so saves stay stable.
     ratings["marketability"] = rng.randint(RATING_MIN, 85)

@@ -525,17 +525,21 @@ class GameSim:
         comeback = max(-0.030, min(0.030, -off_margin * 0.0011))
         edge = home_edge - fat_pen + comeback + self._play_boost
         r = shooter.ratings
+        # Defender coefficients are held at parity with the matching shooter coefficient so a
+        # league-wide ratings drift nets to zero on make probability (scores track skill *gaps*,
+        # not absolute level). Parity also keeps an elite shooter from running away from an average
+        # defense, which is what produced 160-point regulation games.
         if shot_type == "rim":
-            make_p = (0.578 + (r["finishing"] - 70) * 0.0030 - (dc.interior_anchor - 70) * 0.0026
+            make_p = (0.560 + (r["finishing"] - 70) * 0.0030 - (dc.interior_anchor - 70) * 0.0030
                       + edge + scheme[1] + pressure[3])
             foul_p = 0.195 + (r["draw_foul"] - 70) * 0.002 + pressure[1]
         elif shot_type == "mid":
-            make_p = (0.380 + (r["mid_range"] - 70) * 0.0030 - (dc.avg_perimeter_def - 70) * 0.0021
+            make_p = (0.380 + (r["mid_range"] - 70) * 0.0030 - (dc.avg_perimeter_def - 70) * 0.0030
                       + edge)
             foul_p = 0.06 + (r["draw_foul"] - 70) * 0.0015 + pressure[1] * 0.5
         else:  # three
             make_p = (0.330 + (r["three_point"] - 70) * 0.0034
-                      - (dc.avg_perimeter_def - 70) * 0.0021 + edge + scheme[0])
+                      - (dc.avg_perimeter_def - 70) * 0.0034 + edge + scheme[0])
             foul_p = 0.05 + (r["draw_foul"] - 70) * 0.001
         if clutch:
             make_p += (r["clutch"] - 70) * 0.0008
