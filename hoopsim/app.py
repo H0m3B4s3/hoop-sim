@@ -1,12 +1,12 @@
 """Top-level application entry.
 
 Phase-1 scaffold: this boots the rich UI and hands control to the main menu screen. The full
-navigation stack and screens are built out in the ``hoopr.ui`` package; until those land this
+navigation stack and screens are built out in the ``hoopsim.ui`` package; until those land this
 module provides a runnable smoke entry point.
 """
 from __future__ import annotations
 
-from hoopr import __version__
+from hoopsim import __version__
 
 
 def run() -> None:

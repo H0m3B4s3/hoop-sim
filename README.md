@@ -29,6 +29,21 @@ python -m hoopsim
 From the main menu: **New Career → choose your league (NBA or College) → pick your team**, and
 you're in charge.
 
+### Run the web UI locally
+
+Prefer the browser? A prebuilt frontend ships in the repo, so you only need the web extra:
+
+```bash
+pip install -e ".[web]"   # adds fastapi + uvicorn
+hoopsim-web               # serves http://127.0.0.1:8000 and opens a browser
+```
+
+Only rebuild the frontend if you change anything under `frontend/` (requires Node):
+
+```bash
+cd frontend && npm install && npm run build   # outputs into hoopsim/web/static
+```
+
 ## Game modes
 
 At the start of a career you choose which league to manage. Both leagues coexist in one world and
