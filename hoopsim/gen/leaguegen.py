@@ -10,6 +10,7 @@ from hoopsim.config import (DEFAULT_SEASON_PRESET, ROOKIE_AGE_RANGE, SALARY_CAP,
 from hoopsim.gen.namegen import NameGenerator
 from hoopsim.gen.playergen import _POSITION_WEIGHTS, make_player
 from hoopsim.models.attributes import POSITIONS
+from hoopsim.models.coach import apply_coach_tactics, assign_coach
 from hoopsim.models.contract import flat_contract
 from hoopsim.models.league import Phase
 from hoopsim.models.player import Player
@@ -145,6 +146,10 @@ def build_world(seed: int = None, season_preset: str = DEFAULT_SEASON_PRESET) ->
     world.phase = Phase.PRESEASON
 
     names = NameGenerator(rng)
+    # Coaches draw from a *separate* rng so adding them never perturbs the roster/contract/draft
+    # stream — every existing seed reproduces the exact same league, just with coaches layered on.
+    coach_rng = Rng(None if seed is None else seed ^ 0xC0AC)
+    coach_names = NameGenerator(coach_rng)
     for tid, rec in enumerate(_load_team_records()):
         team = Team(
             tid=tid,
@@ -157,6 +162,8 @@ def build_world(seed: int = None, season_preset: str = DEFAULT_SEASON_PRESET) ->
         )
         world.register_team(team)
         _build_roster(world, team, names)
+        team.coach = assign_coach(coach_rng, coach_names.name()[1])
+        apply_coach_tactics(team)
 
     _build_free_agents(world, names)
 

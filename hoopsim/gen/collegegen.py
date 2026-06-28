@@ -16,6 +16,7 @@ from hoopsim.gen.leaguegen import _build_roster as build_nba_roster
 from hoopsim.gen.leaguegen import _load_team_records
 from hoopsim.gen.namegen import NameGenerator
 from hoopsim.gen.playergen import make_player
+from hoopsim.models.coach import apply_coach_tactics, assign_coach
 from hoopsim.models.league import Phase
 from hoopsim.models.player import Player
 from hoopsim.models.team import Team, auto_set_lineup
@@ -144,7 +145,8 @@ def generate_recruit_class(world: World) -> None:
     _build_recruits(world, NameGenerator(world.rng))
 
 
-def _build_background_nba(world: World, names: NameGenerator) -> None:
+def _build_background_nba(world: World, names: NameGenerator, coach_rng: Rng,
+                          coach_names: NameGenerator) -> None:
     for i, rec in enumerate(_load_team_records()):
         team = Team(
             tid=NBA_TID_OFFSET + i,
@@ -154,6 +156,8 @@ def _build_background_nba(world: World, names: NameGenerator) -> None:
         )
         world.register_other_team(team)
         build_nba_roster(world, team, names)
+        team.coach = assign_coach(coach_rng, coach_names.name()[1])
+        apply_coach_tactics(team)
 
 
 def build_college_world(seed: int = None, economy: str = DEFAULT_COLLEGE_ECONOMY) -> World:
@@ -167,6 +171,9 @@ def build_college_world(seed: int = None, economy: str = DEFAULT_COLLEGE_ECONOMY
     world.phase = Phase.PRESEASON
 
     names = NameGenerator(rng)
+    # Separate rng for coaches keeps the roster/recruit/draft stream identical to a coachless world.
+    coach_rng = Rng(None if seed is None else seed ^ 0xC0AC)
+    coach_names = NameGenerator(coach_rng)
     for tid, rec in enumerate(_generate_college_records(rng)):
         team = Team(
             tid=tid, city=rec["city"], name=rec["name"], abbrev=rec["abbrev"],
@@ -175,7 +182,9 @@ def build_college_world(seed: int = None, economy: str = DEFAULT_COLLEGE_ECONOMY
         )
         world.register_team(team)
         _build_college_roster(world, team, names)
+        team.coach = assign_coach(coach_rng, coach_names.name()[1])
+        apply_coach_tactics(team)
 
     _build_recruits(world, names)
-    _build_background_nba(world, names)
+    _build_background_nba(world, names, coach_rng, coach_names)
     return world

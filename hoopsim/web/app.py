@@ -708,7 +708,13 @@ def set_lineup(body: LineupBody, sid: str = Depends(_sid)):
 def get_tactics(sid: str = Depends(_sid)):
     world = _world(sid)
     team = _user_team(world)
-    return {"tactics": [{"key": k, "label": label, "value": value, "options": list(SETTINGS[k])}
+    coach = None
+    if team.coach is not None:
+        prof = team.coach.profile
+        coach = {"name": team.coach.name, "archetype": prof.key,
+                 "label": prof.label, "blurb": prof.blurb}
+    return {"coach": coach,
+            "tactics": [{"key": k, "label": label, "value": value, "options": list(SETTINGS[k])}
                         for k, label, value in team.tactics.items()]}
 
 

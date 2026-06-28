@@ -194,13 +194,18 @@ Tiered signing — free agency & recruiting (built)
   three-, and the rest. Missing a target leaves the lower tiers on the board, so you can pivot down
   instead of losing the whole class ([`recruit_wave_pool`/`resolve_recruiting_wave`](hoopsim/systems/recruiting.py)).
 
+Coaching & rotations (built)
+- Every team has a **head coach** with an archetype that gives it a rotation identity
+  ([`models/coach.py`](hoopsim/models/coach.py)). A handful are outliers — *Seven Seconds* (run-and-gun),
+  *Iron Rotation* (rides a 7-man core 40+ minutes), *Deep Bench*, *Motion Egalitarian* — while most
+  carry a lean (*Pace & Space*, *Grind It Out*, *Defensive Anchor*) or are *Balanced*. The archetype
+  seeds the team's default tactics and shapes `set_auto_minutes` (rotation depth, how hard minutes
+  pile onto stars, starter caps) and `choose_lineup` (how readily tired players sit), so depth charts
+  finally matter differently from team to team. The coach shows on the Tactics screen.
+- **Position-aware lineups**: the engine now fills the five with a soft position-fit penalty, so it
+  never fields five guards — each position's depth carries weight ([`choose_lineup`](hoopsim/sim/engine.py)).
+
 Rotations & depth chart (planned)
-- The depth chart is **display-only** today; the engine fills five on-court spots by a flat best-5
-  priority from `team.minutes_target`, with no position slots during play
-  ([`choose_lineup`](hoopsim/sim/engine.py)).
-- **Position-aware depth**: a per-position depth order the substitution engine respects, so your
-  second-string PG actually replaces the PG and the floor stays balanced (configurable next-man-up
-  rules — SG slides to PG, PF to C).
 - **Role tags** — `sixth_man`, `defensive_ace`, `closer` — that bias the rotation math: a closer
   overrides crunch-time selection, a defensive ace earns minutes against strong offenses, and a sixth
   man jumps the bench queue.

@@ -10,8 +10,10 @@ from __future__ import annotations
 from typing import Dict, List, Optional
 
 from hoopsim.config import HOME_COURT_BONUS, IN_GAME_INJURY_RATE, OT_SECONDS, game_format
+from hoopsim.models.attributes import POSITIONS
+from hoopsim.models.coach import profile_for
 from hoopsim.models.player import Player
-from hoopsim.models.team import Team
+from hoopsim.models.team import Team, position_distance
 from hoopsim.sim import ratings as R
 from hoopsim.sim.boxscore import GameResult, PBPEvent
 from hoopsim.sim.coach import Coach, CoachOrders, CoachView, PlayerView
@@ -22,6 +24,11 @@ FATIGUE_GAIN = 0.115
 FATIGUE_RECOVER = 0.20
 FATIGUE_MAKE_PENALTY = 0.00060
 SUB_INTERVAL = 168          # game-seconds between rotation checks
+# Soft positional balance: a player costs this much priority per "position of distance" from the
+# slot being filled, so the engine fields a sensible five (no all-guard lineups) without rigid
+# per-position subs. Tuned per branch since the two priority functions live on different scales.
+POS_BALANCE_WEIGHT = 200.0          # normal rotation (priority is in remaining-seconds units)
+CLUTCH_POS_BALANCE_WEIGHT = 25.0    # crunch time (priority is overall*10; keep talent dominant)
 FOUL_OUT = 6
 MAX_PUTBACKS = 3
 BONUS_FOULS = 5             # team fouls in a period that put the opponent in the bonus
@@ -85,10 +92,15 @@ class _TeamState:
         if clutch:
             # Crunch time: ride your best closers regardless of how many minutes they've banked
             # (best overall on the floor, lightly adjusted for exhaustion and foul trouble).
+            pos_weight = CLUTCH_POS_BALANCE_WEIGHT
+
             def priority(pid: int) -> float:
                 foul_pen = 4000.0 if self.fouls[pid] >= 5 else 0.0
                 return self.players[pid].overall * 10.0 - self.fatigue[pid] * 0.4 - foul_pen
         else:
+            fatigue_weight = profile_for(self.team).fatigue_weight   # head-coach sub tendency
+            pos_weight = POS_BALANCE_WEIGHT
+
             def priority(pid: int) -> float:
                 remaining = max(0.0, self.target_secs[pid] - self.secs_played[pid])
                 foul_pen = 0.0
@@ -100,10 +112,19 @@ class _TeamState:
                 elif f >= 3 and game_secs < 1440:
                     foul_pen = 600
                 starter_bonus = 250.0 if pid in self.team.starters else 0.0
-                return remaining - self.fatigue[pid] * 22.0 - foul_pen + starter_bonus
+                return remaining - self.fatigue[pid] * fatigue_weight - foul_pen + starter_bonus
 
-        candidates.sort(key=priority, reverse=True)
-        self.on_court = candidates[:5]
+        # Position-aware greedy fill: each slot PG..C takes the best remaining candidate after a
+        # soft penalty for playing out of position, so the five stays positionally sensible.
+        scores = {pid: priority(pid) for pid in candidates}
+        remaining = list(candidates)
+        chosen: List[int] = []
+        for slot in POSITIONS:
+            best = max(remaining,
+                       key=lambda pid: scores[pid] - pos_weight * position_distance(self.players[pid], slot))
+            chosen.append(best)
+            remaining.remove(best)
+        self.on_court = chosen
         self.rebuild_cache()
 
     def avg_fatigue(self) -> float:
