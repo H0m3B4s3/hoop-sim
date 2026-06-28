@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from rich.table import Table
 
-from hoopsim.models.attributes import POSITIONS
+from hoopsim.models.attributes import POSITIONS, all_composites
 from hoopsim.models.team import auto_set_lineup, position_distance
 from hoopsim.models.world import World
 from hoopsim.ui.console import choose, clear, console
@@ -36,22 +36,31 @@ def lineup_screen(world: World) -> None:
             _change_slot(world, team, int(action.split(":")[1]))
 
 
+def _off_def(p) -> tuple:
+    """At-a-glance offense (scoring+playmaking) and defense numbers — mirrors the web lineup page."""
+    comps = all_composites(p.ratings)
+    return (round(0.6 * comps["scoring"] + 0.4 * comps["playmaking"]), round(comps["defense"]))
+
+
 def _render(world: World, team) -> None:
     table = Table(title=f"{team.full_name} — Starting Five", title_style="title",
                   header_style="label")
-    for col in ("Slot", "Player", "Pos", "Fit", "OVR", "Min"):
-        table.add_column(col, justify="right" if col in ("OVR", "Min") else "left")
+    numeric = ("OVR", "POT", "OFF", "DEF", "Min")
+    for col in ("Slot", "Player", "Pos", "Fit", "OVR", "POT", "OFF", "DEF", "Min"):
+        table.add_column(col, justify="right" if col in numeric else "left")
     for i in range(5):
         slot = POSITIONS[i]
         if i < len(team.starters):
             p = world.players[team.starters[i]]
             fit = "natural" if position_distance(p, slot) == 0 else "[warn]off-pos[/warn]"
             yr = f" {class_label(p.class_year)}" if team.league == "college" else ""
+            off, dff = _off_def(p)
             table.add_row(slot, f"{p.name}{yr}", p.position, fit,
                           f"[{ovr_style(p.overall)}]{p.overall}[/]",
+                          str(p.scouted_potential()), str(off), str(dff),
                           str(team.minutes_target.get(p.pid, 0)))
         else:
-            table.add_row(slot, "[dim]—[/dim]", "", "", "", "")
+            table.add_row(slot, "[dim]—[/dim]", "", "", "", "", "", "", "")
     console.print(table)
     bench = [world.players[pid] for pid in team.roster if pid not in team.starters]
     bench.sort(key=lambda p: p.overall, reverse=True)
@@ -67,7 +76,9 @@ def _change_slot(world: World, team, slot_idx: int) -> None:
     opts = []
     for p in pool:
         marker = " [star](starter)[/star]" if p.pid in team.starters else ""
-        opts.append((str(p.pid), f"{p.name} [dim]{p.position} · OVR {p.overall}[/dim]{marker}"))
+        opts.append((str(p.pid),
+                     f"{p.name} [dim]{p.position} · OVR {p.overall} / POT "
+                     f"{p.scouted_potential()}[/dim]{marker}"))
     pid = choose(f"Who starts at {POSITIONS[slot_idx]}?", opts, allow_back=True)
     if pid is None:
         return

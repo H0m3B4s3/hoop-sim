@@ -52,6 +52,45 @@ def sign_free_agent(world: World, team: Team, pid: int, salary: int, years: int
     return True, reason
 
 
+def _wants_to_resign(world: World, team: Team, player: Player) -> bool:
+    """Whether an AI team re-signs an expiring own player rather than letting them walk."""
+    ovr = player.overall
+    if player.age >= 35 and ovr < 78:
+        return False                       # washed veterans walk
+    if ovr >= 78:
+        return True                        # keep your stars — Bird rights go over the cap
+    if player.age <= 24 and player.scouted_potential() >= ovr + 4:
+        return True                        # keep promising youth on the upswing
+    if cap.payroll(world, team) > world.luxury_tax_line and ovr < 74:
+        return False                       # tax teams shed mid-tier guys to the market
+    better = sum(1 for pid in team.roster if world.players[pid].overall > ovr)
+    return better < 8                      # keep rotation-caliber contributors
+
+
+def run_retention(world: World) -> dict:
+    """Before contracts expire, AI teams re-sign the expiring players they want to keep.
+
+    Re-signs use Bird rights (over-the-cap), so genuine keepers stay home; only the players a
+    team chooses not to retain — fringe roster filler, washed vets, the cap-squeezed — reach the
+    free-agent market. The user makes their own re-sign calls, so the user team is excluded.
+    """
+    resigned = 0
+    for team in world.team_list():
+        if team.tid == world.user_team_id:
+            continue
+        for pid in list(team.roster):
+            player = world.players[pid]
+            if player.contract.years_remaining != 1:
+                continue                   # only deals expiring this offseason
+            if not _wants_to_resign(world, team, player):
+                continue
+            salary, add_years = cap.extension_offer(world, player)
+            ok, _ = cap.extend_contract(world, team, pid, salary, add_years)
+            if ok:
+                resigned += 1
+    return {"resigned": resigned}
+
+
 def run_free_agency(world: World) -> dict:
     """AI teams sign available free agents to fill needs within their cap. User is excluded."""
     ai_teams = [t for t in world.team_list() if t.tid != world.user_team_id]

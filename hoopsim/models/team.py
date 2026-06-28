@@ -43,6 +43,7 @@ class Team:
     market_size: int = 3                                   # 1 (small) .. 5 (large)
     owner_budget: int = DEFAULT_OWNER_BUDGET
     mle_used: bool = False                                  # mid-level exception spent this offseason
+    dead_money: List[int] = field(default_factory=list)    # waived guaranteed salary, per season (idx 0 = now)
 
     # League membership and college-mode state.
     league: str = "nba"                                    # "nba" | "college"
@@ -139,6 +140,7 @@ class Team:
             "market_size": self.market_size,
             "owner_budget": self.owner_budget,
             "mle_used": self.mle_used,
+            "dead_money": list(self.dead_money),
             "league": self.league,
             "prestige": self.prestige,
             "nil_budget": self.nil_budget,
@@ -171,6 +173,7 @@ class Team:
             market_size=d.get("market_size", 3),
             owner_budget=d.get("owner_budget", DEFAULT_OWNER_BUDGET),
             mle_used=d.get("mle_used", False),
+            dead_money=list(d.get("dead_money", [])),
             league=d.get("league", "nba"),
             prestige=d.get("prestige", 3),
             nil_budget=d.get("nil_budget", 0),
@@ -185,8 +188,15 @@ def roster_players(team: Team, players: Dict[int, Player]) -> List[Player]:
     return [players[pid] for pid in team.roster if pid in players]
 
 
+def dead_cap(team: Team) -> int:
+    """This season's dead money — guaranteed salary still owed to waived players."""
+    return team.dead_money[0] if team.dead_money else 0
+
+
 def team_salary(team: Team, players: Dict[int, Player]) -> int:
-    return sum(players[pid].contract.current_salary for pid in team.roster if pid in players)
+    """Payroll counting toward the cap: active contracts plus this year's dead money."""
+    active = sum(players[pid].contract.current_salary for pid in team.roster if pid in players)
+    return active + dead_cap(team)
 
 
 def available_players(team: Team, players: Dict[int, Player]) -> List[Player]:

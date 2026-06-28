@@ -44,6 +44,8 @@ def expire_contracts(world: World) -> List[int]:
     """Advance every rostered contract a year; return pids that hit free agency."""
     new_fas: List[int] = []
     for team in world.team_list():
+        if team.dead_money:
+            team.dead_money.pop(0)                  # this season's dead money comes off the books
         for pid in list(team.roster):
             contract = world.players[pid].contract
             contract.advance_year()
@@ -97,11 +99,12 @@ def pre_draft(world: World, champion_tid) -> dict:
     archive_season(world, champion_tid)
     for team in world.team_list():
         team.mle_used = False          # each team gets its one mid-level exception back
-    from hoopsim.systems import development
+    from hoopsim.systems import development, freeagency
     development.develop_all(world)
+    resigned = freeagency.run_retention(world)["resigned"]   # AI keeps its own before FA opens
     new_fas = expire_contracts(world)
     retired = age_and_retire(world)
-    return {"new_fas": len(new_fas), "retired": len(retired)}
+    return {"new_fas": len(new_fas), "retired": len(retired), "resigned": resigned}
 
 
 def cull_free_agents(world: World, keep: int = 80) -> int:

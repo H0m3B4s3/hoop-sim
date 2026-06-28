@@ -35,8 +35,10 @@ At the start of a career you choose which league to manage. Both leagues coexist
 are connected by the **draft pipeline**.
 
 - **🏀 NBA franchise** — a salary cap that **grows each year**, trades, free agency,
-  **re-signing and extending** your own players (Bird rights), an 82-game (or Quick 30) season,
-  play-in, best-of-7 playoffs, and a lottery draft.
+  **re-signing and extending** your own players (Bird rights), **dead-cap penalties** when you
+  waive guaranteed contracts, an 82-game (or Quick 30) season, play-in, best-of-7 playoffs, and a
+  lottery draft. AI teams now **re-sign their own keepers** before free agency opens, so only the
+  players a team chooses to let walk reach the market.
 - **🎓 College program** — pick from **64 programs across eight conferences** spanning power,
   mid-major, and low-major prestige tiers, with a **college economy chosen at game start**:
   - **Scholarship mode** — a traditional 13-scholarship limit and allocation; recruit on prestige
@@ -142,6 +144,15 @@ a week, and clear at the deadline), and **end-of-season awards & league history*
 Year, Defensive POY, Most Improved, All-League first/second/third teams, and statistical leaders —
 crowned each offseason and browsable in a History tab alongside past champions).
 
+Latest — **roster-building realism**: waiving a guaranteed, above-minimum contract now leaves
+**dead money** on your cap, stretched across future seasons (minimum deals stay free to cut), shown
+in the waive confirm and the Finances panel; **AI teams re-sign their own keepers** (stars, rising
+youth, and rotation-caliber players, via Bird rights) before free agency, so the market is no longer
+flooded with talent every team would obviously keep; the **lineup screen now shows potential, an
+offense/defense read, and projected minutes** so you can prioritize upside without bouncing to the
+roster page; and **live crunch-time subs surface each player's offense/defense and key skills** to
+inform who you put on the floor for the next possession.
+
 The web app now runs a **full college career** end to end — regular season, single-elim conference
 and national tournaments (with live coaching), and the offseason: the NBA draft pipeline (your
 declared players drafted by the background NBA) and **recruiting** (NIL bidding or scholarship
@@ -172,12 +183,25 @@ Coach mode — end-of-game situations (NBA & CBB)
 - **Interactive crunch-time coaching is built** across the terminal and web app (NBA & college,
   regular season + postseason — including the college tournament in the browser).
 
-NBA free agency — rounds
-- **Rounds of free agency**: pursue a primary target; if he signs elsewhere (better offer — possibly
-  a minigame), that tier of FAs comes off the board and you move to the next group.
+Tiered signing — free agency & recruiting (next up)
+- Today both markets resolve in a single instant pass ([`run_free_agency`](hoopsim/systems/freeagency.py),
+  [`resolve_recruiting`](hoopsim/systems/recruiting.py)), which makes them feel one-and-done.
+- **Rounds of free agency**: top-tier (max-contract) FAs resolve first; pursue a primary target, and
+  if he signs elsewhere that tier comes off the board, the remaining pool re-prices downward, and you
+  work the next group — with a decision point between waves.
+- **Phased recruiting** for both scholarship and NIL: five-star prospects commit first, and missing an
+  initial target leaves recruits in the pool so you can work down the board instead of losing them.
 
-CBB recruiting — phases
-- **Phased recruiting** for both scholarship and NIL, so missing an initial target isn't one-and-done.
+Rotations & depth chart (planned)
+- The depth chart is **display-only** today; the engine fills five on-court spots by a flat best-5
+  priority from `team.minutes_target`, with no position slots during play
+  ([`choose_lineup`](hoopsim/sim/engine.py)).
+- **Position-aware depth**: a per-position depth order the substitution engine respects, so your
+  second-string PG actually replaces the PG and the floor stays balanced (configurable next-man-up
+  rules — SG slides to PG, PF to C).
+- **Role tags** — `sixth_man`, `defensive_ace`, `closer` — that bias the rotation math: a closer
+  overrides crunch-time selection, a defensive ace earns minutes against strong offenses, and a sixth
+  man jumps the bench queue.
 
 ## Notes
 
