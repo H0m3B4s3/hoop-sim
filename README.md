@@ -9,10 +9,10 @@ Built on a procedurally generated league (fictional teams and players), a determ
 seedable simulation core, and a rich terminal UI.
 
 ```
-  _   _  ___   ___  ___ ___
- | | | |/ _ \ / _ \| _ \ _ \
- | |_| | (_) | (_) |  _/   /
-  \___/ \___/ \___/|_| |_|_\
+ _  _   ___    ___   ___  ___  ___  __  __
+| || | / _ \  / _ \ | _ \/ __||_ _||  \/  |
+| __ || (_) || (_) ||  _/\__ \ | | | |\/| |
+|_||_| \___/  \___/ |_|  |___/|___||_|  |_|
 ```
 
 ## Quick start
