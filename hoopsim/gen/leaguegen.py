@@ -125,13 +125,33 @@ def _assign_contracts(world: World, team: Team, players: List[Player]) -> None:
         )
 
 
+def _free_agent_potential(rng: Rng, ovr: int, age: int) -> int:
+    """Potential for the opening free-agent pool.
+
+    The age-based curve in :func:`make_player` is right for rostered young players and draft
+    prospects, but it has no place here: at a fresh start, undrafted blue-chips don't float in
+    free agency — they're on a roster or still in the draft. Free agents are leftover talent, so
+    upside is modest and stays clear of star territory. A good-but-aging veteran sitting at his
+    ceiling (an 80/80 guy) is fine; what we never want is a 60-overall kid projected to 90+. The
+    rare diamond-in-the-rough is the only exception, and even he tops out well short of stardom.
+    """
+    if age >= 25:
+        return int(min(85, ovr + rng.randint(0, 1)))
+    mu = max(0.0, (24 - age) * 1.1)
+    upside = max(0.0, rng.gauss(mu, mu * 0.4 + 1.5))
+    ceiling = 86 if rng.chance(0.03) else 79
+    return int(max(ovr, min(round(ovr + upside), ceiling)))
+
+
 def _build_free_agents(world: World, names: NameGenerator) -> None:
     for _ in range(_NUM_FREE_AGENTS):
         target = int(max(45, min(80, round(world.rng.gauss(62, 8)))))
-        is_young = world.rng.chance(0.35)
+        # Fewer young longshots than a roster carries — the opening pool skews toward aging vets.
+        is_young = world.rng.chance(0.22)
         age = (world.rng.randint(*ROOKIE_AGE_RANGE) if is_young
                else int(min(38, max(23, round(world.rng.triangular(23, 38, 30))))))
         p = make_player(world.rng, world.new_pid(), names, target_overall=target, age=age)
+        p.potential = _free_agent_potential(world.rng, p.overall, p.age)
         p.team_id = None
         world.add_player(p)
         world.free_agents.append(p.pid)
