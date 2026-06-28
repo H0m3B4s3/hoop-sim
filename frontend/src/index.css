@@ -72,7 +72,8 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 .app {
-  height: 100vh;
+  height: 100vh; /* fallback for browsers without dvh */
+  height: 100dvh; /* tracks Safari's dynamic toolbars so nothing hides behind them */
   display: flex;
   flex-direction: column;
 }
@@ -441,6 +442,9 @@ span.clickable:hover {
 }
 .content {
   flex: 1;
+  /* min-width:0 lets wide tables scroll inside .tableWrap instead of
+     stretching the flex layout and bleeding past the viewport */
+  min-width: 0;
   padding: 18px;
   overflow: auto;
 }
@@ -606,6 +610,11 @@ table.dt tr.clickable:hover td {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
+}
+/* grid items default to min-width:auto; without this the nowrap box-score
+   table widens its column past the track and bleeds across the page */
+.boxGrid > div {
+  min-width: 0;
 }
 .pbp {
   margin-top: 12px;
@@ -1004,11 +1013,16 @@ select:focus-visible {
 .modalBg {
   position: fixed;
   inset: 0;
+  /* pin to the visible viewport (not Safari's large layout viewport) so a
+     bottom-anchored modal can't slide its sticky close button up behind the
+     URL bar, and so it clears the notch / home indicator */
+  height: 100dvh;
   background: rgba(0, 0, 0, 0.6);
   display: grid;
   place-items: center;
   z-index: 50;
-  padding: 24px;
+  padding: max(24px, env(safe-area-inset-top)) 24px
+    max(24px, env(safe-area-inset-bottom));
   backdrop-filter: blur(2px);
 }
 .modal {
@@ -1017,7 +1031,7 @@ select:focus-visible {
   border-radius: 14px;
   width: 760px;
   max-width: 100%;
-  max-height: 86vh;
+  max-height: 86dvh;
   overflow: auto;
   box-shadow: var(--shadow);
 }
@@ -1137,6 +1151,7 @@ select:focus-visible {
     top: 0;
     left: 0;
     height: 100%;
+    height: 100dvh; /* match visible viewport so bottom nav items aren't cut off */
     width: 220px;
     transform: translateX(-100%);
     /* visibility:hidden removes items from tab order + a11y tree;
@@ -1145,6 +1160,8 @@ select:focus-visible {
     transition: transform 0.22s ease, visibility 0s linear 0.22s;
     z-index: 20;
     padding-top: 58px; /* clears the topbar (~57px on mobile) */
+    padding-bottom: env(safe-area-inset-bottom);
+    overflow-y: auto; /* scroll if the nav list is taller than the viewport */
     box-shadow: 2px 0 16px rgba(0, 0, 0, 0.45);
   }
   .side.open {
@@ -1178,9 +1195,11 @@ select:focus-visible {
     align-items: center;
   }
 
-  /* content area */
+  /* content area — extra bottom padding clears the home indicator so the
+     last control (e.g. the offseason button) is fully tappable */
   .content {
     padding: 12px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
   }
 
   /* touch targets */
@@ -1236,12 +1255,13 @@ select:focus-visible {
 
   /* modal */
   .modalBg {
-    padding: 12px;
+    padding: max(12px, env(safe-area-inset-top)) 12px
+      max(12px, env(safe-area-inset-bottom));
     align-items: flex-end;
   }
   .modal {
     border-radius: 14px 14px 10px 10px;
-    max-height: 92vh;
+    max-height: 92dvh;
     width: 100%;
   }
 
