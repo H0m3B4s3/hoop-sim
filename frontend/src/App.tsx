@@ -1574,6 +1574,13 @@ function TacticsPanel({ toast }: { toast: (m: string) => void }) {
   return (
     <div className="card">
       <h3>Tactics</h3>
+      {data.coach && (
+        <div className="coachBadge">
+          <strong>{data.coach.name}</strong>
+          <span className="coachArchetype"> — {data.coach.label}</span>
+          <div className="muted">{data.coach.blurb}</div>
+        </div>
+      )}
       {data.tactics.map((t: any) => (
         <div key={t.key} className="tacticRow">
           <label>{t.label}</label>

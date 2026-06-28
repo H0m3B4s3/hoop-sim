@@ -6,10 +6,11 @@ that need player data take a ``players`` mapping so the model stays pure data.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from hoopsim.config import DEFAULT_OWNER_BUDGET, STARTERS, game_minutes
 from hoopsim.models.attributes import POSITIONS
+from hoopsim.models.coach import Coach, profile_for
 from hoopsim.models.player import Player
 from hoopsim.models.stats import StatLine
 from hoopsim.models.tactics import Tactics
@@ -31,6 +32,7 @@ class Team:
     minutes_target: Dict[int, int] = field(default_factory=dict)  # pid -> target minutes
     auto_lineup: bool = True                               # False -> user set the starting five
     tactics: Tactics = field(default_factory=Tactics)
+    coach: Optional[Coach] = None                          # head coach (rotation/tactics identity)
 
     wins: int = 0
     losses: int = 0
@@ -130,6 +132,7 @@ class Team:
             "minutes_target": {str(k): v for k, v in self.minutes_target.items()},
             "auto_lineup": self.auto_lineup,
             "tactics": self.tactics.to_dict(),
+            "coach": self.coach.to_dict() if self.coach else None,
             "wins": self.wins,
             "losses": self.losses,
             "conf_wins": self.conf_wins,
@@ -163,6 +166,7 @@ class Team:
             minutes_target={int(k): v for k, v in d.get("minutes_target", {}).items()},
             auto_lineup=d.get("auto_lineup", True),
             tactics=Tactics.from_dict(d.get("tactics", {})),
+            coach=Coach.from_dict(d["coach"]) if d.get("coach") else None,
             wins=d.get("wins", 0),
             losses=d.get("losses", 0),
             conf_wins=d.get("conf_wins", 0),
@@ -267,14 +271,15 @@ def set_auto_minutes(team: Team, players: Dict[int, Player]) -> None:
     if not pool:
         team.minutes_target = {}
         return
+    prof = profile_for(team)                       # rotation shape comes from the head coach
     pool.sort(key=lambda p: (p.pid in team.starters, p.overall), reverse=True)
-    rotation = pool[:10]
-    weights = [max(1.0, p.overall - 55) ** 1.4 for p in rotation]
+    rotation = pool[:prof.rotation_size]
+    weights = [max(1.0, p.overall - 55) ** prof.star_reliance for p in rotation]
     total_w = sum(weights)
     minutes = game_minutes(team.league)            # 48 (NBA) or 40 (college)
     total_minutes = STARTERS * minutes
-    starter_floor = minutes // 2
-    cap = minutes - 10
+    starter_floor = minutes // 2 + prof.floor_bonus
+    cap = minutes - prof.cap_slack
     targets: Dict[int, int] = {}
     for p, w in zip(rotation, weights):
         share = total_minutes * (w / total_w)

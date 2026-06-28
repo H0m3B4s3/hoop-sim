@@ -751,6 +751,18 @@ table.dt tr.clickable:hover td {
 }
 
 /* ---- tactics ----------------------------------------------------------- */
+.coachBadge {
+  margin: 4px 0 14px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--panel-2, rgba(127, 127, 127, 0.08));
+  border-radius: 4px;
+}
+.coachBadge .coachArchetype {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .tacticRow {
   display: grid;
   grid-template-columns: 160px 1fr;

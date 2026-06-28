@@ -15,6 +15,10 @@ def edit_tactics(world: World) -> None:
     while True:
         clear()
         header(world)
+        if team.coach is not None:
+            prof = team.coach.profile
+            console.print(f"[label]{team.coach.name}[/label] — "
+                          f"[accent]{prof.label}[/accent]: [dim]{prof.blurb}[/dim]")
         table = Table(title=f"{team.full_name} — Tactics", title_style="title",
                       header_style="label")
         table.add_column("#", justify="right")
