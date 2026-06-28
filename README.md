@@ -219,6 +219,11 @@ Coaching & rotations (built)
   finally matter differently from team to team. The coach shows on the Tactics screen.
 - **Position-aware lineups**: the engine now fills the five with a soft position-fit penalty, so it
   never fields five guards — each position's depth carries weight ([`choose_lineup`](hoopsim/sim/engine.py)).
+- **User-controlled rotation**: the Lineup tab has **Rotation** and **End of Bench** tiers on top of
+  the starting five. Pinned reserves (`team.rotation`) draw minutes; End-of-Bench players sit unless
+  injuries force them in — so you can give a low-rated, high-upside youngster real run over a deeper
+  veteran (which also accelerates his development). No manual rotation falls back to the coach's
+  automatic shape ([`set_auto_minutes`](hoopsim/models/team.py)).
 
 Rotations & depth chart (planned)
 - **Role tags** — `sixth_man`, `defensive_ace`, `closer` — that bias the rotation math: a closer
