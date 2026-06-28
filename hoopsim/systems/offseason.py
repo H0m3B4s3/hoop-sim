@@ -124,7 +124,8 @@ def post_offseason(world: World) -> None:
     """Fill rosters to the minimum, cull the free-agent pool, grow the cap, and start next year."""
     from hoopsim.config import CAP_GROWTH_RATE
     from hoopsim.systems import cap
-    from hoopsim.systems import draft_system
+    from hoopsim.systems import draft_system, freeagency
+    freeagency.end_fa_market(world)     # close any open wave before minimum-deal roster fill
     fill_rosters(world)
     cull_free_agents(world)
     cap.grow_cap(world, CAP_GROWTH_RATE)

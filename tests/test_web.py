@@ -348,10 +348,19 @@ def test_api_college_offseason_advances_to_next_season():
 
     board = client.get("/api/recruiting").json()
     assert board["recruits"] and "nil_available" in board
+    assert board["wave"]["active"] and board["wave"]["wave"] == 1   # opens at the top tier
 
-    top = board["recruits"][0]["pid"]
-    sign = client.post("/api/recruiting/sign", json={"offers": {str(top): 1_500_000}}).json()
-    assert "signed" in sign and sign["total"] > 0           # recruiting resolved league-wide
+    # Signing Day resolves in waves (top tier first); work each wave until the board clears.
+    total = 0
+    while True:
+        board = client.get("/api/recruiting").json()
+        top = board["recruits"][0]["pid"] if board["recruits"] else None
+        offers = {str(top): 1_500_000} if top is not None else {}
+        sign = client.post("/api/recruiting/sign", json={"offers": offers}).json()
+        total += sign["total"]
+        if sign["done"]:
+            break
+    assert total > 0                                        # recruiting resolved league-wide
     assert world.season_year == year0 + 1                   # rolled into the next season
     assert sign["summary"]["phase"] == "regular_season"
     assert client.get("/api/state").json()["summary"]["offseason_stage"] is None

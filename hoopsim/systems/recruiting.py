@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from hoopsim.gen.collegegen import make_college_player
+from hoopsim.gen.collegegen import make_college_player, star_rating
 from hoopsim.gen.namegen import NameGenerator
 from hoopsim.models.contract import flat_contract
 from hoopsim.models.team import Team, auto_set_lineup
@@ -17,6 +17,51 @@ from hoopsim.models.world import World
 from hoopsim.systems import collegefin
 
 ACTIVE_INTEREST_BONUS = 6.0
+
+# --- Phased recruiting -----------------------------------------------------
+# Signing Day resolves in waves by recruit caliber: five-stars commit first, then each wave opens
+# the next tier down. Missing a target leaves the rest of the board available, so a program that
+# loses a five-star battle can pivot to four-stars instead of being stuck with whoever's left.
+# ``World.recruit_wave`` is the open wave while the board is live, or ``None`` outside it.
+RECRUIT_WAVE_STARS = [5, 4, 3, 1]       # star floor that opens each successive wave
+RECRUIT_WAVE_NAMES = ["Five-star prospects", "Four-star prospects",
+                      "Three-star prospects", "Remaining recruits"]
+NUM_RECRUIT_WAVES = len(RECRUIT_WAVE_STARS)
+
+
+def natural_recruit_wave(player) -> int:
+    """The wave in which this recruit's star tier first opens."""
+    stars = star_rating(player)
+    for i, floor in enumerate(RECRUIT_WAVE_STARS):
+        if stars >= floor:
+            return i
+    return NUM_RECRUIT_WAVES - 1
+
+
+def recruit_wave_pool(world: World) -> List:
+    """Recruits whose tier has opened in the current wave (best potential first)."""
+    wave = world.recruit_wave if world.recruit_wave is not None else NUM_RECRUIT_WAVES - 1
+    pool = [p for p in world.recruit_players() if natural_recruit_wave(p) <= wave]
+    return sorted(pool, key=lambda p: p.scouted_potential(), reverse=True)
+
+
+def start_recruiting(world: World) -> None:
+    world.recruit_wave = 0
+
+
+def end_recruiting(world: World) -> None:
+    world.recruit_wave = None
+
+
+def advance_recruit_wave(world: World) -> bool:
+    """Move to the next wave. Returns ``True`` if a wave remains, ``False`` once the board clears."""
+    if world.recruit_wave is None:
+        return False
+    world.recruit_wave += 1
+    if world.recruit_wave >= NUM_RECRUIT_WAVES:
+        end_recruiting(world)
+        return False
+    return True
 
 
 def _pull(world: World, team: Team, recruit, *, user_offered: bool, nil_offer: Optional[int]
@@ -50,15 +95,17 @@ def _commit(world: World, team: Team, recruit, nil_offer: Optional[int]) -> None
         world.recruits.remove(recruit.pid)
 
 
-def resolve_recruiting(world: World, user_offers: Dict[int, object]) -> dict:
-    """Sign every recruit to the program that pulls hardest. ``user_offers`` maps a recruit pid
-    to True (scholarship offer) or an int (NIL amount) for the user's program."""
+def resolve_recruiting_wave(world: World, user_offers: Dict[int, object]) -> dict:
+    """Resolve the tier open in the current wave. ``user_offers`` maps a recruit pid to True
+    (scholarship offer) or an int (NIL amount) for the user's program.
+
+    Recruits in the open tier commit to whichever program pulls hardest; any the user pursued but
+    lost — and the whole next tier — stay on the board for the following wave.
+    """
     user_tid = world.user_team_id
-    recruits = sorted(world.recruit_players(),
-                      key=lambda p: p.scouted_potential(), reverse=True)
     user_signings: List[int] = []
     total = 0
-    for recruit in recruits:
+    for recruit in recruit_wave_pool(world):
         candidates = [t for t in world.team_list() if collegefin.has_roster_room(t)]
         if not candidates:
             break
@@ -83,6 +130,27 @@ def resolve_recruiting(world: World, user_offers: Dict[int, object]) -> dict:
             total += 1
             if best_team.tid == user_tid:
                 user_signings.append(recruit.pid)
+    for team in world.team_list():
+        auto_set_lineup(team, world.players)
+    return {"user_signings": user_signings, "total": total}
+
+
+def resolve_recruiting(world: World, user_offers: Dict[int, object]) -> dict:
+    """Headless / single-pass Signing Day: resolve every wave at once with the given offers.
+
+    Used by the headless college offseason and any caller that wants the whole board resolved in
+    one shot; the interactive front-ends drive :func:`resolve_recruiting_wave` per wave.
+    """
+    start_recruiting(world)
+    user_signings: List[int] = []
+    total = 0
+    while True:
+        result = resolve_recruiting_wave(world, user_offers)
+        user_signings += result["user_signings"]
+        total += result["total"]
+        if not advance_recruit_wave(world):
+            break
+    end_recruiting(world)
     # recruits who didn't commit leave the pool (a fresh class is generated next offseason)
     world.recruits = []
     for team in world.team_list():

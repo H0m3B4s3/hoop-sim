@@ -183,14 +183,16 @@ Coach mode — end-of-game situations (NBA & CBB)
 - **Interactive crunch-time coaching is built** across the terminal and web app (NBA & college,
   regular season + postseason — including the college tournament in the browser).
 
-Tiered signing — free agency & recruiting (next up)
-- Today both markets resolve in a single instant pass ([`run_free_agency`](hoopsim/systems/freeagency.py),
-  [`resolve_recruiting`](hoopsim/systems/recruiting.py)), which makes them feel one-and-done.
-- **Rounds of free agency**: top-tier (max-contract) FAs resolve first; pursue a primary target, and
-  if he signs elsewhere that tier comes off the board, the remaining pool re-prices downward, and you
-  work the next group — with a decision point between waves.
-- **Phased recruiting** for both scholarship and NIL: five-star prospects commit first, and missing an
-  initial target leaves recruits in the pool so you can work down the board instead of losing them.
+Tiered signing — free agency & recruiting (built)
+- Both markets now resolve in **waves** in the terminal and the web app alike, instead of a single
+  instant pass.
+- **Rounds of free agency**: the market opens in tiers — max-contract caliber first, then each wave
+  widens to the next group down. You work the open tier each wave; players you pass on can be gone
+  once rival GMs bid, and anyone still unsigned **re-prices downward** as their tier cools
+  ([`fa_wave_pool`/`wave_market_salary`](hoopsim/systems/freeagency.py)).
+- **Phased recruiting** for both scholarship and NIL: five-star prospects commit first, then four-,
+  three-, and the rest. Missing a target leaves the lower tiers on the board, so you can pivot down
+  instead of losing the whole class ([`recruit_wave_pool`/`resolve_recruiting_wave`](hoopsim/systems/recruiting.py)).
 
 Rotations & depth chart (planned)
 - The depth chart is **display-only** today; the engine fills five on-court spots by a flat best-5
