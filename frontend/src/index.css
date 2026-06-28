@@ -1103,8 +1103,10 @@ select:focus-visible {
     place-items: center;
   }
 
-  /* topbar compression */
+  /* topbar compression — z-index above sidebar so hamburger stays tappable when drawer is open */
   .topbar {
+    position: relative;
+    z-index: 25;
     gap: 8px;
     padding: 8px 12px;
     flex-wrap: nowrap;
@@ -1123,8 +1125,8 @@ select:focus-visible {
   .topbar .pill {
     display: none;
   }
-  /* keep save/quit buttons compact */
-  .topbar .ghost {
+  /* keep save/quit buttons compact — exclude hamburger which needs padding:0 */
+  .topbar .ghost:not(.menuBtn) {
     padding: 6px 10px;
     font-size: 13px;
   }
@@ -1142,7 +1144,7 @@ select:focus-visible {
     visibility: hidden;
     transition: transform 0.22s ease, visibility 0s linear 0.22s;
     z-index: 20;
-    padding-top: 14px;
+    padding-top: 58px; /* clears the topbar (~57px on mobile) */
     box-shadow: 2px 0 16px rgba(0, 0, 0, 0.45);
   }
   .side.open {
@@ -1152,12 +1154,19 @@ select:focus-visible {
     transition: transform 0.22s ease, visibility 0s linear 0s;
   }
 
-  /* overlay backdrop */
+  /* overlay backdrop — always in DOM so it can fade; pointer-events guard prevents stray clicks */
   .sideOverlay {
     position: fixed;
     inset: 0;
     z-index: 19;
     background: rgba(0, 0, 0, 0.45);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease;
+  }
+  .sideOverlay.open {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   /* nav items bigger for touch */
@@ -1181,6 +1190,11 @@ select:focus-visible {
   .rowActions button,
   button.mini {
     min-height: 32px;
+  }
+  /* hamburger: undo padding/size overrides from .topbar .ghost and button rules */
+  .topbar .menuBtn {
+    padding: 0;
+    min-height: 36px;
   }
 
   /* setup card */
