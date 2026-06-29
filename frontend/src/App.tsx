@@ -595,6 +595,7 @@ function CoachPanel({
   const [lineup, setLineup] = useState<number[]>(decision.on_court.map((p: any) => p.pid));
   const [timeout, setTimeout_] = useState(false);
   const [tempo, setTempo] = useState("normal");
+  const [oset, setOset] = useState("motion");
   const [foul, setFoul] = useState("auto");
 
   // Reset the working orders whenever a new possession (decision) arrives.
@@ -602,6 +603,7 @@ function CoachPanel({
     setLineup(decision.on_court.map((p: any) => p.pid));
     setTimeout_(false);
     setTempo("normal");
+    setOset("motion");
     setFoul("auto");
   }, [decision]);
 
@@ -624,9 +626,14 @@ function CoachPanel({
     onSubmit({
       timeout,
       tempo,
+      offensive_set: oset,
       defensive_foul: foul,
       lineup: changed ? lineup : null,
     });
+
+  // Load a situational preset five into the working lineup (still editable before Run).
+  const presetActive = (lu: number[]) =>
+    lu.length === lineup.length && lu.every((p) => lineup.includes(p));
 
   const fatigueTag = (f: number) =>
     f >= 70 ? ["gassed", "#f85149"] : f >= 45 ? ["tiring", "#d29922"] : ["fresh", "#7d8590"];
@@ -641,7 +648,11 @@ function CoachPanel({
         <TeamTag abbrev={t.abbrev} color={t.color} />
         <b style={{ color: leadColor }}>{leadText}</b>
         <span className="muted">
-          {decision.user_on_offense ? "you have the ball" : "on defense"}
+          {decision.sub_only
+            ? "🏀 free throw — sub before the live ball"
+            : decision.user_on_offense
+              ? "you have the ball"
+              : "on defense"}
         </span>
         <span className="coachTOs">
           ⏱ {t.abbrev} {decision.user_timeouts} · opp {decision.opp_timeouts}
@@ -664,6 +675,25 @@ function CoachPanel({
             </li>
           ))}
         </ul>
+      )}
+
+      {decision.hint && <div className="coachHint">💭 {decision.hint}</div>}
+
+      {decision.presets?.length > 0 && (
+        <div className="coachPresets">
+          <span className="muted small">Quick lineups</span>
+          {decision.presets.map((ps: any) => (
+            <button
+              key={ps.key}
+              className={presetActive(ps.lineup) ? "seg on" : "seg"}
+              disabled={busy}
+              title={ps.blurb}
+              onClick={() => setLineup([...ps.lineup])}
+            >
+              {ps.label}
+            </button>
+          ))}
+        </div>
       )}
 
       <div className="coachLineup">
@@ -697,25 +727,45 @@ function CoachPanel({
       </div>
 
       <div className="coachControls">
-        {decision.user_on_offense ? (
-          <div className="segGroup">
-            <span className="muted small">Tempo</span>
-            {[
-              ["normal", "Run offense"],
-              ["bleed", "Bleed clock"],
-              ["hold", "Hold for last shot"],
-              ["quick3", "Quick 3"],
-            ].map(([v, label]) => (
-              <button
-                key={v}
-                className={tempo === v ? "seg on" : "seg"}
-                disabled={busy}
-                onClick={() => setTempo(v)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+        {decision.sub_only ? null : decision.user_on_offense ? (
+          <>
+            <div className="segGroup">
+              <span className="muted small">Tempo</span>
+              {[
+                ["normal", "Run offense"],
+                ["bleed", "Bleed clock"],
+                ["hold", "Hold for last shot"],
+                ["quick3", "Quick 3"],
+              ].map(([v, label]) => (
+                <button
+                  key={v}
+                  className={tempo === v ? "seg on" : "seg"}
+                  disabled={busy}
+                  onClick={() => setTempo(v)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="segGroup">
+              <span className="muted small">Set</span>
+              {[
+                ["motion", "Run offense"],
+                ["iso", "Iso star"],
+                ["inside", "Pound inside"],
+                ["spread", "Spread / kick"],
+              ].map(([v, label]) => (
+                <button
+                  key={v}
+                  className={oset === v ? "seg on" : "seg"}
+                  disabled={busy}
+                  onClick={() => setOset(v)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </>
         ) : (
           <div className="segGroup">
             <span className="muted small">Defense</span>
@@ -736,18 +786,21 @@ function CoachPanel({
           </div>
         )}
 
-        <label className={decision.user_timeouts === 0 ? "muted toBox" : "toBox"}>
-          <input
-            type="checkbox"
-            checked={timeout}
-            disabled={busy || decision.user_timeouts === 0}
-            onChange={(e) => setTimeout_(e.target.checked)}
-          />
-          Call timeout
-        </label>
+        {!decision.sub_only && (
+          <label className={decision.user_timeouts === 0 ? "muted toBox" : "toBox"}>
+            <input
+              type="checkbox"
+              checked={timeout}
+              disabled={busy || decision.user_timeouts === 0}
+              onChange={(e) => setTimeout_(e.target.checked)}
+            />
+            Call timeout
+          </label>
+        )}
 
         <button className="primary" disabled={busy} onClick={submit}>
-          ▶ Run the possession{changed ? " (lineup changed)" : ""}
+          ▶ {decision.sub_only ? "Send the shooter to the line" : "Run the possession"}
+          {changed ? " (lineup changed)" : ""}
         </button>
       </div>
     </div>

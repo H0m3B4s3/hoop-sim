@@ -208,6 +208,158 @@ def test_timeouts_initialized_from_format():
     assert sim.shot_clock == 24.0
 
 
+# --- coach-mode: situational lineup presets --------------------------------
+def test_presets_offer_five_available_players_each():
+    _, sim = _sim()
+    _ready_lineups(sim)
+    view = sim._build_view(sim.home, sim.away, sim.home)
+    assert set(view.presets) == {"closers", "shooters", "stoppers", "ft"}
+    avail = {pid for pid in sim.home.available if pid not in sim.home.unavailable}
+    for key, five in view.presets.items():
+        assert len(five) == 5 and len(set(five)) == 5
+        assert set(five) <= avail
+
+
+def test_presets_pick_the_right_skill_for_the_situation():
+    _, sim = _sim()
+    _ready_lineups(sim)
+    view = sim._build_view(sim.home, sim.away, sim.home)
+    players = sim.home.players
+    # The FT unit can't be beaten on free-throw shooting by any available five.
+    ft_sum = sum(players[pid].ratings["free_throw"] for pid in view.presets["ft"])
+    avail = [pid for pid in sim.home.available if pid not in sim.home.unavailable]
+    best_ft = sum(sorted((players[pid].ratings["free_throw"] for pid in avail),
+                         reverse=True)[:5])
+    assert ft_sum == best_ft
+    # Closers are the five best by overall.
+    best_ovr = sum(sorted((players[pid].overall for pid in avail), reverse=True)[:5])
+    assert sum(players[pid].overall for pid in view.presets["closers"]) == best_ovr
+
+
+def test_presets_skip_fouled_out_players():
+    _, sim = _sim()
+    _ready_lineups(sim)
+    gone = sim.home.available[0]
+    sim.home.unavailable.add(gone)
+    view = sim._build_view(sim.home, sim.away, sim.home)
+    for five in view.presets.values():
+        assert gone not in five
+
+
+# --- coach-mode: offensive sets --------------------------------------------
+def test_inside_set_pushes_shots_to_the_rim():
+    _, sim = _sim(coach=Coach())
+    _ready_lineups(sim)
+    shooter = sim.home.cache.players[0]
+    sim._plan_possession(sim.home, sim.away, CoachOrders(offensive_set="motion"))
+    base_rim = sum(sim._pick_shot_type(shooter, sim.home, putback=False) == "rim"
+                   for _ in range(400))
+    sim._plan_possession(sim.home, sim.away, CoachOrders(offensive_set="inside"))
+    inside_rim = sum(sim._pick_shot_type(shooter, sim.home, putback=False) == "rim"
+                     for _ in range(400))
+    assert inside_rim > base_rim
+
+
+def test_spread_set_arms_a_three_bias():
+    _, sim = _sim(coach=Coach())
+    sim._plan_possession(sim.home, sim.away, CoachOrders(offensive_set="spread"))
+    assert sim._three_bias > 0.0
+    # a plain motion set clears it again
+    sim._plan_possession(sim.home, sim.away, CoachOrders(offensive_set="motion"))
+    assert sim._three_bias == 0.0
+
+
+def test_iso_set_concentrates_usage_on_the_top_option():
+    _, sim = _sim(coach=Coach())
+    _ready_lineups(sim)
+    oc = sim.home.cache
+    star = max(range(len(oc.players)), key=lambda i: oc.usage[i])
+    sim._plan_possession(sim.home, sim.away, CoachOrders(offensive_set="motion"))
+    base = sum(sim._pick_shooter(sim.home, oc, putback=False) == star for _ in range(600))
+    sim._plan_possession(sim.home, sim.away, CoachOrders(offensive_set="iso"))
+    iso = sum(sim._pick_shooter(sim.home, oc, putback=False) == star for _ in range(600))
+    assert iso > base
+
+
+def test_offensive_set_ignored_on_defense():
+    # User coaches the defense: an offensive set order must not bias the opponent's offense.
+    _, sim = _sim(coach=Coach())
+    sim.coach_tid = sim.away.team.tid
+    sim._plan_possession(sim.home, sim.away, CoachOrders(offensive_set="spread"))
+    assert sim._three_bias == 0.0
+    assert not sim._iso_set
+
+
+# --- coach-mode: situation hint --------------------------------------------
+def test_hint_is_situational_and_nonempty():
+    _, sim = _sim()
+    _ready_lineups(sim)
+    sim.clock = 12.0
+    sim.result.home_score, sim.result.away_score = 100, 102   # home (user) down 2
+    off_hint = sim._build_view(sim.home, sim.away, sim.home).hint   # user on offense
+    def_hint = sim._build_view(sim.away, sim.home, sim.home).hint   # user on defense
+    assert off_hint and def_hint and off_hint != def_hint
+    assert "2" in off_hint                                          # references the 2-point margin
+
+
+# --- coach-mode: reactive free-throw sub window -----------------------------
+def _bench(state):
+    return [pid for pid in state.available
+            if pid not in state.on_court and pid not in state.unavailable]
+
+
+def test_ft_sub_window_offers_sub_only_view_and_applies_it():
+    import pytest
+    _, sim = _sim(coach=Coach())
+    _ready_lineups(sim)
+    sim.clock = 20.0                                          # inside the FT sub window (<=60s)
+    sim.result.home_score, sim.result.away_score = 101, 100   # one-possession game
+    sim.coach_tid = sim.home.team.tid                        # user coaches home (the defense here)
+    # Home deliberately fouls away: the generator pauses before the final FT.
+    driver = sim._drive_resolution(sim._intentional_foul_g(sim.away, sim.home))
+    view = next(driver)
+    assert view.sub_only and view.presets and _bench(sim.home)
+    incoming = _bench(sim.home)[0]
+    new_five = sim.home.on_court[:4] + [incoming]
+    with pytest.raises(StopIteration):
+        driver.send(CoachOrders(lineup=new_five))
+    # the fresh five is on the floor for the live rebound + ensuing trip
+    assert set(sim.home.on_court) == set(new_five)
+
+
+def test_ft_sub_window_closed_outside_crunch():
+    import pytest
+    _, sim = _sim(coach=Coach())
+    _ready_lineups(sim)
+    sim.clock = 120.0                                        # outside the FT sub window
+    sim.result.home_score, sim.result.away_score = 101, 100
+    sim.coach_tid = sim.home.team.tid
+    driver = sim._drive_resolution(sim._intentional_foul_g(sim.away, sim.home))
+    with pytest.raises(StopIteration):                       # resolves with no sub prompt
+        next(driver)
+
+
+def test_ft_sub_window_closed_when_not_one_possession():
+    _, sim = _sim(coach=Coach())
+    _ready_lineups(sim)
+    sim.clock = 20.0
+    sim.result.home_score, sim.result.away_score = 110, 100   # 10 > FT_SUB_MARGIN
+    sim.coach_tid = sim.home.team.tid
+    assert not sim._ft_sub_window()
+
+
+def test_sync_foul_paths_never_pause():
+    # The synchronous wrappers (used by tests and non-coached sims) must fully resolve.
+    _, sim = _sim(collect_pbp=True)
+    _ready_lineups(sim)
+    sim.clock = 15.0
+    sim.result.home_score, sim.result.away_score = 100, 101
+    sim._intentional_foul(sim.home, sim.away)               # returns, doesn't yield
+    sim._foul_up_3(sim.home, sim.away)
+    sim._resolve_possession(sim.home, sim.away)
+    assert sim.result.pbp
+
+
 # --- tactics serialization defaults ---------------------------------------
 def test_tactics_defaults_for_missing_keys():
     t = Tactics.from_dict({"pace": "Fast"})
