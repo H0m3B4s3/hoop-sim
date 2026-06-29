@@ -1342,6 +1342,22 @@ select:focus-visible {
 .coachFeed li {
   padding: 1px 0;
 }
+.coachHint {
+  margin-bottom: 10px;
+  padding: 7px 11px;
+  border-radius: 8px;
+  background: rgba(88, 166, 255, 0.08);
+  border-left: 3px solid var(--accent, #58a6ff);
+  color: var(--text, #c9d1d9);
+  font-size: 0.9rem;
+}
+.coachPresets {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
 .coachLineup {
   display: flex;
   flex-direction: column;

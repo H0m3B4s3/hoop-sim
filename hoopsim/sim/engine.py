@@ -16,7 +16,7 @@ from hoopsim.models.player import Player
 from hoopsim.models.team import Team, position_distance
 from hoopsim.sim import ratings as R
 from hoopsim.sim.boxscore import GameResult, PBPEvent
-from hoopsim.sim.coach import Coach, CoachOrders, CoachView, PlayerView
+from hoopsim.sim.coach import Coach, CoachOrders, CoachView, PlayerView, PRESET_WEIGHTS
 from hoopsim.sim.ratings import LineupCache, build_lineup_cache
 
 # -- tunables (calibrated so PPP ~1.10 and pace ~99) -------------------------
@@ -36,8 +36,23 @@ BONUS_FOULS = 5             # team fouls in a period that put the opponent in th
 # -- interactive end-game coaching window -----------------------------------
 COACH_WINDOW_SECONDS = 120.0   # final-period clock at/under which the coach is consulted
 COACH_MARGIN = 12              # only when the game is within this many points
+# A free-throw set opens a legal sub window before the final attempt. We only surface it (so the
+# user can reset their rebounding/defense for the live ball) in genuinely tense spots, to avoid
+# prompting on every whistle.
+FT_SUB_WINDOW_SECONDS = 60.0   # final-period clock at/under which an FT sub window is offered
+FT_SUB_MARGIN = 5              # only within this many points (a one-possession game)
 TIMEOUT_FATIGUE_RELIEF = 0.55  # on-court fatigue multiplier after a timeout
 DRAW_PLAY_BONUS = 0.05         # make-probability edge on the possession after a timeout
+
+
+class _SubBreak:
+    """Marker a resolution generator yields at a free-throw dead ball, before the final attempt.
+    Carries the offense/defense states so the driver can offer the user a substitution."""
+    __slots__ = ("off", "deff")
+
+    def __init__(self, off: "_TeamState", deff: "_TeamState") -> None:
+        self.off = off
+        self.deff = deff
 
 
 def _stamina_factor(p: Player) -> float:
@@ -164,6 +179,8 @@ class GameSim:
         self._draw_play_tid: Optional[int] = None   # team that just took a timeout (one-poss boost)
         self._play_boost = 0.0
         self._three_bias = 0.0                       # chance this trip is forced into a three
+        self._iso_set = False                         # funnel this trip's usage to the top scorer
+        self._rim_set = 0.0                           # extra rim-shot bias this trip (pound inside)
         self._first_engagement = True
 
     # -- public -------------------------------------------------------------
@@ -255,11 +272,12 @@ class GameSim:
 
             pbp_mark = len(self.result.pbp)
             if intentional:
-                self._intentional_foul(offense, defense)
+                gen = self._intentional_foul_g(offense, defense)
             elif foul_up_3:
-                self._foul_up_3(offense, defense)
+                gen = self._foul_up_3_g(offense, defense)
             else:
-                self._resolve_possession(offense, defense)
+                gen = self._resolve_possession_g(offense, defense)
+            yield from self._drive_resolution(gen)
             if orders is not None:
                 self.coach.narrate(self.result.pbp[pbp_mark:])
             self._apply_fatigue(poss_secs)
@@ -270,6 +288,39 @@ class GameSim:
         self.result.line_score.append(
             (self.result.home_score - period_home, self.result.away_score - period_away))
         return offense, defense
+
+    def _drive_resolution(self, gen):
+        """Run a possession-resolution generator, surfacing its free-throw sub windows.
+
+        The cores (``_resolve_possession_g`` and the deliberate-foul variants) pause with a
+        :class:`_SubBreak` before the final free throw of a set. When the situation is tense
+        enough (:meth:`_ft_sub_window`) we hand the user a substitution-only decision so a fresh
+        five contests the live rebound and the next trip; otherwise we resume untouched. Non-coached
+        sims drain the cores through synchronous wrappers and never see these breaks.
+        """
+        try:
+            brk = next(gen)
+            while True:
+                if self.coach is not None and self._ft_sub_window():
+                    user = brk.off if brk.off.team.tid == self.coach_tid else brk.deff
+                    orders = yield self._build_view(brk.off, brk.deff, user, sub_only=True)
+                    if orders is not None:
+                        self._apply_orders(orders, brk.off, brk.deff)
+                brk = gen.send(None)
+        except StopIteration:
+            return
+
+    def _ft_sub_window(self) -> bool:
+        """True when a free-throw sub window is worth offering: final period, one-possession game,
+        late, and the user has a bench player to bring in."""
+        if self.coach_tid is None or self.quarter < self.periods:
+            return False
+        margin = abs(self.result.home_score - self.result.away_score)
+        if self.clock > FT_SUB_WINDOW_SECONDS or margin > FT_SUB_MARGIN:
+            return False
+        user = self.home if self.home.team.tid == self.coach_tid else self.away
+        return any(pid not in user.on_court and pid not in user.unavailable
+                   for pid in user.available)
 
     # -- interactive coaching ----------------------------------------------
     def _coach_engaged(self, offense: _TeamState, defense: _TeamState) -> bool:
@@ -297,8 +348,20 @@ class GameSim:
             and self._should_foul_up_3(offense, defense)
 
         self._three_bias = 0.0
+        self._iso_set = False
+        self._rim_set = 0.0
         if intentional or foul_up_3:
             return intentional, foul_up_3, self.rng.uniform(2.5, 5.0)
+
+        # Offensive set: the look to hunt this trip (independent of tempo). quick3 already implies a
+        # spread-for-three, so it carries its own bias below.
+        off_set = orders.offensive_set if (orders is not None and user_off) else "motion"
+        if off_set == "iso":
+            self._iso_set = True
+        elif off_set == "inside":
+            self._rim_set = 0.16
+        elif off_set == "spread":
+            self._three_bias = 0.45
 
         tempo = orders.tempo if (orders is not None and user_off) else "normal"
         if tempo == "hold":
@@ -364,7 +427,7 @@ class GameSim:
             self._log(opp.team.tid, f"{opp.team.abbrev} call timeout ({opp.timeouts} left)")
 
     def _build_view(self, offense: _TeamState, defense: _TeamState,
-                    user: _TeamState) -> CoachView:
+                    user: _TeamState, *, sub_only: bool = False) -> CoachView:
         opp = defense if user is offense else offense
 
         def pv(state: _TeamState, pid: int) -> PlayerView:
@@ -386,7 +449,65 @@ class GameSim:
             user_timeouts=user.timeouts, opp_timeouts=opp.timeouts,
             user_in_bonus=opp.period_fouls >= BONUS_FOULS,
             opp_in_bonus=user.period_fouls >= BONUS_FOULS,
-            on_court=on_court, bench=bench, first_engagement=self._first_engagement)
+            on_court=on_court, bench=bench, first_engagement=self._first_engagement,
+            sub_only=sub_only, presets=self._compute_presets(user),
+            hint=(self._ft_sub_hint(user, opp) if sub_only
+                  else self._coach_hint(user, opp, on_offense=user is offense)))
+
+    def _ft_sub_hint(self, user: _TeamState, opp: _TeamState) -> str:
+        user_score = self.result.home_score if user.is_home else self.result.away_score
+        opp_score = self.result.away_score if user.is_home else self.result.home_score
+        lead = user_score - opp_score
+        where = "up" if lead > 0 else "down" if lead < 0 else "tied"
+        tail = f" — {where} {abs(lead)}" if lead else " — tied"
+        return (f"Free throw coming{tail}. Set your five before the live ball: "
+                f"rebounders to corral a miss, your closers to push the other way.")
+
+    def _compute_presets(self, user: _TeamState) -> Dict[str, List[int]]:
+        """The best five available players for each situational preset (see PRESET_WEIGHTS).
+
+        Each preset scores every available player by a weighted blend of ratings (``overall`` is the
+        composite) and takes the top five. These are *suggestions* the UI loads on one tap; the user
+        still confirms, so a positionally odd five is the user's call, not the engine's.
+        """
+        avail = [pid for pid in user.available if pid not in user.unavailable]
+        out: Dict[str, List[int]] = {}
+        for key, weights in PRESET_WEIGHTS.items():
+            def score(pid: int) -> float:
+                p = user.players[pid]
+                return sum((p.overall if field == "overall" else p.ratings[field]) * w
+                           for field, w in weights.items())
+            out[key] = sorted(avail, key=score, reverse=True)[:5]
+        return out
+
+    def _coach_hint(self, user: _TeamState, opp: _TeamState, *, on_offense: bool) -> str:
+        """A short, situational read for the bench panel — guidance, never a command."""
+        user_score = self.result.home_score if user.is_home else self.result.away_score
+        opp_score = self.result.away_score if user.is_home else self.result.home_score
+        lead = user_score - opp_score
+        secs = int(self.clock)
+        late = secs <= 24
+        if on_offense:
+            if lead > 0:
+                if late and opp.timeouts == 0:
+                    return f"Up {lead} and they have no timeouts — milk the clock and make them foul."
+                return f"Up {lead} with the ball — bleed the clock, take a good shot late."
+            if lead < 0:
+                need3 = lead <= -3
+                tail = "you need a three" if need3 else "go get a quick bucket, then get a stop"
+                return f"Down {-lead}, {secs}s left — {tail}."
+            return f"Tied, {secs}s to go — run something clean, don't settle."
+        # defense
+        if lead == 3 and secs <= 8:
+            return "Up 3 in the final seconds — foul before they can shoot the tying three."
+        if lead > 0:
+            extra = " They have no timeouts, so a stop likely ends it." if opp.timeouts == 0 else ""
+            return f"Up {lead} on defense — get a stop, don't foul a jump shooter.{extra}"
+        if lead < 0:
+            if late:
+                return f"Down {-lead}, {secs}s left — foul now to stop the clock and get the ball back."
+            return f"Down {-lead} — get a stop, you can foul if the shot clock favors it."
+        return f"Tied, {secs}s on defense — one stop wins it, contest without fouling."
 
     def _is_crunch(self) -> bool:
         """Final period / OT, close game, under three minutes — ride your best lineup."""
@@ -423,10 +544,16 @@ class GameSim:
         return 0 < self.clock <= 8.0 and (def_score - off_score) == 3
 
     def _foul_up_3(self, offense: _TeamState, defense: _TeamState) -> None:
+        """Synchronous foul-up-3 (no sub window) for tests and non-coached sims."""
+        for _ in self._foul_up_3_g(offense, defense):
+            pass
+
+    def _foul_up_3_g(self, offense: _TeamState, defense: _TeamState):
         """Resolve the deliberate foul-up-3 as a defense-IQ vs offense-IQ contest.
 
         A clean foul puts the offense on the line for two (they can't tie); botching it lets
-        the offense get a look up — occasionally even drawing a three-shot foul.
+        the offense get a look up — occasionally even drawing a three-shot foul. A generator: it
+        pauses at the free-throw sub window (see :meth:`_drive_resolution`).
         """
         oc, dc = offense.cache, defense.cache
         if not oc.players or not dc.players:
@@ -437,30 +564,37 @@ class GameSim:
         shooter = oc.players[_weighted_index(self.rng, oc.usage)]
         if self.rng.chance(clean_p):
             self._commit_foul(defense, dc)
-            made, last_made = self._shoot_fts(shooter, 2)
+            made, last_made = yield from self._shoot_fts_g(shooter, 2, offense, defense)
             self._score(offense, defense, made)
             self._log(defense.team.tid,
                       f"fouls {shooter.short_name} before the three — {made}/2 FT")
             if not last_made:
+                oc, dc = offense.cache, defense.cache     # a sub may have changed the five
                 if self.rng.chance(self._oreb_prob(offense, defense, oc, dc)):
                     self._credit_rebound(offense, oc, offensive=True)
                 else:
                     self._credit_rebound(defense, dc, offensive=False)
         else:
             self._log(defense.team.tid, f"can't foul in time — {shooter.short_name} gets a look")
-            self._resolve_possession(offense, defense)
+            yield from self._resolve_possession_g(offense, defense)
 
     def _intentional_foul(self, offense: _TeamState, defense: _TeamState) -> None:
+        """Synchronous intentional foul (no sub window) for tests and non-coached sims."""
+        for _ in self._intentional_foul_g(offense, defense):
+            pass
+
+    def _intentional_foul_g(self, offense: _TeamState, defense: _TeamState):
         oc, dc = offense.cache, defense.cache
         if not oc.players or not dc.players:
             return
         self._commit_foul(defense, dc)
         shooter = oc.players[_weighted_index(self.rng, oc.usage)]
-        made, last_made = self._shoot_fts(shooter, 2)
+        made, last_made = yield from self._shoot_fts_g(shooter, 2, offense, defense)
         self._score(offense, defense, made)
         self._log(offense.team.tid,
                   f"{shooter.short_name} sent to the line on a foul, {made}/2 FT")
         if not last_made:                      # missed the last FT -> live rebound
+            oc, dc = offense.cache, defense.cache     # a sub may have changed the five
             if self.rng.chance(self._oreb_prob(offense, defense, oc, dc)):
                 self._credit_rebound(offense, oc, offensive=True)
             else:
@@ -483,6 +617,13 @@ class GameSim:
 
     # -- possession ---------------------------------------------------------
     def _resolve_possession(self, off: _TeamState, deff: _TeamState) -> None:
+        """Synchronous possession (no sub window) for tests and non-coached sims."""
+        for _ in self._resolve_possession_g(off, deff):
+            pass
+
+    def _resolve_possession_g(self, off: _TeamState, deff: _TeamState):
+        """One possession. A generator: it pauses at any free-throw sub window (a drawn shooting
+        foul) so the driver can offer a substitution before the live rebound."""
         if not off.on_court or not deff.on_court:
             return
         # A timeout buys the team that called it one drawn-up possession with a small edge.
@@ -501,9 +642,11 @@ class GameSim:
 
         putbacks = 0
         while True:
-            self._take_shot(off, deff, oc, dc, scheme, pressure, clutch, putback=putbacks > 0)
+            yield from self._take_shot_g(off, deff, oc, dc, scheme, pressure, clutch,
+                                         putback=putbacks > 0)
             if not self._last_shot_live:
                 break
+            oc, dc = off.cache, deff.cache            # a sub at the line may have changed the five
             oreb_p = self._oreb_prob(off, deff, oc, dc)
             if self.rng.chance(oreb_p) and putbacks < MAX_PUTBACKS:
                 self._credit_rebound(off, oc, offensive=True)
@@ -532,7 +675,9 @@ class GameSim:
             self._log(off.team.tid, f"{loser.short_name} turns it over")
         return True
 
-    def _take_shot(self, off, deff, oc, dc, scheme, pressure, clutch, putback) -> None:
+    def _take_shot_g(self, off, deff, oc, dc, scheme, pressure, clutch, putback):
+        """One shot attempt. A generator: a drawn shooting foul pauses at the free-throw sub
+        window (via :meth:`_shoot_fts_g`) before the final attempt."""
         shooter_idx = self._pick_shooter(off, oc, putback)
         shooter = oc.players[shooter_idx]
         shot_type = self._pick_shot_type(shooter, off, putback)
@@ -578,7 +723,7 @@ class GameSim:
             # shooting foul on a miss -> free throws only (no FGA charged)
             self._commit_foul(deff, dc)
             n = 3 if is_three else 2
-            made_fts, last_made = self._shoot_fts(shooter, n)
+            made_fts, last_made = yield from self._shoot_fts_g(shooter, n, off, deff)
             self._score(off, deff, made_fts)
             if not last_made:
                 self._last_shot_live = True
@@ -624,6 +769,9 @@ class GameSim:
             weights = [w * (1.4 if p.position in ("PF", "C") else 1.0)
                        for w, p in zip(oc.rebound_w, oc.players)]
         else:
+            # An iso set sharpens the usage curve so the ball finds the top option this trip.
+            if self._iso_set:
+                conc += 1.5
             weights = [u ** conc for u in oc.usage]
         return _weighted_index(self.rng, weights)
 
@@ -635,7 +783,7 @@ class GameSim:
         r = shooter.ratings
         focus_rim, focus_three = R.OFF_FOCUS_SHOT[off.team.tactics.off_focus]
         rim = max(0.03, 0.36 + (r["finishing"] - 70) * 0.004 + (r["athleticism"] - 70) * 0.002
-                  + focus_rim)
+                  + focus_rim + self._rim_set)
         three = max(0.03, 0.32 + (r["three_point"] - 70) * 0.006 + focus_three)
         mid = max(0.04, 1.0 - rim - three)
         total = rim + three + mid
@@ -646,12 +794,18 @@ class GameSim:
             return "three"
         return "mid"
 
-    def _shoot_fts(self, shooter: Player, n: int):
+    def _shoot_fts_g(self, shooter: Player, n: int, off=None, deff=None):
+        """Shoot ``n`` free throws, yielding a :class:`_SubBreak` before the final attempt of a
+        multi-shot set (the legal sub window) when ``off``/``deff`` are supplied. Returns
+        ``(makes, last_made)`` as the generator's value. The synchronous :meth:`_shoot_fts` and the
+        and-one (``n == 1``) path pass no states and so never pause."""
         ft_pct = max(0.40, min(0.97, 0.05 + shooter.ratings["free_throw"] * 0.0095))
         line = self.result.line(shooter.pid)
         makes = 0
         last_made = False
-        for _ in range(n):
+        for i in range(n):
+            if i == n - 1 and n >= 2 and off is not None:
+                yield _SubBreak(off, deff)
             line.fta += 1
             if self.rng.chance(ft_pct):
                 line.ftm += 1
@@ -661,6 +815,15 @@ class GameSim:
             else:
                 last_made = False
         return makes, last_made
+
+    def _shoot_fts(self, shooter: Player, n: int):
+        """Synchronous free throws (no sub window) for the and-one path and non-coached sims."""
+        gen = self._shoot_fts_g(shooter, n)
+        try:
+            while True:
+                next(gen)
+        except StopIteration as done:
+            return done.value
 
     def _maybe_assist(self, off, oc, shooter: Player, shot_type: str) -> Optional[Player]:
         base = {"three": 0.82, "mid": 0.45, "rim": 0.50}[shot_type]

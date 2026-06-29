@@ -147,7 +147,8 @@ class RecruitSignBody(BaseModel):
 class CoachOrdersBody(BaseModel):
     """One possession's crunch-time decision from the browser."""
     timeout: bool = False
-    tempo: str = "normal"                  # normal | hold | quick (offense)
+    tempo: str = "normal"                  # normal | bleed | hold | quick3 (offense)
+    offensive_set: str = "motion"          # motion | iso | inside | spread (offense)
     defensive_foul: str = "auto"           # auto | foul | no (defense)
     lineup: Optional[List[int]] = None     # new on-court five, or None to leave it
 
@@ -428,6 +429,7 @@ def sim_coach(body: CoachOrdersBody, sid: str = Depends(_sid)):
     if live is None:
         raise HTTPException(status_code=409, detail="No game is currently in progress.")
     orders = CoachOrders(timeout=body.timeout, tempo=body.tempo,
+                         offensive_set=body.offensive_set,
                          defensive_foul=body.defensive_foul, lineup=body.lineup)
     return _pump(world, sid, live, orders=orders)
 

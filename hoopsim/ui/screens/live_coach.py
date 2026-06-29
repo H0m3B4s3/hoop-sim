@@ -15,7 +15,9 @@ from rich.table import Table
 from rich.text import Text
 
 from hoopsim.models.world import World
-from hoopsim.sim.coach import Coach, CoachOrders, CoachView, PlayerView
+from hoopsim.sim.coach import (
+    Coach, CoachOrders, CoachView, OFFENSIVE_SETS, PRESET_LABELS, PlayerView,
+)
 from hoopsim.ui.console import choose, console
 
 _TEMPO_LABEL = {
@@ -25,6 +27,8 @@ _TEMPO_LABEL = {
     "quick3": "Quick 3 (get aggressive)",
 }
 _TEMPO_ORDER = ("normal", "bleed", "hold", "quick3")
+_SET_LABEL = dict(OFFENSIVE_SETS)
+_SET_ORDER = tuple(k for k, _ in OFFENSIVE_SETS)
 _FOUL_LABEL = {
     "auto": "Foul: Auto (let the team decide)",
     "foul": "Foul now (send them to the line)",
@@ -63,6 +67,10 @@ class LiveCoach(Coach):
 
         if view.first_engagement:
             self._banner(view)
+        if view.sub_only:
+            console.print()
+            console.rule("[title]TO THE LINE — sub before the final free throw[/title]",
+                         style="accent")
 
         while True:
             self._render(view, orders, lineup)
@@ -72,6 +80,8 @@ class LiveCoach(Coach):
                 break
             elif action == "tempo":
                 orders.tempo = _TEMPO_ORDER[(_TEMPO_ORDER.index(orders.tempo) + 1) % len(_TEMPO_ORDER)]
+            elif action == "set":
+                orders.offensive_set = _SET_ORDER[(_SET_ORDER.index(orders.offensive_set) + 1) % len(_SET_ORDER)]
             elif action == "foul":
                 order = ("auto", "foul", "no")
                 orders.defensive_foul = order[(order.index(orders.defensive_foul) + 1) % len(order)]
@@ -79,6 +89,9 @@ class LiveCoach(Coach):
                 orders.timeout = not orders.timeout
             elif action == "sub":
                 lineup = self._substitute(view, lineup)
+            elif action.startswith("preset:"):
+                key = action.split(":", 1)[1]
+                lineup = self._apply_preset(view, key, lineup)
 
         if lineup != [p.pid for p in view.on_court]:
             orders.lineup = lineup
@@ -133,22 +146,42 @@ class LiveCoach(Coach):
             pf = f"[bad]{p.fouls}[/bad]" if p.fouls >= 5 else str(p.fouls)
             tbl.add_row(p.name, p.pos, str(p.overall), pf, _fatigue_tag(p.fatigue))
         console.print(tbl)
+        if view.hint:
+            console.print(f"  [muted]\U0001f4ad {view.hint}[/muted]")
 
     def _menu(self, view: CoachView, orders: CoachOrders, lineup: List[int]):
         opts = []
-        if view.user_on_offense:
-            opts.append(("tempo", f"Tempo → [accent]{_TEMPO_LABEL[orders.tempo]}[/accent]"))
-        else:
-            opts.append(("foul", f"Defense → [accent]{_FOUL_LABEL[orders.defensive_foul]}[/accent]"))
-        if view.user_timeouts > 0:
-            mark = "[good]✓[/good] " if orders.timeout else ""
-            opts.append(("timeout", f"{mark}Call timeout (advance the ball, rest legs)"))
-        elif orders.timeout:
-            orders.timeout = False
+        if not view.sub_only:
+            if view.user_on_offense:
+                opts.append(("tempo", f"Tempo → [accent]{_TEMPO_LABEL[orders.tempo]}[/accent]"))
+                opts.append(("set", f"Set → [accent]{_SET_LABEL[orders.offensive_set]}[/accent]"))
+            else:
+                opts.append(("foul", f"Defense → [accent]{_FOUL_LABEL[orders.defensive_foul]}[/accent]"))
+            if view.user_timeouts > 0:
+                mark = "[good]✓[/good] " if orders.timeout else ""
+                opts.append(("timeout", f"{mark}Call timeout (advance the ball, rest legs)"))
+            elif orders.timeout:
+                orders.timeout = False
         opts.append(("sub", "Substitute"))
+        for key, label, blurb in PRESET_LABELS:
+            if key in view.presets and view.presets[key] != lineup:
+                opts.append((f"preset:{key}", f"Load [accent]{label}[/accent] [dim]({blurb})[/dim]"))
         changed = " [dim](changed)[/dim]" if lineup != [p.pid for p in view.on_court] else ""
-        opts.append(("go", f"[bold]▶  Run the possession[/bold]{changed}"))
+        go_label = "Send the shooter to the line" if view.sub_only else "Run the possession"
+        opts.append(("go", f"[bold]▶  {go_label}[/bold]{changed}"))
         return opts
+
+    def _apply_preset(self, view: CoachView, key: str, lineup: List[int]) -> List[int]:
+        """Load a situational preset five, naming who comes in vs the current floor."""
+        new_five = view.presets.get(key, lineup)
+        by_pid = {p.pid: p for p in view.on_court + view.bench}
+        added = [by_pid[p].name for p in new_five if p not in lineup and p in by_pid]
+        label = next((l for k, l, _ in PRESET_LABELS if k == key), key)
+        if added:
+            console.print(f"  [good]{label}[/good] in — {', '.join(added)}")
+        else:
+            console.print(f"  [muted]{label} already on the floor[/muted]")
+        return list(new_five)
 
     # -- substitutions ------------------------------------------------------
     def _substitute(self, view: CoachView, lineup: List[int]) -> List[int]:

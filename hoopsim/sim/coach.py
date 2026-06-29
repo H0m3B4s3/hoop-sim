@@ -12,7 +12,34 @@ so non-interactive sims are unaffected; the console implementation lives in
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
+
+# Situational lineup presets the UI offers as one-tap fives. Each maps a player's ratings to a
+# fit score; the engine fills the five with the best-fitting available players. Order is display
+# order. "closers" mirrors the engine's own clutch pick (best overall).
+PRESET_LABELS: Tuple[Tuple[str, str, str], ...] = (
+    ("closers", "Closers", "your best five"),
+    ("shooters", "Shooters", "need points / a three"),
+    ("stoppers", "Stoppers", "get a stop, protect a lead"),
+    ("ft", "FT Team", "they're going to foul"),
+)
+
+# Per-preset rating weights. Keys are Player.ratings fields; "overall" is the composite. Scores
+# are a weighted sum, so the magnitudes only matter relative to each other within a preset.
+PRESET_WEIGHTS: Dict[str, Dict[str, float]] = {
+    "closers": {"overall": 1.0},
+    "shooters": {"three_point": 0.6, "free_throw": 0.25, "off_iq": 0.15},
+    "stoppers": {"perimeter_def": 0.4, "interior_def": 0.3, "rebounding": 0.3},
+    "ft": {"free_throw": 0.7, "overall": 0.3},
+}
+
+# Offensive sets: the look to hunt this possession. Display order; "motion" is the neutral default.
+OFFENSIVE_SETS: Tuple[Tuple[str, str], ...] = (
+    ("motion", "Run offense"),
+    ("iso", "Iso star"),
+    ("inside", "Pound inside"),
+    ("spread", "Spread / kick"),
+)
 
 
 @dataclass
@@ -48,6 +75,14 @@ class CoachView:
     on_court: List[PlayerView] = field(default_factory=list)   # user team, five players
     bench: List[PlayerView] = field(default_factory=list)      # available user subs
     first_engagement: bool = False
+    # True for a mid-possession free-throw sub window: the only legal action is a substitution
+    # (no tempo/foul/timeout) before the final FT, so the new five contests the live rebound.
+    sub_only: bool = False
+    # One-tap situational fives the UI can load into the working lineup. Maps a preset key
+    # (see PRESET_LABELS) to the five pids that best fit it among the currently available players.
+    presets: Dict[str, List[int]] = field(default_factory=dict)
+    # A short, non-binding read of the situation from the bench ("they have no timeouts...").
+    hint: str = ""
 
     @property
     def user_score(self) -> int:
@@ -72,6 +107,10 @@ class CoachOrders:
     # Defense only: "auto" defers to the team's tactics, "foul" sends them to the line now,
     # "no" tells them not to foul this trip.
     defensive_foul: str = "auto"
+    # Offense only: the kind of look to hunt this trip (orthogonal to tempo). "motion" runs the
+    # offense straight, "iso" funnels the ball to the top scorer, "inside" pounds the rim and
+    # draws fouls, "spread" hunts a three. The engine biases shooter/shot selection accordingly.
+    offensive_set: str = "motion"
     # New on-court five for the user team (pids); None leaves the lineup unchanged.
     lineup: Optional[List[int]] = None
 

@@ -19,6 +19,7 @@ from hoopsim.models.player import Player
 from hoopsim.models.team import MAX_ROTATION, Team, roster_players, rotation_pool, team_salary
 from hoopsim.models.world import World
 from hoopsim.sim.boxscore import GameResult
+from hoopsim.sim.coach import PRESET_LABELS
 from hoopsim.sim.season import game_date, regular_season_complete
 from hoopsim.systems import cap
 from hoopsim.systems import scouting as SC
@@ -664,6 +665,13 @@ def coach_view_json(world: World, view) -> dict:
         "bench": [pj(p) for p in view.bench],
         "user_team": team_brief(user),
         "first_engagement": view.first_engagement,
+        "sub_only": view.sub_only,
+        "hint": view.hint,
+        # Situational one-tap fives: [{key, label, blurb, lineup:[pid,...]}, ...] in display order.
+        "presets": [
+            {"key": key, "label": label, "blurb": blurb, "lineup": view.presets[key]}
+            for key, label, blurb in PRESET_LABELS if key in view.presets
+        ],
     }
 
 
