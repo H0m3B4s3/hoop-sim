@@ -43,8 +43,12 @@ def test_roy_is_a_rookie():
     if "roy" not in a:
         return  # a tiny league/season may field no qualifying rookie
     roy_pid = a["roy"]["pid"]
-    # a rookie has no archived career yet
-    assert not w.players[roy_pid].career
+    # a rookie has no archived career yet, and no completed pro seasons — on the first simulated
+    # season every player's career is empty, so the experience gate is what keeps a generated
+    # veteran from stealing Rookie of the Year.
+    roy = w.players[roy_pid]
+    assert not roy.career
+    assert roy.experience == 0
 
 
 def test_archive_season_records_awards_in_history():

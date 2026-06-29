@@ -304,6 +304,26 @@ span.clickable:hover {
   flex-direction: column;
   gap: 6px;
 }
+.seedInput {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  margin: 10px 0;
+  font-size: 12px;
+}
+.seedInput input {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.seedChip {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 
 /* ---- team select ------------------------------------------------------- */
 .confGrid {

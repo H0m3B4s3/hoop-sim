@@ -49,6 +49,7 @@ function Setup({ onReady, toast }: { onReady: () => void; toast: (m: string) => 
   const [league, setLeague] = useState("nba");
   const [preset, setPreset] = useState("Standard");
   const [economy, setEconomy] = useState("nil");
+  const [seed, setSeed] = useState("");
   const [saves, setSaves] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [hasGame, setHasGame] = useState(false);
@@ -61,7 +62,13 @@ function Setup({ onReady, toast }: { onReady: () => void; toast: (m: string) => 
   const create = async () => {
     setBusy(true);
     try {
-      await api.newCareer({ league, preset, economy });
+      const trimmed = seed.trim();
+      const parsed = trimmed === "" ? undefined : Number(trimmed);
+      if (parsed !== undefined && !Number.isFinite(parsed)) {
+        toast("Seed must be a number.");
+        return;
+      }
+      await api.newCareer({ league, preset, economy, seed: parsed });
       onReady();
     } catch (e) {
       toast(String(e));
@@ -115,6 +122,16 @@ function Setup({ onReady, toast }: { onReady: () => void; toast: (m: string) => 
             </Seg>
           </div>
         )}
+        <label className="seedInput">
+          <span className="muted">Seed (optional — share to replay a world)</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="Random"
+            value={seed}
+            onChange={(e) => setSeed(e.target.value)}
+          />
+        </label>
         <button className="primary big" disabled={busy} onClick={create}>
           {busy ? "Generating league…" : "Start Career"}
         </button>
@@ -388,6 +405,7 @@ function TopBar({
             : `Schol ${summary.scholarships_used}/${summary.scholarship_limit}`
           : `Payroll ${money(summary.payroll)} / ${money(summary.salary_cap)}`}
       </div>
+      {summary.seed != null && <SeedChip seed={summary.seed} toast={toast} />}
       <FogToggle />
       <ThemeToggle />
       <button className="ghost" onClick={save}>
@@ -397,6 +415,20 @@ function TopBar({
         Menu
       </button>
     </header>
+  );
+}
+
+function SeedChip({ seed, toast }: { seed: number; toast: (m: string) => void }) {
+  const copy = () => {
+    navigator.clipboard?.writeText(String(seed)).then(
+      () => toast(`Copied seed ${seed}`),
+      () => toast(`Seed ${seed}`),
+    );
+  };
+  return (
+    <button className="ghost seedChip" onClick={copy} title="Click to copy — share to reproduce this world">
+      🌱 {seed}
+    </button>
   );
 }
 

@@ -92,6 +92,7 @@ def world_summary(world: World) -> dict:
     team = world.user_team
     out = {
         "season_year": world.season_year,
+        "seed": world.rng.seed,
         "phase": world.phase,
         "phase_label": Phase.label(world.phase),
         "offseason_stage": _offseason_stage(world),

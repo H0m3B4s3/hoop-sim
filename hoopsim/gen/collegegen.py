@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 from typing import List
 
 from hoopsim.config import DEFAULT_COLLEGE_ECONOMY
@@ -162,6 +163,10 @@ def _build_background_nba(world: World, names: NameGenerator, coach_rng: Rng,
 
 def build_college_world(seed: int = None, economy: str = DEFAULT_COLLEGE_ECONOMY) -> World:
     """Generate a complete college-primary world (no user team selected yet)."""
+    # Always pin a concrete seed so the world is reproducible and shareable, even when the
+    # caller didn't pick one.
+    if seed is None:
+        seed = random.randrange(1 << 30)
     rng = Rng(seed)
     world = World(rng=rng)
     world.mode = "college"
