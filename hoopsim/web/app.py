@@ -130,6 +130,14 @@ class DraftPickBody(BaseModel):
     pid: Optional[int] = None              # None -> best available
 
 
+class ShopPickBody(BaseModel):
+    key: List[int]                         # pick key [year, round, original_tid] to shop
+
+
+class FogBody(BaseModel):
+    enabled: bool                          # toggle potential fog of war
+
+
 class RecruitSignBody(BaseModel):
     """College Signing Day: recruit pid -> NIL amount (NIL mode) or any truthy value
     (scholarship mode means 'offer extended'). Keys arrive as strings over JSON."""
@@ -218,6 +226,24 @@ def roster(tid: int, sid: str = Depends(_sid)):
 @app.get("/api/standings")
 def standings(sid: str = Depends(_sid)):
     return ser.standings_view(_world(sid))
+
+
+@app.get("/api/power")
+def power(sid: str = Depends(_sid)):
+    return ser.power_view(_world(sid))
+
+
+@app.get("/api/fog")
+def fog_get():
+    from hoopsim.systems import scouting as SC
+    return {"enabled": SC.fog_enabled()}
+
+
+@app.post("/api/fog")
+def fog_set(body: FogBody):
+    from hoopsim.systems import scouting as SC
+    SC.set_fog(body.enabled)
+    return {"enabled": SC.fog_enabled()}
 
 
 @app.get("/api/leaders")
@@ -774,13 +800,23 @@ def offseason_pre_draft(sid: str = Depends(_sid)):
     return {"summary": summary, "champion": champ, "awards": latest}
 
 
-def _draft_board(world: World, dc, limit: int = 14):
+def _draft_board(world: World, dc, limit: int = 30):
     remaining = sorted(dc.remaining_prospects(),
                        key=lambda pid: D.prospect_rank(world.players[pid]), reverse=True)[:limit]
-    return [{"pid": pid, **{k: ser.player_row(world, world.players[pid])[k]
-                            for k in ("name", "position", "age", "overall", "potential",
-                                      "archetype")}}
-            for pid in remaining]
+    return [ser.prospect_row(world, world.players[pid]) for pid in remaining]
+
+
+def _user_draft_picks(world: World):
+    """The user's tradeable *future* picks, soonest first — what they can shop on the clock.
+
+    The current draft's order is already fixed, so only later years are tradeable here."""
+    user = world.user_team
+    if user is None:
+        return []
+    cur = world.draft_class.year if world.draft_class else world.season_year
+    picks = sorted((pk for pk in world.picks_owned_by(user.tid) if pk.year > cur),
+                   key=lambda pk: (pk.year, pk.round))
+    return [ser.pick_view(world, pk) for pk in picks]
 
 
 @app.get("/api/draft/board")
@@ -804,7 +840,17 @@ def draft_board(sid: str = Depends(_sid)):
         SESSIONS.autosave(sid)
         return {"complete": True, "recent": recent, "summary": ser.world_summary(world)}
     return {"complete": False, "on_clock": True, "pick": dc.current_pick,
-            "recent": recent, "board": _draft_board(world, dc)}
+            "recent": recent, "board": _draft_board(world, dc),
+            "my_picks": _user_draft_picks(world)}
+
+
+@app.post("/api/draft/shop-pick")
+def draft_shop_pick(body: ShopPickBody, sid: str = Depends(_sid)):
+    """Shop one of the user's draft picks without leaving the draft room."""
+    world = _world(sid)
+    _user_team(world)
+    offers = trades.solicit_pick_offers(world, tuple(body.key))
+    return {"offers": [ser.solicited_offer_view(world, o) for o in offers]}
 
 
 @app.post("/api/draft/pick")

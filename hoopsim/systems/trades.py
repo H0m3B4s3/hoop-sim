@@ -264,6 +264,52 @@ def solicit_offers(world: World, pids: List[int], max_offers: int = 10) -> List[
     return results[:max_offers]
 
 
+def _team_wants_pick(world: World, team: Team, pick) -> bool:
+    """Whether ``team`` would move to acquire the user's pick.
+
+    Everyone covets a first-rounder; only rosters thin on youth bother trading for a second."""
+    if pick.round == 1:
+        return True
+    young = sum(1 for p in roster_players(team, world.players) if p.age <= 23)
+    return young <= 3
+
+
+def solicit_pick_offers(world: World, pick_key: PickKey, max_offers: int = 8
+                        ) -> List[SolicitedOffer]:
+    """Shop one of the user's draft picks: gather what interested teams would give to acquire it.
+
+    The user sends the pick (no salary) and receives players and/or picks, so deals are
+    cap-constrained by the user's own space — exactly the move-down-for-assets logic teams use
+    on draft night. Best haul first; empty if the user doesn't control the pick or no team bites.
+    """
+    user = world.user_team
+    if user is None:
+        return []
+    pick = world.find_pick(*pick_key)
+    if pick is None or pick.owner_tid != user.tid:
+        return []
+    target_value = cap.pick_value(world, pick)
+    user_space = cap.cap_space(world, user)
+    user_size_base = len(user.roster)
+
+    results: List[SolicitedOffer] = []
+    for team in world.team_list():
+        if team.tid == user.tid or not _team_wants_pick(world, team, pick):
+            continue
+        pkg = _best_package(world, team, target_value, 0, user_space, user_size_base, 0)
+        if pkg is None:
+            continue
+        pids_back, picks_back = pkg
+        offer = TradeOffer(user.tid, team.tid, [], pids_back, [pick_key], picks_back)
+        if not validate_trade(world, offer)[0]:
+            continue
+        value = (sum(cap.trade_value(world.players[p]) for p in pids_back)
+                 + _picks_value(world, picks_back))
+        results.append(SolicitedOffer(offer, value, target_value))
+    results.sort(key=lambda o: o.value, reverse=True)
+    return results[:max_offers]
+
+
 # ---------------------------------------------------------------------------
 # AI-initiated offers — the league brings deals to the user (trade-block driven)
 # ---------------------------------------------------------------------------

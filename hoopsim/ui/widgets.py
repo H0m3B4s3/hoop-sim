@@ -153,6 +153,9 @@ def standings_table(world: World, conference: str) -> Table:
     table.add_column("Pct", justify="right")
     table.add_column("GB", justify="right")
     table.add_column("Strk", justify="right")
+    table.add_column("Net", justify="right")
+    from hoopsim.sim import power
+    pwr = power.power_map(world)
     teams = conference_standings(world.team_list(), conference)
     leader_wins = teams[0].wins if teams else 0
     leader_losses = teams[0].losses if teams else 0
@@ -164,8 +167,17 @@ def standings_table(world: World, conference: str) -> Table:
             body = f"[accent]{body}[/accent]"
         name = f"{marker} {body}"   # str cell -> Table parses the markup
         table.add_row(str(i), name, str(t.wins), str(t.losses), f"{t.win_pct:.3f}",
-                      "-" if gb == 0 else f"{gb:.1f}", t.streak_str)
+                      "-" if gb == 0 else f"{gb:.1f}", t.streak_str, _net_str(pwr.get(t.tid)))
     return table
+
+
+def _net_str(pr) -> str:
+    """Signed net rating with a color cue (green good / red bad), for the standings 'Net' column."""
+    if pr is None:
+        return "-"
+    v = pr.power
+    style = "good" if v > 0.5 else ("bad" if v < -0.5 else "muted")
+    return f"[{style}]{v:+.1f}[/{style}]"
 
 
 # ---------------------------------------------------------------------------

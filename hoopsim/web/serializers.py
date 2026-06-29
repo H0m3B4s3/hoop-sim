@@ -21,6 +21,7 @@ from hoopsim.models.world import World
 from hoopsim.sim.boxscore import GameResult
 from hoopsim.sim.season import game_date, regular_season_complete
 from hoopsim.systems import cap
+from hoopsim.systems import scouting as SC
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +145,7 @@ def player_row(world: World, p: Player, *, is_starter: bool = False) -> dict:
     """A roster/list row (mirrors ui.widgets.roster_table). Raw numbers; UI formats them."""
     s = p.season
     team = world.find_team(p.team_id) if p.team_id is not None else None
+    pv = SC.pot_view(p)
     return {
         "pid": p.pid,
         "jersey": p.jersey,
@@ -156,6 +158,11 @@ def player_row(world: World, p: Player, *, is_starter: bool = False) -> dict:
         "class_year": p.class_year,
         "overall": p.overall,
         "potential": p.scouted_potential(),
+        # Fogged potential for display: grade is always safe; band collapses once known.
+        "pot_grade": pv.grade,
+        "pot_low": pv.low,
+        "pot_high": pv.high,
+        "pot_known": pv.known,
         "ppg": round(s.ppg, 1),
         "rpg": round(s.rpg, 1),
         "apg": round(s.apg, 1),
@@ -172,6 +179,16 @@ def player_row(world: World, p: Player, *, is_starter: bool = False) -> dict:
         "on_block": bool(team is not None and p.pid in team.block_list),
         "dead_money_if_waived": (sum(World.dead_money_schedule(p.contract)) if team else 0),
     }
+
+
+def prospect_row(world: World, p: Player) -> dict:
+    """A draft-board row: identity, fogged potential, archetype, and the pre-draft stat line."""
+    row = player_row(world, p)
+    keep = ("pid", "name", "position", "secondary_position", "age", "overall", "potential",
+            "pot_grade", "pot_low", "pot_high", "pot_known", "archetype")
+    out = {k: row[k] for k in keep}
+    out["pre_draft"] = dict(p.pre_draft) if p.pre_draft else None
+    return out
 
 
 def scouting_row(world: World, p: Player, *, on_block: bool = False) -> dict:
@@ -309,6 +326,8 @@ def player_detail(world: World, p: Player) -> dict:
 # ---------------------------------------------------------------------------
 def standings_view(world: World) -> dict:
     """Conference standings with GB and seed markers (mirrors ui.widgets.standings_table)."""
+    from hoopsim.sim import power
+    pwr = power.power_map(world)
     confs = []
     for conf in world_conferences(world):
         teams = conference_standings(world.team_list(), conf)
@@ -317,6 +336,7 @@ def standings_view(world: World) -> dict:
         rows = []
         for i, t in enumerate(teams, start=1):
             gb = ((leader_w - t.wins) + (t.losses - leader_l)) / 2
+            pr = pwr.get(t.tid)
             rows.append({
                 "rank": i,
                 "tid": t.tid,
@@ -329,10 +349,39 @@ def standings_view(world: World) -> dict:
                 "gb": round(gb, 1),
                 "streak": t.streak_str,
                 "point_diff": t.point_diff,
+                "power": round(pr.power, 1) if pr else 0.0,       # net rating
+                "power_rank": pr.rank if pr else 0,               # 1..N leaguewide
                 "is_user": t.tid == world.user_team_id,
             })
         confs.append({"conference": conf, "teams": rows})
     return {"mode": world.mode, "conferences": confs}
+
+
+def power_view(world: World) -> dict:
+    """League power ratings (BPI/SRS-style net rating), best-first, for the Power tab."""
+    from hoopsim.sim import power
+    teams = {t.tid: t for t in world.team_list()}
+    rows = []
+    for r in power.power_ratings(world):
+        t = teams[r.tid]
+        rows.append({
+            "rank": r.rank,
+            "tid": r.tid,
+            "abbrev": t.abbrev,
+            "name": t.full_name,
+            "color": color_hex(t.color),
+            "conference": t.conference,
+            "record": t.record_str,
+            "win_pct": round(t.win_pct, 3),
+            "power": round(r.power, 1),
+            "srs": round(r.srs, 1),
+            "prior": round(r.prior, 1),
+            "sos": round(r.sos, 1),
+            "proj_win_pct": round(r.proj_win_pct, 3),
+            "is_user": t.tid == world.user_team_id,
+        })
+    return {"teams": rows, "games_played": max((t.games_played for t in world.team_list()),
+                                               default=0)}
 
 
 _LEADER_STATS = [
@@ -470,16 +519,19 @@ def solicited_offer_view(world: World, so) -> dict:
                 "value": round(cap.trade_value(p), 1)}
 
     pick_objs = [world.find_pick(*k) for k in offer.b_picks]
+    user_pick_objs = [world.find_pick(*k) for k in offer.a_picks]
     return {
         "partner_tid": offer.b,
         "partner_abbrev": partner.abbrev,
         "partner_name": partner.full_name,
         "partner_color": color_hex(partner.color),
         "user_sends": offer.a_sends,
+        "user_picks": [list(k) for k in offer.a_picks],       # picks the user gives up
         "partner_sends": offer.b_sends,
         "partner_picks": [list(k) for k in offer.b_picks],
         "pieces": [_piece(pid) for pid in offer.b_sends],
         "picks": [pick_view(world, p) for p in pick_objs if p is not None],
+        "gives_picks": [pick_view(world, p) for p in user_pick_objs if p is not None],
         "value": round(so.value, 1),
         "target_value": round(so.target_value, 1),
     }
