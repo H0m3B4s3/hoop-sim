@@ -38,6 +38,9 @@ def archive_season(world: World, champion_tid) -> None:
                 "rpg": round(p.season.rpg, 1), "apg": round(p.season.apg, 1),
                 "ovr": p.overall,
             })
+            # A completed pro season; experience drives salary tiers (cap.max_salary) and how
+            # much scouting fog clears (systems.scouting). Without this it stayed frozen forever.
+            p.experience += 1
 
 
 def expire_contracts(world: World) -> List[int]:

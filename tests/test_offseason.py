@@ -21,6 +21,18 @@ def _played_world(seed=1, games=14):
     return w
 
 
+def test_archiving_a_season_accrues_experience():
+    w = _played_world(seed=3)
+    # Snapshot experience for everyone who actually played before the season rolls over.
+    before = {pid: p.experience for pid, p in w.players.items() if p.season.gp > 0}
+    assert before  # someone played
+    offseason.pre_draft(w, P.champion(w))
+    # pre_draft also ages/retires players, so only check those who are still around.
+    for pid, exp in before.items():
+        if pid in w.players:
+            assert w.players[pid].experience == exp + 1
+
+
 def test_rookie_salary_monotonic():
     salaries = [draft_system.rookie_salary(p) for p in range(1, 61)]
     assert salaries == sorted(salaries, reverse=True)

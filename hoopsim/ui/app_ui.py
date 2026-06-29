@@ -76,10 +76,21 @@ def new_career() -> Optional[World]:
     ])
     if league is None:
         return None
-    seed = random.randrange(1 << 30)
+    seed = _choose_seed()
     if league == "college":
         return _new_college_career(seed)
     return _new_nba_career(seed)
+
+
+def _choose_seed() -> int:
+    """Let the player paste a seed to reproduce/share a world, or roll a fresh random one."""
+    raw = ask_text("World seed (blank = random)", default="").strip()
+    if raw:
+        try:
+            return int(raw)
+        except ValueError:
+            console.print("[warn]Not a number — using a random seed.[/warn]")
+    return random.randrange(1 << 30)
 
 
 def _new_nba_career(seed: int) -> Optional[World]:

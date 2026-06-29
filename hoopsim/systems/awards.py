@@ -73,7 +73,11 @@ def compute_awards(world: World) -> dict:
                       for i in range(0, min(15, len(eligible)), 5)]
         awards["all_league"] = all_league
 
-    rookies = [p for p in rostered if not p.career and p.season.gp >= rookie_gp]
+    # A true rookie has no archived career *and* no completed pro seasons. The career check alone
+    # isn't enough on the very first simulated season, when every player's career is still empty —
+    # without the experience gate a generated veteran would walk off with Rookie of the Year.
+    rookies = [p for p in rostered
+               if not p.career and p.experience == 0 and p.season.gp >= rookie_gp]
     if rookies:
         awards["roy"] = _entry(world, max(rookies, key=val))
 

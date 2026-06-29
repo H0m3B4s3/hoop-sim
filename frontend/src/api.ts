@@ -39,6 +39,7 @@ export interface TeamBrief {
 
 export interface Summary {
   season_year: number;
+  seed?: number | null;
   phase: string;
   phase_label: string;
   offseason_stage?: string | null;

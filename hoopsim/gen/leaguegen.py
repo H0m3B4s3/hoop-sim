@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 from typing import List
 
 from hoopsim.config import (DEFAULT_SEASON_PRESET, ROOKIE_AGE_RANGE, SALARY_CAP, SEASON_PRESETS,
@@ -159,6 +160,10 @@ def _build_free_agents(world: World, names: NameGenerator) -> None:
 
 def build_world(seed: int = None, season_preset: str = DEFAULT_SEASON_PRESET) -> World:
     """Generate a complete, ready-to-play league world (no user team selected yet)."""
+    # Always pin a concrete seed so the world is reproducible and shareable, even when the
+    # caller didn't pick one.
+    if seed is None:
+        seed = random.randrange(1 << 30)
     rng = Rng(seed)
     world = World(rng=rng)
     world.season_year = 2025

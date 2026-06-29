@@ -62,6 +62,8 @@ def header(world: World) -> None:
                 left = trades.trade_deadline_day(world) - world.day
                 style = "warn" if left <= 7 else "dim"
                 bits.append(Text(f"  Trade deadline in {left}d", style=style))
+    if world.rng.seed is not None:
+        bits.append(Text(f"  Seed {world.rng.seed}", style="dim"))
     line = Text()
     for b in bits:
         line.append_text(b)
