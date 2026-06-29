@@ -7,6 +7,8 @@ name = "hoopsim"
 version = "0.1.0"
 description = "A text-based Football-Manager-style basketball management simulation"
 readme = "README.md"
+license = { text = "PolyForm-Noncommercial-1.0.0" }
+license-files = ["LICENSE.md"]
 requires-python = ">=3.9"
 dependencies = ["rich>=13.0"]
 

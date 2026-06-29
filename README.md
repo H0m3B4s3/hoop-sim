@@ -84,12 +84,25 @@ late-game intentional fouling**.
   web app alike (NBA & college, regular season + postseason).
 - **Run a season** — an 82-game (or Quick 30-game) schedule, live standings with tiebreakers,
   play-in tournament, and a best-of-7 playoff bracket through to a champion.
+- **Know where you stand** — **Power Rankings** (a BPI/SRS-style net rating) on every standings
+  table and a dedicated tab. Each team's number blends a schedule-adjusted **Simple Rating System**
+  (margin + strength of schedule) with a **roster-talent prior**; the prior carries the number early
+  in the season — when records are noise — and fades as games are played. Includes a projected
+  win %, so you can judge buyers vs. sellers before the trade deadline.
 - **Work the front office** — propose cap-legal trades (with an AI that values players by
   production, age, upside, and contract), sign free agents within the salary cap, and track
   finances and the luxury tax.
 - **Draft & develop** — a lottery-weighted, two-round draft (interactive for your picks), rookie
   scale contracts, and an offseason where young players grow toward their potential while
-  veterans decline.
+  veterans decline. Each draft class has its own **shape** — most years carry only a couple of
+  genuine top prospects atop a steep cliff, with the occasional loaded class that runs deep and
+  the occasional down year where even the #1 pick is merely solid. Prospects show a **pre-draft
+  stat line** (college/international per-game production) alongside their archetype, and you can
+  **shop your picks for offers right from the draft room** — no tabbing out to the trade screen.
+- **Scout under fog of war** — player **potential** is hidden behind a confidence band and a letter
+  grade (e.g. `B+ (78–86)`) that tightens as a player proves himself; an unproven prospect's
+  ceiling is a guess, a settled veteran's is known. Toggle the fog on/off (🌫 / 👁 in the top bar,
+  or `config.FOG_OF_WAR`) to inspect the exact numbers.
 - **Save & load** — multiple named save slots plus autosave, with fully reproducible simulations
   (the RNG state is part of the save).
 
@@ -235,3 +248,8 @@ Rotations & depth chart (planned)
 - Teams and players are entirely fictional and procedurally generated.
 - A league is created from a random seed shown when you start a career; the same seed reproduces
   the same league.
+
+## License
+
+Licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). You're free to fork,
+modify, and share it for any **noncommercial** purpose. Commercial use is not permitted.
