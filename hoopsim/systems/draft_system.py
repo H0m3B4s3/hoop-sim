@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from typing import List
 
-from hoopsim.config import FUTURE_PICK_YEARS, ROOKIE_CONTRACT_YEARS, ROOKIE_SCALE
+from hoopsim.config import (FUTURE_PICK_YEARS, ROOKIE_AGE_RANGE, ROOKIE_CONTRACT_YEARS,
+                            ROOKIE_SCALE)
 from hoopsim.gen.namegen import NameGenerator
 from hoopsim.gen.playergen import make_player
 from hoopsim.models.contract import flat_contract
@@ -14,27 +15,109 @@ from hoopsim.models.world import World
 
 PROSPECTS = 70
 
+# --- Draft-class talent shape --------------------------------------------------
+# Each class gets its own ceiling and depth so seasons feel different: most years carry one or
+# two genuine blue-chippers atop a steep cliff, the occasional loaded class runs deep, and a
+# down year produces a #1 who is merely solid. POT for the prospect ranked ``i`` (0-based) is
+#     top - depth * (CLIFF*(1 - e**(-i/CLIFF_TAU)) + TAIL*i) + noise
+# i.e. a sharp early drop that saturates, plus a gentle linear tail for the back of the board.
+_POT_CLIFF = 11.0       # magnitude of the early talent cliff (top picks → mid-70s ceilings)
+_POT_CLIFF_TAU = 2.0    # how quickly the cliff bites (smaller = steeper)
+_POT_TAIL = 0.13        # slow linear decay across the rest of the board
+
+
+def _class_profile(rng) -> tuple:
+    """Roll this draft's ceiling and depth.
+
+    ``top`` is the #1 prospect's potential; its Gaussian tails are what make a class loaded or
+    weak. ``depth`` scales the whole decay curve: < 1 stretches talent deep into the board,
+    > 1 collapses it onto the very top picks.
+    """
+    top = max(77.0, min(90.0, rng.gauss(84.0, 3.2)))
+    depth = max(0.82, min(1.4, rng.gauss(1.0, 0.22)))
+    return top, depth
+
+
+def _prospect_potential(rng, top: float, depth: float, rank: int) -> int:
+    import math
+    cliff = _POT_CLIFF * (1.0 - math.exp(-rank / _POT_CLIFF_TAU))
+    drop = depth * (cliff + _POT_TAIL * rank)
+    return int(round(max(55.0, min(95.0, top - drop + rng.gauss(0, 1.7)))))
+
 
 # ---------------------------------------------------------------------------
 # Generation & ordering
 # ---------------------------------------------------------------------------
 def generate_draft_class(world: World) -> List[int]:
     names = NameGenerator(world.rng)
+    rng = world.rng
+    top, depth = _class_profile(rng)
     ids: List[int] = []
     for i in range(PROSPECTS):
-        base = 75 - i * 0.34
-        target = int(max(48, min(80, round(base + world.rng.gauss(0, 3.0)))))
-        p = make_player(world.rng, world.new_pid(), names,
+        pot = _prospect_potential(rng, top, depth, i)
+        age = rng.randint(*ROOKIE_AGE_RANGE)
+        # Current ability trails potential by a youth gap — younger prospects are rawer, so the
+        # gap is bigger; the floor keeps a few polished, NBA-ready picks each year.
+        gap = max(2.0, min(22.0, rng.gauss(13.0 - (age - 19) * 2.0, 3.0)))
+        target = int(max(48, min(86, round(pot - gap))))
+        p = make_player(rng, world.new_pid(), names, age=age,
                         target_overall=target, is_prospect=True)
         p.team_id = None
+        p.potential = max(p.overall, pot)
+        p.pre_draft = _pre_draft_stats(rng, p)
         world.add_player(p)
         ids.append(p.pid)
+    # Board order follows scouted talent, which only loosely tracks true potential (fog of war):
+    # a polished prospect can out-rank a rawer one with a higher ceiling.
     ids.sort(key=lambda pid: prospect_rank(world.players[pid]), reverse=True)
     return ids
 
 
 def prospect_rank(player) -> float:
     return 0.45 * player.overall + 0.55 * player.scouted_potential()
+
+
+# Where a prospect played before the draft — pure flavor, weighted toward big programs.
+_PRE_DRAFT_LEVELS = [
+    ("NCAA — Power Conf", 0.52), ("NCAA — Mid-Major", 0.22),
+    ("International", 0.18), ("G League Ignite", 0.08),
+]
+
+
+def _pre_draft_stats(rng, p) -> dict:
+    """A plausible per-game college/international line inferred from a prospect's ratings.
+
+    Not used by the engine — it gives the user a scouting profile to read alongside the
+    archetype, and (like real pre-draft stats) it's only a loose proxy for pro potential.
+    """
+    r = p.ratings
+    big = p.position in ("PF", "C")
+    guard = p.position in ("PG", "SG")
+    scoring = 0.45 * r["finishing"] + 0.30 * r["three_point"] + 0.25 * r["mid_range"]
+    usage = 0.6 * r["ball_handle"] + 0.4 * r["off_iq"]
+    ppg = 9.0 + (scoring - 60) * 0.55 + (usage - 60) * 0.06 + rng.gauss(0, 1.8)
+    fc = 1.25 if big else (1.0 if p.position == "SF" else 0.78)
+    rpg = 2.0 + r["rebounding"] * fc * 0.072 + rng.gauss(0, 0.7)
+    gf = 1.2 if guard else (0.85 if p.position == "SF" else 0.55)
+    apg = 0.8 + (r["passing"] * 0.05 + r["ball_handle"] * 0.025) * gf + rng.gauss(0, 0.5)
+    spg = 0.3 + r["steal"] * 0.018 + rng.gauss(0, 0.2)
+    bpg = 0.2 + r["block"] * (0.03 if big else 0.01) + rng.gauss(0, 0.2)
+    fg = 0.40 + (r["finishing"] - 60) * 0.0026 + (0.03 if big else 0.0)
+    tp = 0.27 + (r["three_point"] - 55) * 0.0028
+    games = rng.randint(24, 35)
+    level = rng.weighted_one([lv for lv, _ in _PRE_DRAFT_LEVELS],
+                             [w for _, w in _PRE_DRAFT_LEVELS])
+    return {
+        "level": level,
+        "gp": games,
+        "ppg": round(max(2.0, ppg), 1),
+        "rpg": round(max(1.0, rpg), 1),
+        "apg": round(max(0.3, apg), 1),
+        "spg": round(max(0.1, spg), 1),
+        "bpg": round(max(0.0, bpg), 1),
+        "fg_pct": round(min(0.68, max(0.34, fg)), 3),
+        "tp_pct": round(min(0.50, max(0.18, tp)), 3),
+    }
 
 
 # ---------------------------------------------------------------------------

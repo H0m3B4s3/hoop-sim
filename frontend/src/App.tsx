@@ -192,6 +192,7 @@ const NAV: { key: string; label: string }[] = [
   { key: "lineup", label: "Lineup" },
   { key: "tactics", label: "Tactics" },
   { key: "standings", label: "Standings" },
+  { key: "power", label: "Power Rankings" },
   { key: "leaders", label: "Leaders" },
   { key: "history", label: "History" },
   { key: "finances", label: "Finances" },
@@ -287,6 +288,7 @@ function Hub({
           {tab === "lineup" && <LineupPanel onPlayer={setOpenPid} toast={toast} />}
           {tab === "tactics" && <TacticsPanel toast={toast} />}
           {tab === "standings" && <StandingsPanel />}
+          {tab === "power" && <PowerPanel />}
           {tab === "leaders" && <LeadersPanel onPlayer={setOpenPid} />}
           {tab === "history" && <HistoryPanel onPlayer={setOpenPid} />}
           {tab === "finances" && (
@@ -386,6 +388,7 @@ function TopBar({
             : `Schol ${summary.scholarships_used}/${summary.scholarship_limit}`
           : `Payroll ${money(summary.payroll)} / ${money(summary.salary_cap)}`}
       </div>
+      <FogToggle />
       <ThemeToggle />
       <button className="ghost" onClick={save}>
         💾 Save
@@ -790,6 +793,34 @@ function OvrCell({ v }: { v: number }) {
 }
 const OVR = (v: number) => <OvrCell v={v} />;
 
+// Net rating (power) cell: signed points-vs-average, green/red, with optional league rank.
+function NetRating({ v, rank }: { v: number; rank?: number }) {
+  const color = v > 0.5 ? "var(--good, #2e9e5b)" : v < -0.5 ? "var(--bad, #d1495b)" : "var(--muted, #9aa0a6)";
+  const txt = v > 0 ? `+${v.toFixed(1)}` : v.toFixed(1);
+  return (
+    <span style={{ color, fontWeight: 600 }}>
+      {txt}
+      {rank ? <span style={{ color: "var(--muted, #9aa0a6)", fontWeight: 400, marginLeft: 4 }}>#{rank}</span> : null}
+    </span>
+  );
+}
+
+// Fogged potential: a letter grade + confidence band for unproven players; a bare number once
+// the ceiling is settled. Reads pot_grade/pot_low/pot_high/pot_known from a serialized row.
+function PotCell({ row }: { row: Row }) {
+  const { theme } = useTheme();
+  const known = row.pot_known;
+  const mid = known ? row.potential : Math.round((row.pot_low + row.pot_high) / 2);
+  const band =
+    known || row.pot_low === row.pot_high ? `${row.potential}` : `${row.pot_low}–${row.pot_high}`;
+  return (
+    <span style={{ whiteSpace: "nowrap" }}>
+      <span style={{ fontWeight: 600 }}>{row.pot_grade}</span>
+      <span style={{ color: ovrColor(mid, theme), marginLeft: 5 }}>{band}</span>
+    </span>
+  );
+}
+
 // Position label including a dual-position player's secondary slot (e.g. "PG/SG"), matching
 // the college recruiting board. The roster/FA/scouting tables otherwise drop it entirely.
 const posLabel = (p: Row) =>
@@ -898,7 +929,7 @@ function rosterColumns(
         }
       : { accessorKey: "age", header: "Age" },
     { accessorKey: "overall", header: "OVR", cell: (c) => OVR(c.getValue() as number) },
-    { accessorKey: "potential", header: "POT" },
+    { accessorKey: "potential", header: "POT", cell: (c) => <PotCell row={c.row.original} /> },
     { accessorKey: "ppg", header: "PPG" },
     { accessorKey: "rpg", header: "RPG" },
     { accessorKey: "apg", header: "APG" },
@@ -1205,6 +1236,11 @@ function StandingsPanel() {
     },
     { accessorKey: "streak", header: "Strk" },
     { accessorKey: "point_diff", header: "Diff" },
+    {
+      accessorKey: "power",
+      header: "Net",
+      cell: (c) => <NetRating v={c.getValue() as number} rank={c.row.original.power_rank} />,
+    },
   ];
   return (
     <div className={data.conferences.length > 2 ? "standGrid many" : "standGrid"}>
@@ -1219,6 +1255,72 @@ function StandingsPanel() {
           />
         </div>
       ))}
+    </div>
+  );
+}
+
+function PowerPanel() {
+  const [data, setData] = useState<any | null>(null);
+  useEffect(() => {
+    api.power().then(setData).catch(() => {});
+  }, []);
+  if (!data) return <Loading />;
+  const cols: ColumnDef<Row, any>[] = [
+    { accessorKey: "rank", header: "#" },
+    {
+      accessorKey: "name",
+      header: "Team",
+      cell: (c) => (
+        <span className={c.row.original.is_user ? "userTeam" : ""}>
+          <TeamTag
+            abbrev={c.row.original.abbrev}
+            color={c.row.original.color}
+            name={c.getValue() as string}
+          />
+        </span>
+      ),
+    },
+    { accessorKey: "record", header: "Rec" },
+    {
+      accessorKey: "power",
+      header: "Net",
+      cell: (c) => <NetRating v={c.getValue() as number} />,
+    },
+    {
+      accessorKey: "proj_win_pct",
+      header: "Proj",
+      cell: (c) => (c.getValue() as number).toFixed(3),
+    },
+    {
+      accessorKey: "srs",
+      header: "SRS",
+      cell: (c) => <NetRating v={c.getValue() as number} />,
+    },
+    {
+      accessorKey: "prior",
+      header: "Talent",
+      cell: (c) => <NetRating v={c.getValue() as number} />,
+    },
+    {
+      accessorKey: "sos",
+      header: "SOS",
+      cell: (c) => <NetRating v={c.getValue() as number} />,
+    },
+  ];
+  return (
+    <div className="card">
+      <h4>Power Rankings</h4>
+      <p className="muted" style={{ marginTop: 0, fontSize: "0.85em" }}>
+        Net rating (points vs. an average team){data.games_played < 20 ? " — early-season numbers lean on roster talent" : ""}.
+        Blends results-based <b>SRS</b> (schedule-adjusted margin) with a roster <b>Talent</b> prior;
+        the prior's weight fades as games are played. <b>SOS</b> is strength of schedule faced.
+      </p>
+      <DataTable
+        data={data.teams}
+        columns={cols}
+        initialSort={[{ id: "rank", desc: false }]}
+        search={false}
+      />
     </div>
   );
 }
@@ -1330,7 +1432,7 @@ function FreeAgentsPanel({
     { accessorKey: "position", header: "Pos", cell: (c) => posLabel(c.row.original) },
     { accessorKey: "age", header: "Age" },
     { accessorKey: "overall", header: "OVR", cell: (c) => OVR(c.getValue() as number) },
-    { accessorKey: "potential", header: "POT" },
+    { accessorKey: "potential", header: "POT", cell: (c) => <PotCell row={c.row.original} /> },
     { accessorKey: "ask", header: "Asking", cell: (c) => money(c.getValue() as number) },
     {
       id: "sign",
@@ -1414,7 +1516,7 @@ function ScoutingPanel({ onPlayer }: { onPlayer: (pid: number) => void }) {
     { accessorKey: "position", header: "Pos", cell: (c) => posLabel(c.row.original) },
     { accessorKey: "age", header: "Age" },
     { accessorKey: "overall", header: "OVR", cell: (c) => OVR(c.getValue() as number) },
-    { accessorKey: "potential", header: "POT" },
+    { accessorKey: "potential", header: "POT", cell: (c) => <PotCell row={c.row.original} /> },
     ...COMPOSITE_COLS.map(
       (c): ColumnDef<Row, any> => ({
         id: c.key,
@@ -1570,7 +1672,7 @@ function LineupPanel({
                 </td>
                 <td>{p?.position}</td>
                 <td>{p && OVR(p.overall)}</td>
-                <td>{p?.potential}</td>
+                <td>{p && <PotCell row={p} />}</td>
                 <td>{p?.off}</td>
                 <td>{p?.def}</td>
                 <td>{p?.minutes}</td>
@@ -1616,7 +1718,7 @@ function LineupPanel({
                 </td>
                 <td>{posLabel(p)}</td>
                 <td>{OVR(p.overall)}</td>
-                <td>{p.potential}</td>
+                <td><PotCell row={p} /></td>
                 <td>{p.minutes}</td>
                 <td>
                   <button className="mini" onClick={() => demote(pid)}>
@@ -1661,7 +1763,7 @@ function LineupPanel({
                 </td>
                 <td>{posLabel(p)}</td>
                 <td>{OVR(p.overall)}</td>
-                <td>{p.potential}</td>
+                <td><PotCell row={p} /></td>
                 <td>{p.minutes}</td>
                 <td>
                   <button className="mini" onClick={() => promote(pid)}>
@@ -2627,6 +2729,9 @@ function OffseasonPanel({
             {board.recent.map((r: any) => `#${r.pick} ${r.team} ${r.player}`).join(" · ")}
           </div>
         )}
+        {board?.my_picks?.length > 0 && (
+          <DraftShop picks={board.my_picks} toast={toast} onTrade={() => { refresh(); loadBoard(); }} />
+        )}
         {board && (
           <>
             <div className="toolbar">
@@ -2643,6 +2748,9 @@ function OffseasonPanel({
                   <th>Age</th>
                   <th>OVR</th>
                   <th>POT</th>
+                  <th>PPG</th>
+                  <th>RPG</th>
+                  <th>APG</th>
                   <th></th>
                 </tr>
               </thead>
@@ -2651,12 +2759,19 @@ function OffseasonPanel({
                   <tr key={p.pid}>
                     <td>{i + 1}</td>
                     <td>
-                      {p.name} <span className="muted">{p.archetype}</span>
+                      {p.name}{" "}
+                      <span className="muted">
+                        {p.archetype}
+                        {p.pre_draft?.level ? ` · ${p.pre_draft.level}` : ""}
+                      </span>
                     </td>
-                    <td>{p.position}</td>
+                    <td>{posLabel(p)}</td>
                     <td>{p.age}</td>
                     <td>{OVR(p.overall)}</td>
-                    <td>{p.potential}</td>
+                    <td><PotCell row={p} /></td>
+                    <td>{p.pre_draft?.ppg ?? "—"}</td>
+                    <td>{p.pre_draft?.rpg ?? "—"}</td>
+                    <td>{p.pre_draft?.apg ?? "—"}</td>
                     <td>
                       <button className="mini" onClick={() => pick(p.pid)}>
                         Draft
@@ -2687,6 +2802,94 @@ function OffseasonPanel({
     <div className="card">
       <h3>New season underway!</h3>
       <p className="muted">Head to the Play tab to tip off.</p>
+    </div>
+  );
+}
+
+// Shop your draft picks without leaving the draft room: solicit what rival GMs would give to
+// acquire a pick, then accept the best return inline.
+function DraftShop({
+  picks,
+  toast,
+  onTrade,
+}: {
+  picks: Row[];
+  toast: (m: string) => void;
+  onTrade: () => void;
+}) {
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const [offers, setOffers] = useState<Row[] | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const keyStr = (k: number[]) => k.join("-");
+  const shop = async (pk: Row) => {
+    const ks = keyStr(pk.key);
+    if (openKey === ks) {
+      setOpenKey(null);
+      return;
+    }
+    setBusy(true);
+    setOpenKey(ks);
+    setOffers(null);
+    const r = await api.shopPick(pk.key).catch((e) => toast(String(e)));
+    setBusy(false);
+    setOffers(r ? r.offers : []);
+  };
+  const accept = async (o: Row) => {
+    const r = await api
+      .acceptOffer({
+        partner_tid: o.partner_tid,
+        user_sends: [],
+        user_picks: o.user_picks,
+        partner_sends: o.partner_sends,
+        partner_picks: o.partner_picks,
+      })
+      .catch((e) => toast(String(e)));
+    if (r?.executed) {
+      toast("Trade completed.");
+      setOpenKey(null);
+      setOffers(null);
+      onTrade();
+    }
+  };
+
+  return (
+    <div className="card" style={{ marginBottom: 12, background: "var(--surface-2, transparent)" }}>
+      <h5 style={{ margin: "0 0 6px" }}>Shop your picks</h5>
+      <div className="toolbar" style={{ flexWrap: "wrap", gap: 6 }}>
+        {picks.map((pk) => (
+          <button
+            key={keyStr(pk.key)}
+            className={openKey === keyStr(pk.key) ? "mini active" : "mini"}
+            onClick={() => shop(pk)}
+          >
+            {pk.label}
+          </button>
+        ))}
+      </div>
+      {openKey && (
+        <div style={{ marginTop: 8 }}>
+          {busy && <div className="muted small">Calling around the league…</div>}
+          {offers && offers.length === 0 && !busy && (
+            <div className="muted small">No team made an offer for that pick.</div>
+          )}
+          {offers?.map((o, i) => (
+            <div key={i} className="offerRow" style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", borderTop: "1px solid var(--border, #2a2a2a)" }}>
+              <TeamTag abbrev={o.partner_abbrev} color={o.partner_color} name={o.partner_name} />
+              <span className="muted small" style={{ flex: 1 }}>
+                gives{" "}
+                {[
+                  ...o.pieces.map((p: Row) => `${p.name} (${p.position} ${p.overall})`),
+                  ...o.picks.map((p: Row) => p.label),
+                ].join(", ") || "—"}
+              </span>
+              <button className="mini primary" onClick={() => accept(o)}>
+                Accept
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -3060,7 +3263,10 @@ function PlayerModal({
           <span>
             <b style={{ color: ovrColor(p.overall, theme) }}>{p.name}</b>{" "}
             <span className="muted">
-              {posLabel(p)} · {p.archetype} · OVR {p.overall} · POT {p.potential}
+              {posLabel(p)} · {p.archetype} · OVR {p.overall} · POT{" "}
+              {p.pot_known
+                ? p.potential
+                : `${p.pot_grade} (${p.pot_low}–${p.pot_high})`}
             </span>
           </span>
         ) : (
@@ -3152,6 +3358,26 @@ function ThemeToggle() {
       aria-label="Toggle color theme"
     >
       {theme === "dark" ? "☀" : "☾"}
+    </button>
+  );
+}
+
+// Scout fog of war: when on, potential shows as a grade + band; off reveals exact ceilings.
+function FogToggle() {
+  const [on, setOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    api.fogGet().then((r) => setOn(r.enabled)).catch(() => {});
+  }, []);
+  if (on === null) return null;
+  const flip = () => api.fogSet(!on).then((r) => setOn(r.enabled)).catch(() => {});
+  return (
+    <button
+      className="ghost themeToggle"
+      onClick={flip}
+      title={on ? "Scouting fog ON — potentials shown as grades/bands. Click to reveal exact numbers." : "Scouting fog OFF — exact potentials shown. Click to restore fog."}
+      aria-label="Toggle scouting fog of war"
+    >
+      {on ? "🌫" : "👁"}
     </button>
   );
 }

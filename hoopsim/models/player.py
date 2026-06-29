@@ -58,6 +58,10 @@ class Player:
     # Hidden: scouting uncertainty on potential (set at generation, never shown raw).
     scout_error: int = 0
 
+    # Pre-draft scouting production (college/international per-game line). Set for draft prospects
+    # so the user can read a stat profile, not just an archetype; ``None`` for everyone else.
+    pre_draft: Optional[Dict[str, float]] = None
+
     season: StatLine = field(default_factory=StatLine)
     playoffs: StatLine = field(default_factory=StatLine)
     career: List[dict] = field(default_factory=list)   # one summary dict per finished season
@@ -125,6 +129,7 @@ class Player:
             "college": self.college,
             "redshirt": self.redshirt,
             "scout_error": self.scout_error,
+            "pre_draft": dict(self.pre_draft) if self.pre_draft else None,
             "season": self.season.to_dict(),
             "playoffs": self.playoffs.to_dict(),
             "career": list(self.career),
@@ -157,6 +162,7 @@ class Player:
             college=d.get("college", ""),
             redshirt=d.get("redshirt", False),
             scout_error=d.get("scout_error", 0),
+            pre_draft=(dict(d["pre_draft"]) if d.get("pre_draft") else None),
             season=StatLine.from_dict(d.get("season", {})),
             playoffs=StatLine.from_dict(d.get("playoffs", {})),
             career=list(d.get("career", [])),

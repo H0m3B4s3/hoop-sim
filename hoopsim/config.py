@@ -67,6 +67,11 @@ RATING_MIN = 25
 RATING_MAX = 99
 POTENTIAL_FLOOR = 40
 
+# Fog of war over player potential: when True, the UI shows a confidence band + letter grade for
+# unproven players instead of the raw ceiling. Flip to False to inspect the exact numbers (e.g.
+# when checking draft-class distributions). User-toggleable at runtime via systems.scouting.
+FOG_OF_WAR = True
+
 # ---------------------------------------------------------------------------
 # Salary cap & finances (simplified, faithful in spirit; whole dollars)
 # ---------------------------------------------------------------------------
