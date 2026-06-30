@@ -150,6 +150,23 @@ def test_api_depth_chart_groups_by_position():
     assert any(p["is_starter"] for g in dc["positions"] for p in g["players"])
 
 
+def test_api_set_and_clear_role():
+    client = TestClient(app)
+    state = client.post("/api/career/new",
+                        json={"league": "nba", "preset": "Quick", "seed": 5}).json()
+    tid = state["summary"]["teams"][0]["tid"]
+    client.post(f"/api/career/team/{tid}")
+    roster = client.get(f"/api/teams/{tid}/roster").json()
+    assert "closer" in roster["role_tags"]
+    pid = roster["players"][0]["pid"]
+    view = client.post("/api/role", json={"role": "closer", "pid": pid}).json()
+    assert view["roles"]["closer"] == pid
+    cleared = client.post("/api/role", json={"role": "closer", "pid": None}).json()
+    assert "closer" not in cleared["roles"]
+    bad = client.post("/api/role", json={"role": "bogus", "pid": pid})
+    assert bad.status_code == 400
+
+
 def test_api_waive_and_extend():
     from hoopsim.config import ROSTER_MIN
     client = TestClient(app)

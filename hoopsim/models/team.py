@@ -32,6 +32,7 @@ class Team:
     minutes_target: Dict[int, int] = field(default_factory=dict)  # pid -> target minutes
     auto_lineup: bool = True                               # False -> user set the starting five
     rotation: List[int] = field(default_factory=list)      # user-pinned rotation beyond the starters; [] -> automatic
+    roles: Dict[str, int] = field(default_factory=dict)    # role tag -> pid (one player per role); see ROLE_TAGS
     tactics: Tactics = field(default_factory=Tactics)
     coach: Optional[Coach] = None                          # head coach (rotation/tactics identity)
 
@@ -95,6 +96,9 @@ class Team:
             self.starters.remove(pid)
         if pid in self.rotation:
             self.rotation.remove(pid)
+        for role, holder in list(self.roles.items()):
+            if holder == pid:
+                del self.roles[role]
         self.minutes_target.pop(pid, None)
 
     # -- results ------------------------------------------------------------
@@ -135,6 +139,7 @@ class Team:
             "minutes_target": {str(k): v for k, v in self.minutes_target.items()},
             "auto_lineup": self.auto_lineup,
             "rotation": list(self.rotation),
+            "roles": {k: v for k, v in self.roles.items()},
             "tactics": self.tactics.to_dict(),
             "coach": self.coach.to_dict() if self.coach else None,
             "wins": self.wins,
@@ -170,6 +175,7 @@ class Team:
             minutes_target={int(k): v for k, v in d.get("minutes_target", {}).items()},
             auto_lineup=d.get("auto_lineup", True),
             rotation=list(d.get("rotation", [])),
+            roles={k: int(v) for k, v in d.get("roles", {}).items()},
             tactics=Tactics.from_dict(d.get("tactics", {})),
             coach=Coach.from_dict(d["coach"]) if d.get("coach") else None,
             wins=d.get("wins", 0),
@@ -244,6 +250,25 @@ def assign_positions(five: List[Player]) -> List[int]:
 # Cap how deep a user can spread minutes so a pinned rotation stays meaningful (not a 15-man mob).
 MAX_ROTATION = 12       # starters + pinned reserves
 
+# Role tags bias the rotation/closing math. Each tag belongs to at most one player on a team
+# (``team.roles`` maps tag -> pid); a player may hold more than one. The engine reads them:
+#   sixth_man     -> jumps the bench queue (first reserve off the bench, most reserve minutes)
+#   defensive_ace -> earns extra minutes against strong offenses
+#   closer        -> overrides crunch-time lineup selection (on the floor to close, if able)
+ROLE_TAGS = ("sixth_man", "defensive_ace", "closer")
+ROLE_LABELS = {"sixth_man": "Sixth Man", "defensive_ace": "Defensive Ace", "closer": "Closer"}
+# How hard the sixth man's minutes weight is boosted so he tops the bench queue.
+SIXTH_MAN_WEIGHT_BOOST = 1.6
+
+
+def role_pid(team: Team, role: str, players: Dict[int, Player]) -> Optional[int]:
+    """The pid tagged with ``role`` if they're on the roster and available, else None."""
+    pid = team.roles.get(role)
+    if pid is None or pid not in team.roster:
+        return None
+    p = players.get(pid)
+    return pid if p is not None and p.available else None
+
 
 def auto_set_lineup(team: Team, players: Dict[int, Player]) -> None:
     """Set the starting five and rotation minutes.
@@ -285,9 +310,15 @@ def rotation_pool(team: Team, players: Dict[int, Player]) -> List[Player]:
         return []
     prof = profile_for(team)                       # rotation shape comes from the head coach
     pool.sort(key=lambda p: (p.pid in team.starters, p.overall), reverse=True)
+    sixth = role_pid(team, "sixth_man", players)   # a tagged sixth man always draws minutes
     if not team.rotation:
-        return pool[:prof.rotation_size]
+        chosen = pool[:prof.rotation_size]
+        if sixth is not None and all(p.pid != sixth for p in chosen):
+            chosen = chosen + [p for p in pool if p.pid == sixth]
+        return chosen
     pinned = set(team.starters) | set(team.rotation)
+    if sixth is not None:
+        pinned.add(sixth)
     chosen = [p for p in pool if p.pid in pinned]
     if len(chosen) < STARTERS:                      # injuries gutted the rotation; backfill to a five
         for p in pool:
@@ -311,6 +342,11 @@ def set_auto_minutes(team: Team, players: Dict[int, Player]) -> None:
     prof = profile_for(team)                       # rotation shape comes from the head coach
     rotation = rotation_pool(team, players)
     weights = [max(1.0, p.overall - 55) ** prof.star_reliance for p in rotation]
+    sixth = role_pid(team, "sixth_man", players)   # boost so he tops the bench queue
+    if sixth is not None:
+        for i, p in enumerate(rotation):
+            if p.pid == sixth and p.pid not in team.starters:
+                weights[i] *= SIXTH_MAN_WEIGHT_BOOST
     total_w = sum(weights)
     minutes = game_minutes(team.league)            # 48 (NBA) or 40 (college)
     total_minutes = STARTERS * minutes

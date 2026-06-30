@@ -29,6 +29,9 @@ SUB_INTERVAL = 168          # game-seconds between rotation checks
 # per-position subs. Tuned per branch since the two priority functions live on different scales.
 POS_BALANCE_WEIGHT = 200.0          # normal rotation (priority is in remaining-seconds units)
 CLUTCH_POS_BALANCE_WEIGHT = 25.0    # crunch time (priority is overall*10; keep talent dominant)
+# Role-tag biases (see models/team.ROLE_TAGS).
+CLOSER_CLUTCH_BONUS = 1000.0        # clutch priority bump: enough to override talent-based selection
+DEF_ACE_MINUTES_BONUS = 250.0       # normal-priority bump, scaled by opponent offensive strength
 FOUL_OUT = 6
 MAX_PUTBACKS = 3
 BONUS_FOULS = 5             # team fouls in a period that put the opponent in the bonus
@@ -59,6 +62,23 @@ def _stamina_factor(p: Player) -> float:
     return 1.15 - p.ratings["stamina"] / 200.0
 
 
+def _team_offense_strength(state: "_TeamState") -> float:
+    """How dangerous a team's offense is, 0 (replacement-level) .. 1 (elite), from its top players.
+
+    Drives the defensive-ace minutes bonus: the better the offense you're facing, the more your
+    ace stays on the floor to guard it. Anchored to the 70-rating baseline the league is built on.
+    """
+    scores = []
+    for pid in state.available:
+        r = state.players[pid].ratings
+        scores.append(0.4 * r["finishing"] + 0.3 * r["three_point"] + 0.3 * r["mid_range"])
+    if not scores:
+        return 0.0
+    scores.sort(reverse=True)
+    top = scores[:8]                                # roughly the rotation that does the scoring
+    return max(0.0, min(1.0, (sum(top) / len(top) - 70.0) / 12.0))
+
+
 def _weighted_index(rng, weights: List[float]) -> int:
     return rng.choices(range(len(weights)), weights=weights, k=1)[0]
 
@@ -82,6 +102,7 @@ class _TeamState:
         self.timeouts: int = game_format(team.league)["timeouts"]
         self.period_fouls: int = 0                      # team fouls in the current period
         self.locked_lineup: Optional[List[int]] = None  # coach-pinned on-court five
+        self.opp_off_strength: float = 0.0              # opponent offense, 0..1; set once by GameSim
 
     def players_on_court(self) -> List[Player]:
         return [self.players[pid] for pid in self.on_court]
@@ -104,17 +125,23 @@ class _TeamState:
                 return
             self.locked_lineup = None    # foul-out/injury broke the pinned five; auto-fill again
 
+        roles = self.team.roles
         if clutch:
             # Crunch time: ride your best closers regardless of how many minutes they've banked
-            # (best overall on the floor, lightly adjusted for exhaustion and foul trouble).
+            # (best overall on the floor, lightly adjusted for exhaustion and foul trouble). A
+            # tagged closer overrides this selection, taking the floor to close unless fouled out.
             pos_weight = CLUTCH_POS_BALANCE_WEIGHT
+            closer = roles.get("closer")
 
             def priority(pid: int) -> float:
                 foul_pen = 4000.0 if self.fouls[pid] >= 5 else 0.0
-                return self.players[pid].overall * 10.0 - self.fatigue[pid] * 0.4 - foul_pen
+                role_bonus = CLOSER_CLUTCH_BONUS if pid == closer else 0.0
+                return self.players[pid].overall * 10.0 - self.fatigue[pid] * 0.4 - foul_pen + role_bonus
         else:
             fatigue_weight = profile_for(self.team).fatigue_weight   # head-coach sub tendency
             pos_weight = POS_BALANCE_WEIGHT
+            ace = roles.get("defensive_ace")
+            ace_bonus = DEF_ACE_MINUTES_BONUS * self.opp_off_strength  # more run vs strong offenses
 
             def priority(pid: int) -> float:
                 remaining = max(0.0, self.target_secs[pid] - self.secs_played[pid])
@@ -127,7 +154,9 @@ class _TeamState:
                 elif f >= 3 and game_secs < 1440:
                     foul_pen = 600
                 starter_bonus = 250.0 if pid in self.team.starters else 0.0
-                return remaining - self.fatigue[pid] * fatigue_weight - foul_pen + starter_bonus
+                role_bonus = ace_bonus if pid == ace else 0.0
+                return (remaining - self.fatigue[pid] * fatigue_weight - foul_pen
+                        + starter_bonus + role_bonus)
 
         # Position-aware greedy fill: each slot PG..C takes the best remaining candidate after a
         # soft penalty for playing out of position, so the five stays positionally sensible.
@@ -164,6 +193,9 @@ class GameSim:
         self.coach_tid = coach_tid if coach is not None else None
         self.home = _TeamState(world, home, is_home=True)
         self.away = _TeamState(world, away, is_home=False)
+        # Each side's defensive ace earns minutes against the *other* team's offense.
+        self.home.opp_off_strength = _team_offense_strength(self.away)
+        self.away.opp_off_strength = _team_offense_strength(self.home)
         fmt = game_format(home.league)
         self.periods = fmt["periods"]
         self.period_seconds = fmt["period_seconds"]

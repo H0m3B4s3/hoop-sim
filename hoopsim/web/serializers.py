@@ -16,7 +16,9 @@ from hoopsim.config import CONFERENCES, ROSTER_MAX, SCHOLARSHIP_LIMIT
 from hoopsim.models.attributes import COMPOSITES, POSITIONS, RATING_GROUPS, all_composites
 from hoopsim.models.league import Phase, conference_standings
 from hoopsim.models.player import Player
-from hoopsim.models.team import MAX_ROTATION, Team, roster_players, rotation_pool, team_salary
+from hoopsim.models.team import (
+    MAX_ROTATION, ROLE_LABELS, ROLE_TAGS, Team, roster_players, rotation_pool, team_salary,
+)
 from hoopsim.models.world import World
 from hoopsim.sim.boxscore import GameResult
 from hoopsim.sim.coach import PRESET_LABELS
@@ -287,6 +289,9 @@ def roster_view(world: World, team: Team) -> dict:
         "rotation": rotation,
         "manual_rotation": bool(team.rotation),
         "max_rotation": MAX_ROTATION,
+        "roles": {role: team.roles[role] for role in ROLE_TAGS if role in team.roles},
+        "role_tags": list(ROLE_TAGS),
+        "role_labels": dict(ROLE_LABELS),
     }
 
 
