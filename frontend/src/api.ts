@@ -35,6 +35,8 @@ export interface TeamBrief {
   league: string;
   prestige: number;
   market_size: number;
+  strength?: number;        // projected team rating (minutes-weighted rotation overall)
+  strength_stars?: number;  // 1–5 league-relative strength rank
 }
 
 export interface Summary {

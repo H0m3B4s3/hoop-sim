@@ -147,3 +147,25 @@ def power_ratings(world: World) -> List[PowerRating]:
 
 def power_map(world: World) -> Dict[int, PowerRating]:
     return {r.tid: r for r in power_ratings(world)}
+
+
+# ---------------------------------------------------------------------------
+# Preseason team strength (for team selection, before any games are played)
+# ---------------------------------------------------------------------------
+def projected_strength(world: World) -> Dict[int, int]:
+    """A single projected-rating number per team: the minutes-weighted rotation overall, rounded.
+
+    Unlike :func:`power_ratings`, this needs no games played — it's the roster-talent read used to
+    rank franchises on the team-selection screen."""
+    return {t.tid: round(_team_talent(world, t)) for t in world.team_list()}
+
+
+def strength_stars(world: World) -> Dict[int, int]:
+    """1–5 stars by where each team's projected strength ranks league-wide (even quintiles).
+
+    Rank-based so the stars always spread across the league instead of clustering — a team is
+    judged relative to its peers, not against an absolute scale."""
+    talents = {t.tid: _team_talent(world, t) for t in world.team_list()}
+    order = sorted(talents, key=lambda tid: talents[tid])     # weakest first
+    n = len(order) or 1
+    return {tid: min(5, 1 + i * 5 // n) for i, tid in enumerate(order)}

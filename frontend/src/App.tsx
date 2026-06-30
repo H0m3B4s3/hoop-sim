@@ -188,7 +188,16 @@ function TeamSelect({
                     }
                   >
                     <TeamTag abbrev={t.abbrev} color={t.color} name={t.full_name} />
-                    <span className="stars">{"★".repeat(t.prestige || t.market_size)}</span>
+                    <span className="teamStrength">
+                      <span className="stars">
+                        {"★".repeat(
+                          (summary.mode === "college" ? t.prestige : t.strength_stars) || 3,
+                        )}
+                      </span>
+                      {summary.mode !== "college" && t.strength != null && (
+                        <span className="muted small"> {t.strength} OVR</span>
+                      )}
+                    </span>
                   </button>
                 ))}
             </div>

@@ -58,6 +58,20 @@ def team_brief(team: Team) -> dict:
     }
 
 
+def _team_briefs_with_strength(world: World) -> List[dict]:
+    """Team identities for selection/dropdowns, tagged with projected strength + a 1–5 star rank."""
+    from hoopsim.sim import power
+    stars = power.strength_stars(world)
+    strength = power.projected_strength(world)
+    out = []
+    for t in sorted(world.team_list(), key=lambda t: t.full_name):
+        b = team_brief(t)
+        b["strength"] = strength.get(t.tid)
+        b["strength_stars"] = stars.get(t.tid)
+        out.append(b)
+    return out
+
+
 def world_conferences(world: World) -> List[str]:
     """Conference names in a stable order (mirrors ui.screens.standings.world_conferences)."""
     if world.mode == "college":
@@ -106,7 +120,7 @@ def world_summary(world: World) -> dict:
         "user_team_id": world.user_team_id,
         "salary_cap": world.salary_cap,
         "luxury_tax_line": world.luxury_tax_line,
-        "teams": [team_brief(t) for t in sorted(world.team_list(), key=lambda t: t.full_name)],
+        "teams": _team_briefs_with_strength(world),
         "conferences": world_conferences(world),
         "regular_season_complete": regular_season_complete(world),
     }
