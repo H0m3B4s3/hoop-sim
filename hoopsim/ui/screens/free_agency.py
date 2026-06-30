@@ -106,7 +106,23 @@ def _fa_table(world: World, team, players, start: int) -> Table:
 
 
 def _attempt_sign(world: World, team, player) -> None:
-    salary, years = freeagency.offer_for(world, team, player)
+    from hoopsim.config import MAX_CONTRACT_YEARS
+    pref = freeagency.contract_years_for(player)
+    # Show what the player wants at each contract length: more years = a per-season discount
+    # (security), fewer years = a premium. Their preferred length is marked.
+    terms = Table(title=f"What {player.name} wants", title_style="title", header_style="label")
+    terms.add_column("Years", justify="right")
+    terms.add_column("Salary/yr", justify="right")
+    for y in range(1, MAX_CONTRACT_YEARS + 1):
+        req = freeagency.required_salary(world, player, y)
+        mark = "  [accent]← prefers[/accent]" if y == pref else ""
+        terms.add_row(str(y), f"{money(req)}{mark}")
+    console.print(terms)
+
+    years = ask_int("Contract years", default=pref, choices=list(range(1, MAX_CONTRACT_YEARS + 1)))
+    req = freeagency.required_salary(world, player, years)
+    salary_m = ask_int("Salary per year ($M)", default=max(1, round(req / 1_000_000)))
+    salary = salary_m * 1_000_000
     console.print(f"Offer to [accent]{player.name}[/accent]: "
                   f"[money]{money(salary)}[/money] × {years}y")
     if not confirm("Submit this offer?", default=True):
@@ -115,7 +131,7 @@ def _attempt_sign(world: World, team, player) -> None:
     if ok:
         console.print(f"[good]{player.name} signs with {team.abbrev}![/good] [dim]({reason})[/dim]")
     else:
-        console.print(f"[bad]Cannot sign:[/bad] {reason}")
+        console.print(f"[bad]Offer rejected:[/bad] {reason}")
     pause()
 
 

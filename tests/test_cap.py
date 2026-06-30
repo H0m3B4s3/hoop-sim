@@ -349,11 +349,14 @@ def test_mid_level_exception_limited_to_once_per_offseason():
     w.release_player(fa1.pid)
     w.release_player(fa2.pid)
 
-    # the first mid-level signing succeeds and spends the exception
-    ok1, _ = freeagency.sign_free_agent(w, team, fa1.pid, cap.market_salary(fa1), 2)
+    # the first mid-level signing succeeds and spends the exception (offer the player's preferred
+    # length so the negotiation accepts and the test exercises the MLE, not term haggling)
+    y1 = freeagency.contract_years_for(fa1)
+    ok1, _ = freeagency.sign_free_agent(w, team, fa1.pid, cap.market_salary(fa1), y1)
     assert ok1 and team.mle_used
     # a second mid-level signing is now rejected (only one MLE per offseason)
-    ok2, _ = freeagency.sign_free_agent(w, team, fa2.pid, cap.market_salary(fa2), 2)
+    y2 = freeagency.contract_years_for(fa2)
+    ok2, _ = freeagency.sign_free_agent(w, team, fa2.pid, cap.market_salary(fa2), y2)
     assert not ok2 and fa2.team_id is None
     # a veteran-minimum deal is still always available
     assert cap.can_sign(w, team, VETERAN_MINIMUM)[0]

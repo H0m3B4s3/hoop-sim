@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import List, Tuple
 
-from hoopsim.config import VETERAN_MINIMUM
+from hoopsim.config import MAX_CONTRACT_YEARS, VETERAN_MINIMUM
 from hoopsim.models.contract import flat_contract
 from hoopsim.models.player import Player
 from hoopsim.models.team import Team, auto_set_lineup
@@ -76,6 +76,8 @@ def advance_fa_wave(world: World) -> bool:
 
 
 def contract_years_for(player: Player) -> int:
+    """The contract length a free agent prefers (younger players bet on themselves, vets want
+    security on shorter deals)."""
     if player.age < 30:
         return 3
     if player.age < 33:
@@ -83,27 +85,67 @@ def contract_years_for(player: Player) -> int:
     return 1
 
 
+def _quality(player: Player) -> float:
+    """How much leverage a free agent has, 0 (fringe/minimum) .. 1 (max-contract star)."""
+    return max(0.0, min(1.0, (player.overall - 65) / 25.0))
+
+
+def required_salary(world: World, player: Player, years: int) -> int:
+    """The salary it takes to sign this free agent *at a given contract length*.
+
+    Term and money trade off. Offering more years than the player prefers is security they'll take
+    a per-year discount for — strongly for older, lesser free agents (who crave a guaranteed job),
+    barely at all for young stars. Offering fewer years than they want makes them hold out for a
+    raise. At the preferred length this is just their market ask (:func:`wave_market_salary`).
+    """
+    target = wave_market_salary(world, player)
+    pref = contract_years_for(player)
+    years = max(1, min(MAX_CONTRACT_YEARS, years))
+    delta = years - pref
+    over_30 = max(0, player.age - 30)
+    q = _quality(player)
+    if delta >= 0:                                  # extra years = security → they discount
+        per_year = 0.02 + 0.02 * over_30 + 0.08 * (1.0 - q)
+        factor = max(0.75, 1.0 - per_year * delta)
+    else:                                           # short deal → they want a premium
+        per_year = 0.08 + 0.05 * over_30 + 0.06 * q
+        factor = 1.0 + per_year * (-delta)
+    return max(VETERAN_MINIMUM, int(round(target * factor / 100_000) * 100_000))
+
+
 def offer_for(world: World, team: Team, player: Player) -> Tuple[int, int]:
-    """The (salary, years) it takes to sign this free agent — their market price.
+    """A fair starting offer — the player's market ask at their preferred contract length.
 
     A free agent commands their market value; a capped-out team simply may not be able to fit it
-    (that legality is enforced in :func:`sign_free_agent`). The price is *not* silently reduced to
-    the minimum — you can't land a star for a veteran-minimum deal. During the offseason the price
-    reflects the current wave's cooled market (see :func:`wave_market_salary`).
+    (that legality is enforced in :func:`sign_free_agent`). The user can negotiate term against
+    money from here via :func:`required_salary`.
     """
     return wave_market_salary(world, player), contract_years_for(player)
 
 
+def evaluate_offer(world: World, player: Player, salary: int, years: int) -> Tuple[bool, str]:
+    """Whether the free agent accepts an offer of ``salary`` over ``years`` (willingness only —
+    cap-legality is checked separately in :func:`sign_free_agent`)."""
+    if years < 1 or years > MAX_CONTRACT_YEARS:
+        return False, f"Contracts run 1–{MAX_CONTRACT_YEARS} years."
+    req = required_salary(world, player, years)
+    if salary < req:
+        pref = contract_years_for(player)
+        hint = "" if years >= pref else " — or offer more years for less per season"
+        return False, (f"{player.short_name} wants about ${req // 1_000_000}M "
+                       f"over {years}y{hint}.")
+    return True, f"{player.short_name} accepts {years}y at ${salary // 1_000_000}M."
+
+
 def sign_free_agent(world: World, team: Team, pid: int, salary: int, years: int
                     ) -> Tuple[bool, str]:
-    """Sign a free agent to a contract after checking the player accepts and it is cap-legal."""
+    """Sign a free agent after checking they accept the terms and the deal is cap-legal."""
     player = world.players[pid]
     if player.team_id is not None:
         return False, "Player is not a free agent."
-    asking = wave_market_salary(world, player)
-    if salary < asking:
-        return False, f"{player.short_name} won't sign for that — they want about " \
-                      f"${asking // 1_000_000}M."
+    accepts, why = evaluate_offer(world, player, salary, years)
+    if not accepts:
+        return False, why
     ok, reason = cap.can_sign(world, team, salary)
     if not ok:
         return False, reason
@@ -112,7 +154,7 @@ def sign_free_agent(world: World, team: Team, pid: int, salary: int, years: int
     if spent_mle:
         team.mle_used = True
     auto_set_lineup(team, world.players)
-    return True, reason
+    return True, why
 
 
 def _wants_to_resign(world: World, team: Team, player: Player) -> bool:

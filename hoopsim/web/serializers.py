@@ -612,6 +612,7 @@ def free_agents_view(world: World) -> dict:
         fas = freeagency.fa_wave_pool(world)            # only the open tier, cooled pricing
     else:
         fas = sorted(world.free_agent_players(), key=lambda p: p.overall, reverse=True)
+    from hoopsim.config import MAX_CONTRACT_YEARS
     rows = []
     for p in fas:
         ask = freeagency.wave_market_salary(world, p)
@@ -620,8 +621,12 @@ def free_agents_view(world: World) -> dict:
         row["ask"] = ask
         row["can_sign"] = can_sign
         row["sign_reason"] = reason
+        row["preferred_years"] = freeagency.contract_years_for(p)
+        # Salary the player requires at each contract length — lets the offer UI trade term vs money.
+        row["required_by_years"] = {str(y): freeagency.required_salary(world, p, y)
+                                    for y in range(1, MAX_CONTRACT_YEARS + 1)}
         rows.append(row)
-    return {"free_agents": rows, "wave": fa_wave_view(world)}
+    return {"free_agents": rows, "wave": fa_wave_view(world), "max_years": MAX_CONTRACT_YEARS}
 
 
 def fa_wave_view(world: World) -> dict:

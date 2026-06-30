@@ -932,6 +932,20 @@ table.dt tr.clickable:hover td {
   font-size: 12px;
   color: var(--accent);
 }
+.offerRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+}
+.offerRow label {
+  min-width: 110px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.offerRow input[type="number"] {
+  width: 100px;
+}
 .depthGrid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
