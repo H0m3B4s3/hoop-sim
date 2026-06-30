@@ -7,7 +7,7 @@ from typing import List, Optional, Tuple
 from rich.panel import Panel
 from rich.table import Table
 
-from hoopr import __version__
+from hoopsim import __version__
 from hoopsim.config import CONFERENCES, SEASON_PRESETS
 from hoopsim.models.league import Game, Phase
 from hoopsim.models.world import World
@@ -228,6 +228,7 @@ def _regular_season_menu(world: World) -> Optional[str]:
         ("scout", "🔍  Scouting board (league-wide)"),
         ("standings", "📊  Standings"),
         ("leaders", "🏀  League leaders"),
+        ("legacy", "🏅  Legacy & history"),
         ("save", "💾  Save game"),
         ("quit", "🚪  Quit to main menu"),
     ])
@@ -253,6 +254,9 @@ def _regular_season_menu(world: World) -> Optional[str]:
         show_standings(world)
     elif action == "leaders":
         _league_leaders(world)
+    elif action == "legacy":
+        from hoopsim.ui.screens.legacy import legacy_screen
+        legacy_screen(world)
     elif action == "save":
         _save_menu(world)
     elif action == "quit":

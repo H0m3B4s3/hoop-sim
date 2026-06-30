@@ -1228,6 +1228,22 @@ function AwardCard({
 }
 
 function HistoryPanel({ onPlayer }: { onPlayer: (pid: number) => void }) {
+  const [view, setView] = useState<"seasons" | "hof" | "records">("seasons");
+  return (
+    <div>
+      <div className="segrow tight" style={{ marginBottom: 12 }}>
+        <Seg active={view === "seasons"} onClick={() => setView("seasons")}>Seasons</Seg>
+        <Seg active={view === "hof"} onClick={() => setView("hof")}>Hall of Fame</Seg>
+        <Seg active={view === "records"} onClick={() => setView("records")}>Records</Seg>
+      </div>
+      {view === "seasons" && <SeasonsView onPlayer={onPlayer} />}
+      {view === "hof" && <HallOfFameView onPlayer={onPlayer} />}
+      {view === "records" && <RecordsView onPlayer={onPlayer} />}
+    </div>
+  );
+}
+
+function SeasonsView({ onPlayer }: { onPlayer: (pid: number) => void }) {
   const teamText = useTeamText();
   const [data, setData] = useState<Row[] | null>(null);
   useEffect(() => {
@@ -1286,6 +1302,105 @@ function HistoryPanel({ onPlayer }: { onPlayer: (pid: number) => void }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// A short accolade summary like "2× MVP · 5× All-League".
+function accoladeSummary(accolades: { label: string; count: number }[]): string {
+  if (!accolades || accolades.length === 0) return "";
+  return accolades.map((a) => `${a.count}× ${a.label}`).join(" · ");
+}
+
+function HallOfFameView({ onPlayer }: { onPlayer: (pid: number) => void }) {
+  const [data, setData] = useState<Row[] | null>(null);
+  useEffect(() => {
+    api.hallOfFame().then((r) => setData(r.members)).catch(() => {});
+  }, []);
+  if (!data) return <Loading />;
+  if (data.length === 0)
+    return (
+      <div className="card">
+        <h3>Hall of Fame</h3>
+        <p className="muted pad">
+          No inductees yet — legends are enshrined when great careers come to an end.
+        </p>
+      </div>
+    );
+  return (
+    <div className="card">
+      <h3>Hall of Fame</h3>
+      {data.map((m) => (
+        <div className="hofRow clickable" key={m.pid} onClick={() => onPlayer(m.pid)}>
+          <div className="hofMain">
+            <b>{m.name}</b>
+            <span className="muted small">
+              {" "}
+              {m.position} · {m.last_team} · {m.first_year}–{m.last_year} · peak {OVR(m.peak_ovr)}
+            </span>
+          </div>
+          <div className="muted small">
+            {m.totals?.pts?.toLocaleString()} pts · {m.totals?.reb?.toLocaleString()} reb ·{" "}
+            {m.totals?.ast?.toLocaleString()} ast · {m.seasons} seasons
+          </div>
+          {m.accolades?.length > 0 && (
+            <div className="hofAccolades small">{accoladeSummary(m.accolades)}</div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RecordsView({ onPlayer }: { onPlayer: (pid: number) => void }) {
+  const [cat, setCat] = useState("pts");
+  const [data, setData] = useState<any | null>(null);
+  useEffect(() => {
+    api.leaderboards(cat).then(setData).catch(() => {});
+  }, [cat]);
+  const LABELS: Record<string, string> = { pts: "Points", reb: "Rebounds", ast: "Assists", gp: "Games" };
+  return (
+    <div className="card">
+      <h3>All-Time Records</h3>
+      <div className="segrow tight" style={{ marginBottom: 12 }}>
+        {(data?.categories ?? ["pts", "reb", "ast", "gp"]).map((c: string) => (
+          <Seg key={c} active={cat === c} onClick={() => setCat(c)}>
+            {LABELS[c] ?? c}
+          </Seg>
+        ))}
+      </div>
+      {!data ? (
+        <Loading />
+      ) : (
+        <table className="dt">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Player</th>
+              <th>Career</th>
+              <th className="right">{LABELS[cat]}</th>
+              <th className="right">Seasons</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.rows.map((r: Row, i: number) => (
+              <tr key={r.pid} className="clickable" onClick={() => onPlayer(r.pid)}>
+                <td>{i + 1}</td>
+                <td>
+                  {r.name}
+                  {r.hof && <span title="Hall of Famer"> 🏅</span>}
+                  {r.active && <span className="muted small"> · active</span>}
+                </td>
+                <td className="muted small">
+                  {r.last_team} · {r.first_year}–{r.last_year}
+                </td>
+                <td className="right">{r.totals?.[cat]?.toLocaleString()}</td>
+                <td className="right">{r.seasons}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
@@ -2794,6 +2909,10 @@ function OffseasonPanel({
           (r.summary.resigned ? `, ${r.summary.resigned} re-signed by their teams.` : ".")
       );
       if (r.awards?.mvp) toast(`🏆 ${r.awards.mvp.name} won MVP — see the History tab.`);
+      for (const hof of r.summary.inducted ?? [])
+        toast(`🏅 ${hof.name} was inducted into the Hall of Fame.`);
+      for (const ms of r.summary.milestones ?? [])
+        toast(`📈 ${ms.name} reached ${ms.value.toLocaleString()} career ${ms.noun}s.`);
     }
     refresh(); // persist the new stage so leaving/returning resumes correctly
     setStep("draft");
@@ -3408,6 +3527,27 @@ function PlayerModal({
             <Stat label="TS%" value={(p.season_stats.ts_pct * 100).toFixed(1)} />
             <Stat label="MPG" value={p.season_stats.mpg} />
           </div>
+          {p.legacy && p.legacy.seasons > 0 && (
+            <div className="legacyBox">
+              <h4>
+                Career {p.legacy.hof && <span title="Hall of Famer">🏅</span>}
+              </h4>
+              <div className="muted small">
+                {p.legacy.seasons} seasons · {p.legacy.totals.pts.toLocaleString()} pts (
+                {p.legacy.totals.ppg} PPG) · {p.legacy.totals.reb.toLocaleString()} reb ·{" "}
+                {p.legacy.totals.ast.toLocaleString()} ast · peak {OVR(p.legacy.peak_ovr)}
+              </div>
+              {p.legacy.accolades.length > 0 && (
+                <div className="legacyAccolades small">
+                  {p.legacy.accolades.map((a: any) => (
+                    <span key={a.key} className="accoladeChip">
+                      {a.count}× {a.label}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <div className="ratingGroups">
             {Object.entries(p.rating_groups).map(([group, items]: any) => (
               <div key={group} className="ratingGroup">

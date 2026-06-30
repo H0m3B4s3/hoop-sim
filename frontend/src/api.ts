@@ -88,6 +88,8 @@ export const api = {
   freeAgents: () => get<any>("/freeagents"),
   scouting: () => get<any>("/scouting"),
   history: () => get<{ history: Row[] }>("/history"),
+  hallOfFame: () => get<{ members: Row[] }>("/hall-of-fame"),
+  leaderboards: (category: string) => get<any>(`/leaderboards?category=${category}`),
   tradeBlock: (tid: number) => get<{ tid: number; pids: number[] }>(`/teams/${tid}/trade-block`),
   teamPicks: (tid: number) => get<{ tid: number; picks: Row[] }>(`/teams/${tid}/picks`),
   player: (pid: number) => get<any>(`/players/${pid}`),

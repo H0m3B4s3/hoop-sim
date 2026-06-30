@@ -42,6 +42,8 @@ class World:
         self.luxury_tax_line: int = LUXURY_TAX_LINE
         self.first_apron: int = FIRST_APRON
         self.history: List[dict] = []                # champions / awards per finished season
+        self.hall_of_fame: List[dict] = []           # legacy résumé snapshots of inducted greats
+        self.retired: List[dict] = []                # résumé snapshots of everyone who has retired
 
         # Mode & the college layer. ``mode`` is the league the user controls; ``other_teams``
         # holds the *other* league (the pipeline partner) as Team objects (their players live in
@@ -220,6 +222,8 @@ class World:
             "fa_wave": self.fa_wave,
             "recruit_wave": self.recruit_wave,
             "history": list(self.history),
+            "hall_of_fame": list(self.hall_of_fame),
+            "retired": list(self.retired),
             "next_pid": self._next_pid,
             "next_gid": self._next_gid,
             "next_offer_id": self._next_offer_id,
@@ -255,6 +259,8 @@ class World:
         w.fa_wave = d.get("fa_wave")
         w.recruit_wave = d.get("recruit_wave")
         w.history = list(d.get("history", []))
+        w.hall_of_fame = list(d.get("hall_of_fame", []))
+        w.retired = list(d.get("retired", []))
         w._next_pid = d.get("next_pid", max(w.players, default=0) + 1)
         w._next_gid = d.get("next_gid", 1)
         w._next_offer_id = d.get("next_offer_id", 1)

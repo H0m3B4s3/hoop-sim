@@ -321,6 +321,15 @@ def test_api_history_after_a_season():
     mvp = hist[0]["awards"]["mvp"]
     assert mvp["name"] and "team_color" in mvp
 
+    # Hall of Fame + all-time leaderboards endpoints respond and are well-formed.
+    hof = client.get("/api/hall-of-fame").json()
+    assert "members" in hof and isinstance(hof["members"], list)
+    board = client.get("/api/leaderboards?category=pts").json()
+    assert board["category"] == "pts" and "pts" in board["categories"]
+    if board["rows"]:
+        pts = [r["totals"]["pts"] for r in board["rows"]]
+        assert pts == sorted(pts, reverse=True)       # ranked, highest first
+
 
 def test_api_college_postseason_crowns_champion():
     """College worlds drive conference tournaments then a national tournament on the web.

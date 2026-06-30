@@ -65,6 +65,7 @@ class Player:
     season: StatLine = field(default_factory=StatLine)
     playoffs: StatLine = field(default_factory=StatLine)
     career: List[dict] = field(default_factory=list)   # one summary dict per finished season
+    accolades: Dict[str, int] = field(default_factory=dict)  # award tally: mvp/all_league/champion/roy/dpoy/mip
 
     # -- identity -----------------------------------------------------------
     @property
@@ -133,6 +134,7 @@ class Player:
             "season": self.season.to_dict(),
             "playoffs": self.playoffs.to_dict(),
             "career": list(self.career),
+            "accolades": dict(self.accolades),
         }
 
     @classmethod
@@ -166,4 +168,5 @@ class Player:
             season=StatLine.from_dict(d.get("season", {})),
             playoffs=StatLine.from_dict(d.get("playoffs", {})),
             career=list(d.get("career", [])),
+            accolades={k: int(v) for k, v in d.get("accolades", {}).items()},
         )
