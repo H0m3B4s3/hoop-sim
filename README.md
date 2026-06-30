@@ -181,6 +181,21 @@ offense/defense read, and projected minutes** so you can prioritize upside witho
 roster page; and **live crunch-time subs surface each player's offense/defense and key skills** to
 inform who you put on the floor for the next possession.
 
+Newest — **legacy, free agency, and player identity**: a **career legacy system** now gives every
+playthrough long-term stakes — players accrue **accolades** (MVP, All-League, DPOY, Champion, …),
+cross **career milestones** (20,000 points and the like), and retire into a **Hall of Fame** (gated
+by a weighted résumé score) and **all-time leaderboards** browsable in the History tab. To make it
+matter from day one, world creation now fabricates a **synthetic backstory** — believable career
+arcs and accolades for existing veterans plus a cohort of **retired legends** seeding the record
+book — and every player carries **draft provenance** (year / round / pick) on his bio. **Free-agent
+signings are now a real negotiation**: you trade contract **years against money** (more years is
+security a player discounts for — strongly for lesser/older free agents, barely for young stars;
+fewer years makes them hold out for a raise), instead of auto-accepting any offer that meets the
+ask. The **team-selection screen shows projected strength** (stars by league-relative rank plus a
+rating) so franchises read as unequal, and elite players can roll **rare "unicorn" archetypes** —
+*Point Forward*, *Playmaking Big*, *Two-Way Phenom*, *Shot Creator* — that the normal pool never
+produces.
+
 The web app now runs a **full college career** end to end — regular season, single-elim conference
 and national tournaments (with live coaching), and the offseason: the NBA draft pipeline (your
 declared players drafted by the background NBA) and **recruiting** (NIL bidding or scholarship
@@ -199,7 +214,7 @@ Still on the roadmap:
 - **International prospects** entering via the NBA draft and recruitable to college programs.
 - **Transfer portal** for college rosters.
 - **Advanced NBA cap** rules (apron, sign-and-trade), two-way / G-League contracts.
-- **Deeper scouting**, Hall of Fame / career milestones, chemistry and momentum, coaching staff.
+- **Deeper scouting**, chemistry and momentum, coaching staff.
 - A richer **NIL marketplace** (negotiated endorsement packages, brand events).
 
 ### Future work (not started)
