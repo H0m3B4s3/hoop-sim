@@ -238,10 +238,13 @@ Coaching & rotations (built)
   veteran (which also accelerates his development). No manual rotation falls back to the coach's
   automatic shape ([`set_auto_minutes`](hoopsim/models/team.py)).
 
-Rotations & depth chart (planned)
-- **Role tags** — `sixth_man`, `defensive_ace`, `closer` — that bias the rotation math: a closer
-  overrides crunch-time selection, a defensive ace earns minutes against strong offenses, and a sixth
-  man jumps the bench queue.
+Rotations & depth chart (built)
+- **Role tags** — `sixth_man`, `defensive_ace`, `closer` — bias the rotation math from the Lineup
+  tab (terminal & web): a **closer** overrides crunch-time selection (taking the floor to close
+  unless fouled out), a **defensive ace** earns extra minutes scaled by the opponent's offensive
+  strength, and a **sixth man** jumps the bench queue (first reserve off the bench, most reserve
+  minutes). One player per role; cleared automatically if he leaves the roster
+  ([`team.roles`](hoopsim/models/team.py), [`choose_lineup`](hoopsim/sim/engine.py)).
 
 ## Notes
 

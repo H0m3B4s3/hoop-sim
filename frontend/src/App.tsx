@@ -1716,6 +1716,14 @@ function LineupPanel({
     saveRotation([...rotationIds, pid]);
   };
   const demote = (pid: number) => saveRotation(rotationIds.filter((x) => x !== pid));
+  // Role tags (sixth man / defensive ace / closer) — one player per role; "" clears it.
+  const roles: Record<string, number> = data.roles ?? {};
+  const roleTags: string[] = data.role_tags ?? [];
+  const roleLabels: Record<string, string> = data.role_labels ?? {};
+  const saveRole = async (role: string, pid: number | null) => {
+    const r = await api.setRole(role, pid).catch((e) => toast(String(e)));
+    if (r) setData(r);
+  };
   return (
     <div className="card">
       <div className="finalLine">
@@ -1867,6 +1875,30 @@ function LineupPanel({
           )}
         </tbody>
       </table>
+
+      <h3 style={{ marginTop: 20 }}>Roles</h3>
+      <p className="muted" style={{ marginTop: 0 }}>
+        A <b>sixth man</b> jumps the bench queue, a <b>defensive ace</b> earns extra minutes against
+        strong offenses, and a <b>closer</b> takes the floor to close tight games.
+      </p>
+      {roleTags.map((role) => (
+        <div key={role} className="tacticRow">
+          <label>{roleLabels[role] ?? role}</label>
+          <select
+            value={roles[role] ?? ""}
+            onChange={(e) => saveRole(role, e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">— None —</option>
+            {[...data.players]
+              .sort((a: Row, b: Row) => b.overall - a.overall)
+              .map((p: Row) => (
+                <option key={p.pid} value={p.pid}>
+                  {p.name} · {p.position} · OVR {p.overall}
+                </option>
+              ))}
+          </select>
+        </div>
+      ))}
     </div>
   );
 }

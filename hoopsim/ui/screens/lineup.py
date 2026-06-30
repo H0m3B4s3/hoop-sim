@@ -6,7 +6,7 @@ from __future__ import annotations
 from rich.table import Table
 
 from hoopsim.models.attributes import POSITIONS, all_composites
-from hoopsim.models.team import auto_set_lineup, position_distance
+from hoopsim.models.team import ROLE_LABELS, ROLE_TAGS, auto_set_lineup, position_distance
 from hoopsim.models.world import World
 from hoopsim.ui.console import choose, clear, console
 from hoopsim.ui.theme import ovr_style
@@ -23,6 +23,10 @@ def lineup_screen(world: World) -> None:
         console.print(f"  Lineup mode: {mode}\n")
         opts = [(f"slot:{i}", f"Change slot {i + 1} ({POSITIONS[i]})")
                 for i in range(min(5, len(team.starters) or 5))]
+        for role in ROLE_TAGS:
+            holder = team.roles.get(role)
+            who = world.players[holder].short_name if holder in world.players else "[dim]none[/dim]"
+            opts.append((f"role:{role}", f"Set {ROLE_LABELS[role]} ({who})"))
         if not team.auto_lineup:
             opts.append(("auto", "↩  Revert to automatic lineup"))
         opts.append(("back", "← Back"))
@@ -34,6 +38,8 @@ def lineup_screen(world: World) -> None:
             auto_set_lineup(team, world.players)
         elif action.startswith("slot:"):
             _change_slot(world, team, int(action.split(":")[1]))
+        elif action.startswith("role:"):
+            _change_role(world, team, action.split(":")[1])
 
 
 def _off_def(p) -> tuple:
@@ -67,6 +73,11 @@ def _render(world: World, team) -> None:
     if bench:
         names = "  ".join(f"{p.short_name}([{ovr_style(p.overall)}]{p.overall}[/])" for p in bench)
         console.print(f"[dim]Bench:[/dim] {names}")
+    roles = "  ".join(
+        f"[label]{ROLE_LABELS[r]}:[/label] "
+        f"{world.players[team.roles[r]].short_name if team.roles.get(r) in world.players else '[dim]—[/dim]'}"
+        for r in ROLE_TAGS)
+    console.print(f"[dim]Roles:[/dim] {roles}")
 
 
 def _change_slot(world: World, team, slot_idx: int) -> None:
@@ -91,4 +102,23 @@ def _change_slot(world: World, team, slot_idx: int) -> None:
     starters[slot_idx] = pid
     team.starters = [s for s in starters if s is not None]
     team.auto_lineup = False
+    auto_set_lineup(team, world.players)
+
+
+def _change_role(world: World, team, role: str) -> None:
+    """Tag a player with a role (one per role), or clear it."""
+    pool = sorted((world.players[pid] for pid in team.roster), key=lambda p: p.overall, reverse=True)
+    current = team.roles.get(role)
+    opts = [("clear", "[dim]— None (clear role) —[/dim]")]
+    for p in pool:
+        marker = " [star](current)[/star]" if p.pid == current else ""
+        opts.append((str(p.pid),
+                     f"{p.name} [dim]{p.position} · OVR {p.overall}[/dim]{marker}"))
+    pick = choose(f"Who is your {ROLE_LABELS[role]}?", opts, allow_back=True)
+    if pick is None:
+        return
+    if pick == "clear":
+        team.roles.pop(role, None)
+    else:
+        team.roles[role] = int(pick)
     auto_set_lineup(team, world.players)

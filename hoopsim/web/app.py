@@ -121,6 +121,11 @@ class RotationBody(BaseModel):
     rotation: Optional[List[int]] = None   # pids beyond the starters; None -> revert to automatic
 
 
+class RoleBody(BaseModel):
+    role: str                              # one of team.ROLE_TAGS
+    pid: Optional[int] = None              # player to tag; None -> clear the role
+
+
 class TacticBody(BaseModel):
     key: str
     value: str
@@ -753,6 +758,25 @@ def set_rotation(body: RotationBody, sid: str = Depends(_sid)):
                 seen.add(pid)
                 ids.append(pid)
         team.rotation = ids[:max(0, MAX_ROTATION - len(team.starters))]
+    auto_set_lineup(team, world.players)
+    SESSIONS.autosave(sid)
+    return ser.roster_view(world, team)
+
+
+@app.post("/api/role")
+def set_role(body: RoleBody, sid: str = Depends(_sid)):
+    """Tag a player with a role (sixth man / defensive ace / closer) or clear it. One per role."""
+    from hoopsim.models.team import ROLE_TAGS
+    world = _world(sid)
+    team = _user_team(world)
+    if body.role not in ROLE_TAGS:
+        raise HTTPException(status_code=400, detail=f"Unknown role: {body.role}")
+    if body.pid is None:
+        team.roles.pop(body.role, None)
+    elif body.pid in team.roster:
+        team.roles[body.role] = body.pid
+    else:
+        raise HTTPException(status_code=400, detail="Player is not on the roster.")
     auto_set_lineup(team, world.players)
     SESSIONS.autosave(sid)
     return ser.roster_view(world, team)
