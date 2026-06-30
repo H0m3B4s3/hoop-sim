@@ -21,6 +21,9 @@ htmlcov/
 saves/
 *.hoopr.json
 
+# Internal dev docs — kept local, not shared while in development
+docs/
+
 # OS / editor
 .DS_Store
 .idea/

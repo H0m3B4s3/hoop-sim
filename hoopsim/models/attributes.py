@@ -101,7 +101,7 @@ class Archetype:
 # real identity: large positive deltas are signature elite skills, large negatives are genuine
 # holes. Specialists (Rim Protector, Sharpshooter, Post Scorer, Athletic Big, Slasher) are spiky on
 # purpose — a Rim Protector should brick threes like Gobert. Balanced roles (Combo Guard, Two-Way,
-# Glue Guy) keep gentle skews so they stay well-rounded.
+# Swiss Army Knife) keep gentle skews so they stay well-rounded.
 ARCHETYPES: List[Archetype] = [
     Archetype("Floor General", ["PG"],
               {"passing": 16, "off_iq": 12, "ball_handle": 12, "basketball_iq": 12,
@@ -151,7 +151,7 @@ ARCHETYPES: List[Archetype] = [
                "block": 8, "free_throw": -16, "three_point": -28, "off_iq": -12,
                "ball_handle": -14, "passing": -8},
               (81, 85)),
-    Archetype("Glue Guy", ["SF", "PF", "SG"],
+    Archetype("Swiss Army Knife", ["SF", "PF", "SG"],
               {"def_iq": 8, "basketball_iq": 7, "consistency": 7, "work_ethic": 8,
                "rebounding": 4, "perimeter_def": 5},
               (77, 81)),
@@ -161,3 +161,47 @@ ARCHETYPES_BY_POSITION: Dict[str, List[Archetype]] = {pos: [] for pos in POSITIO
 for _arch in ARCHETYPES:
     for _pos in _arch.positions:
         ARCHETYPES_BY_POSITION[_pos].append(_arch)
+
+
+# ---------------------------------------------------------------------------
+# Rare "unicorn" archetypes — generated only on elite-ceiling players (see
+# playergen._choose_archetype) and never in the normal pool, so they stay special.
+# ---------------------------------------------------------------------------
+# Skews are tuned to sit inside the same overall/scoring envelope as the normal archetypes (see
+# the ratings-rebalance work): big signature spikes offset by real holes, so a unicorn is elite at
+# his thing without inflating league scoring or his overall above the elite gate.
+RARE_ARCHETYPES: List[Archetype] = [
+    # Lead creator in a forward's frame (LeBron / Luka / Simmons).
+    Archetype("Point Forward", ["SF", "PF"],
+              {"passing": 14, "ball_handle": 11, "off_iq": 10, "basketball_iq": 6,
+               "finishing": 5, "rebounding": 4, "perimeter_def": 3,
+               "three_point": -6, "mid_range": -4, "interior_def": -7, "block": -9,
+               "free_throw": -4},
+              (79, 82)),
+    # Offensive engine at the 5 — elite passing + scoring touch, ground-bound (Jokić; KAT-lite).
+    Archetype("Playmaking Big", ["C", "PF"],
+              {"passing": 17, "off_iq": 13, "basketball_iq": 8, "mid_range": 8,
+               "three_point": 6, "free_throw": 7, "finishing": 5, "rebounding": 5,
+               "athleticism": -14, "vertical": -14, "speed": -12, "block": -10,
+               "perimeter_def": -9, "interior_def": -6},
+              (82, 85)),
+    # Athletic two-way force who guards 1–5 with real playmaking, broken jumper (Giannis).
+    Archetype("Two-Way Phenom", ["SF", "PF", "C"],
+              {"finishing": 12, "athleticism": 12, "vertical": 10, "rebounding": 9,
+               "interior_def": 9, "perimeter_def": 6, "block": 7, "def_iq": 6,
+               "passing": 6, "ball_handle": 4, "draw_foul": 6,
+               "three_point": -26, "free_throw": -16, "mid_range": -12, "off_iq": -6},
+              (81, 84)),
+    # Elite three-level shotmaker who creates his own look (Durant / Kobe).
+    Archetype("Shot Creator", ["SG", "SF"],
+              {"three_point": 12, "mid_range": 12, "finishing": 7, "draw_foul": 8,
+               "ball_handle": 8, "free_throw": 6, "off_iq": 4,
+               "perimeter_def": -14, "def_iq": -10, "interior_def": -10,
+               "rebounding": -6, "steal": -6},
+              (78, 81)),
+]
+
+RARE_ARCHETYPES_BY_POSITION: Dict[str, List[Archetype]] = {pos: [] for pos in POSITIONS}
+for _arch in RARE_ARCHETYPES:
+    for _pos in _arch.positions:
+        RARE_ARCHETYPES_BY_POSITION[_pos].append(_arch)
