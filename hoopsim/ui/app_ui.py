@@ -146,12 +146,19 @@ def _new_college_career(seed: int) -> Optional[World]:
 
 
 def _choose_team(world: World) -> Optional[int]:
+    from hoopsim.sim import power
     from hoopsim.ui.screens.standings import world_conferences
+    college = world.mode == "college"
+    stars = power.strength_stars(world)
+    strength = power.projected_strength(world)
     options: List[Tuple[str, str]] = []
     for conf in world_conferences(world):
         for t in sorted((t for t in world.team_list() if t.conference == conf),
                         key=lambda t: t.city):
-            tag = ("★" * t.prestige) if world.mode == "college" else ("★" * t.market_size)
+            if college:
+                tag = "★" * t.prestige
+            else:
+                tag = f"{'★' * stars.get(t.tid, 3)}  {strength.get(t.tid, 70)} OVR"
             options.append((str(t.tid),
                             f"[{t.color}]{t.abbrev}[/] {t.full_name} "
                             f"[dim]({conf}) {tag}[/dim]"))

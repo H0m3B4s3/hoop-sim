@@ -358,6 +358,15 @@ span.clickable:hover {
   color: var(--accent);
   font-size: 11px;
 }
+.teamStrength {
+  margin-left: auto;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.teamStrength .stars {
+  margin-left: 0;
+}
 .dot {
   width: 11px;
   height: 11px;
