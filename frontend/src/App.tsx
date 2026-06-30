@@ -1629,12 +1629,16 @@ function FreeAgentsPanel({
 }) {
   const [data, setData] = useState<any | null>(null);
   const [offer, setOffer] = useState<Row | null>(null);
+  const [pos, setPos] = useState("All");
   const load = () => api.freeAgents().then(setData).catch(() => {});
   useEffect(() => {
     load();
   }, [reloadSignal]);
   if (!data) return <Loading />;
   const wave = data.wave?.active ? data.wave : null;
+  const rows = (data.free_agents as Row[]).filter(
+    (p) => pos === "All" || p.position === pos || p.secondary_position === pos,
+  );
   const sign = async (pid: number, salary: number, years: number) => {
     try {
       const r = await api.sign(pid, salary, years);
@@ -1682,8 +1686,17 @@ function FreeAgentsPanel({
           unsigned; pursue your targets before rival GMs bid.
         </p>
       )}
+      <div className="toolbar">
+        <select value={pos} onChange={(e) => setPos(e.target.value)}>
+          {["All", "PG", "SG", "SF", "PF", "C"].map((p) => (
+            <option key={p} value={p}>
+              {p === "All" ? "All positions" : p}
+            </option>
+          ))}
+        </select>
+      </div>
       <DataTable
-        data={data.free_agents}
+        data={rows}
         columns={cols}
         initialSort={[{ id: "overall", desc: true }]}
         onRowClick={(r) => onPlayer((r as Row).pid)}
@@ -1717,14 +1730,16 @@ function OfferModal({
   const pref: number = row.preferred_years ?? 3;
   const reqBy: Record<string, number> = row.required_by_years ?? {};
   const requiredFor = (y: number) => reqBy[String(y)] ?? row.ask;
+  // Default to the exact ask in $M (one decimal, rounded up so it always meets the requirement).
+  const defaultSalaryM = (y: number) => Math.max(1, Math.ceil(requiredFor(y) / 1e5) / 10);
   const [years, setYears] = useState(pref);
-  const [salaryM, setSalaryM] = useState(Math.max(1, Math.round(requiredFor(pref) / 1e6)));
+  const [salaryM, setSalaryM] = useState(defaultSalaryM(pref));
   const required = requiredFor(years);
-  const salary = salaryM * 1e6;
+  const salary = Math.round(salaryM * 1e6);   // integer dollars — the API rejects floats
   const accepts = salary >= required;
   const setYearsAndDefault = (y: number) => {
     setYears(y);
-    setSalaryM(Math.max(1, Math.round(requiredFor(y) / 1e6))); // reset salary to the new ask
+    setSalaryM(defaultSalaryM(y));            // reset salary to the new ask
   };
   return (
     <Modal title={`Offer to ${row.name}`} onClose={onClose}>
@@ -1747,6 +1762,7 @@ function OfferModal({
         <input
           type="number"
           min={1}
+          step={0.1}
           value={salaryM}
           onChange={(e) => setSalaryM(Math.max(1, Number(e.target.value)))}
         />

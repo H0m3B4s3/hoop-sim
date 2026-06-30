@@ -8,9 +8,15 @@ async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
     ...opts,
   });
   if (!res.ok) {
-    let detail = res.statusText;
+    let detail: string = res.statusText;
     try {
-      detail = (await res.json()).detail ?? detail;
+      const d = (await res.json()).detail;
+      if (Array.isArray(d)) {
+        // FastAPI validation errors come back as a list of {loc, msg, ...} objects.
+        detail = d.map((e) => e.msg ?? String(e)).join("; ");
+      } else if (typeof d === "string") {
+        detail = d;
+      }
     } catch {
       /* ignore */
     }
