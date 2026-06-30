@@ -107,7 +107,8 @@ export const api = {
   executeTrade: (b: any) => post<any>("/trade/execute", b),
   solicitOffers: (pids: number[]) => post<any>("/trade/solicit", { pids }),
   acceptOffer: (b: any) => post<any>("/trade/accept", b),
-  sign: (pid: number) => post<any>("/sign", { pid }),
+  sign: (pid: number, salary?: number, years?: number) =>
+    post<any>("/sign", { pid, salary, years }),
   extend: (pid: number) => post<any>("/extend", { pid }),
   waive: (pid: number) => post<any>("/waive", { pid }),
   setBlock: (pid: number, on: boolean) => post<any>("/block", { pid, on }),

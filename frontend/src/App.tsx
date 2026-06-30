@@ -1619,19 +1619,23 @@ function FreeAgentsPanel({
   reloadSignal?: number;
 }) {
   const [data, setData] = useState<any | null>(null);
+  const [offer, setOffer] = useState<Row | null>(null);
   const load = () => api.freeAgents().then(setData).catch(() => {});
   useEffect(() => {
     load();
   }, [reloadSignal]);
   if (!data) return <Loading />;
   const wave = data.wave?.active ? data.wave : null;
-  const sign = async (pid: number) => {
+  const sign = async (pid: number, salary: number, years: number) => {
     try {
-      const r = await api.sign(pid);
+      const r = await api.sign(pid, salary, years);
       toast(r.signed ? "Signed!" : r.reason);
       if (r.summary) refresh(r.summary);
-      load();
-      if (r.signed) onChange?.();
+      if (r.signed) {
+        setOffer(null);
+        load();
+        onChange?.();
+      }
     } catch (e) {
       toast(String(e));
     }
@@ -1650,14 +1654,12 @@ function FreeAgentsPanel({
       cell: (c) => (
         <button
           className="mini"
-          disabled={!c.row.original.can_sign}
-          title={c.row.original.sign_reason}
           onClick={(e) => {
             e.stopPropagation();
-            sign(c.row.original.pid);
+            setOffer(c.row.original);
           }}
         >
-          Sign
+          Offer
         </button>
       ),
     },
@@ -1678,7 +1680,84 @@ function FreeAgentsPanel({
         onRowClick={(r) => onPlayer((r as Row).pid)}
         searchPlaceholder="Search free agents…"
       />
+      {offer && (
+        <OfferModal
+          row={offer}
+          maxYears={data.max_years ?? 5}
+          onClose={() => setOffer(null)}
+          onSubmit={(salary, years) => sign(offer.pid, salary, years)}
+        />
+      )}
     </div>
+  );
+}
+
+// Negotiate a free-agent contract: trade years against money. More years than the player prefers
+// earns a per-season discount (security); fewer years makes them hold out for a raise.
+function OfferModal({
+  row,
+  maxYears,
+  onClose,
+  onSubmit,
+}: {
+  row: Row;
+  maxYears: number;
+  onClose: () => void;
+  onSubmit: (salary: number, years: number) => void;
+}) {
+  const pref: number = row.preferred_years ?? 3;
+  const reqBy: Record<string, number> = row.required_by_years ?? {};
+  const requiredFor = (y: number) => reqBy[String(y)] ?? row.ask;
+  const [years, setYears] = useState(pref);
+  const [salaryM, setSalaryM] = useState(Math.max(1, Math.round(requiredFor(pref) / 1e6)));
+  const required = requiredFor(years);
+  const salary = salaryM * 1e6;
+  const accepts = salary >= required;
+  const setYearsAndDefault = (y: number) => {
+    setYears(y);
+    setSalaryM(Math.max(1, Math.round(requiredFor(y) / 1e6))); // reset salary to the new ask
+  };
+  return (
+    <Modal title={`Offer to ${row.name}`} onClose={onClose}>
+      <div className="muted small">
+        {posLabel(row)} · OVR {row.overall} · prefers {pref}y · asks {money(row.ask)}/yr
+      </div>
+      <div className="offerRow">
+        <label>Years</label>
+        <div className="segrow tight">
+          {Array.from({ length: maxYears }, (_, i) => i + 1).map((y) => (
+            <Seg key={y} active={years === y} onClick={() => setYearsAndDefault(y)}>
+              {y}
+              {y === pref ? "★" : ""}
+            </Seg>
+          ))}
+        </div>
+      </div>
+      <div className="offerRow">
+        <label>Salary / year ($M)</label>
+        <input
+          type="number"
+          min={1}
+          value={salaryM}
+          onChange={(e) => setSalaryM(Math.max(1, Number(e.target.value)))}
+        />
+      </div>
+      <p className={accepts ? "good" : "muted"}>
+        {accepts
+          ? `✓ ${row.name} accepts ${years}y at ${money(salary)}/yr.`
+          : `Wants about ${money(required)}/yr over ${years}y${
+              years < pref ? " — or offer more years for less" : ""
+            }.`}
+      </p>
+      <div className="finalLine">
+        <button className="ghost" onClick={onClose}>
+          Cancel
+        </button>
+        <button className="primary" disabled={!accepts} onClick={() => onSubmit(salary, years)}>
+          Submit offer
+        </button>
+      </div>
+    </Modal>
   );
 }
 
