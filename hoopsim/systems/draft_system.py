@@ -220,6 +220,15 @@ def make_pick(world: World, pid: int) -> None:
     salary = rookie_salary(pick_no)
     contract = flat_contract(salary, ROOKIE_CONTRACT_YEARS, world.season_year, rookie_scale=True)
     world.sign_player(pid, tid, contract)
+    # Record draft provenance (bio flavor): round and overall pick from the slot.
+    n_teams = len(world.teams)
+    team = world.teams.get(tid)
+    world.players[pid].draft = {
+        "year": dc.year,
+        "round": 1 if pick_no <= n_teams else 2,
+        "pick": pick_no,
+        "team": team.abbrev if team else "",
+    }
     dc.record_pick(pid)
 
 

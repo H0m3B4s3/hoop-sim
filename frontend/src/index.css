@@ -896,6 +896,42 @@ table.dt tr.clickable:hover td {
 .allLeagueChip:hover {
   color: var(--accent);
 }
+.hofRow {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.hofRow:last-child {
+  border-bottom: none;
+}
+.hofMain {
+  font-size: 15px;
+}
+.hofAccolades,
+.legacyAccolades {
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--accent);
+}
+.legacyBox {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 12px 0;
+}
+.legacyBox h4 {
+  margin: 0 0 4px;
+}
+.accoladeChip {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 12px;
+  color: var(--accent);
+}
 .depthGrid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);

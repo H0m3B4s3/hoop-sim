@@ -137,6 +137,16 @@ def player_card(world: World, p: Player) -> Panel:
             f"[dim]{p.height_str} · {p.weight_lb} lb · Age {p.age} · "
             f"OVR {p.overall} · POT {p.scouted_potential()}[/]\n"
             f"Contract: {money(p.contract.current_salary)} × {p.contract.years_remaining}y")
+    draft = (f"{p.draft['year']} · Rd {p.draft['round']}, Pick {p.draft['pick']} ({p.draft['team']})"
+             if p.draft else "Undrafted")
+    head += f"\n[dim]Draft: {draft}[/]"
+    if p.accolades:
+        from hoopsim.systems.legacy import ACCOLADE_LABELS, ACCOLADE_WEIGHTS
+        acc = " · ".join(f"{v}× {ACCOLADE_LABELS.get(k, k)}"
+                         for k, v in sorted(p.accolades.items(),
+                                            key=lambda kv: -ACCOLADE_WEIGHTS.get(kv[0], 0)) if v)
+        if acc:
+            head += f"\n[accent]{acc}[/]"
     if p.is_injured:
         head += f"\n[injury]Injured: {p.injury.description} ({p.injury.games_remaining} games)[/]"
     border = world.teams[p.team_id].color if p.team_id in world.teams else "cyan"

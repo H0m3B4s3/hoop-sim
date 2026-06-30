@@ -279,6 +279,18 @@ def history(sid: str = Depends(_sid)):
     return {"history": ser.history_view(world)}
 
 
+@app.get("/api/hall-of-fame")
+def hall_of_fame(sid: str = Depends(_sid)):
+    world = _world(sid)
+    return {"members": ser.hall_of_fame_view(world)}
+
+
+@app.get("/api/leaderboards")
+def leaderboards(category: str = "pts", sid: str = Depends(_sid)):
+    world = _world(sid)
+    return ser.leaderboards_view(world, category)
+
+
 @app.get("/api/teams/{tid}/depth-chart")
 def depth_chart(tid: int, sid: str = Depends(_sid)):
     world = _world(sid)

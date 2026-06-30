@@ -311,6 +311,7 @@ def player_detail(world: World, p: Player) -> dict:
         "weight_lb": p.weight_lb,
         "experience": p.experience,
         "college": p.college,
+        "draft": dict(p.draft) if p.draft else None,
         "morale": p.morale,
         "rating_groups": groups,
         "composites": composites,
@@ -324,8 +325,65 @@ def player_detail(world: World, p: Player) -> dict:
             "ft_pct": round(s.ft_pct, 3), "ts_pct": round(s.ts_pct, 3),
         },
         "career": list(p.career),
+        "legacy": legacy_resume_view(world, p),
     })
     return base
+
+
+def legacy_resume_view(world: World, p: Player) -> dict:
+    """Career résumé for the legacy/career page: totals, peak, accolades, and HoF standing."""
+    from hoopsim.systems import legacy
+    r = legacy.resume(world, p)
+    return {
+        "seasons": r["seasons"],
+        "peak_ovr": r["peak_ovr"],
+        "totals": r["totals"],
+        "accolades": [{"key": k, "label": legacy.ACCOLADE_LABELS.get(k, k), "count": v}
+                      for k, v in sorted(r["accolades"].items(),
+                                         key=lambda kv: -legacy.ACCOLADE_WEIGHTS.get(kv[0], 0))],
+        "hof_score": r["hof_score"],
+        "hof": r["hof"],
+    }
+
+
+def hall_of_fame_view(world: World) -> List[dict]:
+    """Inducted greats, highest HoF score first — self-contained résumé snapshots."""
+    from hoopsim.systems import legacy
+    rows = sorted(world.hall_of_fame, key=lambda s: s.get("hof_score", 0), reverse=True)
+    return [_resume_row(world, s, legacy) for s in rows]
+
+
+def leaderboards_view(world: World, category: str = "pts", limit: int = 25) -> dict:
+    """All-time career leaders (living + retired) for the record book."""
+    from hoopsim.systems import legacy
+    rows = legacy.leaderboards(world, category, limit)
+    return {
+        "category": category,
+        "categories": list(legacy.LEADERBOARD_CATEGORIES),
+        "rows": [_resume_row(world, s, legacy) for s in rows],
+    }
+
+
+def _resume_row(world: World, snap: dict, legacy) -> dict:
+    """Flatten a résumé snapshot into a display row (used by HoF + leaderboards)."""
+    return {
+        "pid": snap.get("pid"),
+        "name": snap.get("name"),
+        "position": snap.get("position"),
+        "seasons": snap.get("seasons"),
+        "peak_ovr": snap.get("peak_ovr"),
+        "last_team": snap.get("last_team"),
+        "first_year": snap.get("first_year"),
+        "last_year": snap.get("last_year"),
+        "draft": snap.get("draft"),
+        "active": snap.get("active", snap.get("pid") in world.players),
+        "totals": snap.get("totals", {}),
+        "accolades": [{"key": k, "label": legacy.ACCOLADE_LABELS.get(k, k), "count": v}
+                      for k, v in snap.get("accolades", {}).items() if v],
+        "hof_score": snap.get("hof_score"),
+        "hof": snap.get("hof", False),
+        "induction_year": snap.get("induction_year"),
+    }
 
 
 # ---------------------------------------------------------------------------

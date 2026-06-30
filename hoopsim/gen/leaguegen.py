@@ -158,7 +158,8 @@ def _build_free_agents(world: World, names: NameGenerator) -> None:
         world.free_agents.append(p.pid)
 
 
-def build_world(seed: int = None, season_preset: str = DEFAULT_SEASON_PRESET) -> World:
+def build_world(seed: int = None, season_preset: str = DEFAULT_SEASON_PRESET,
+                backstory: bool = True) -> World:
     """Generate a complete, ready-to-play league world (no user team selected yet)."""
     # Always pin a concrete seed so the world is reproducible and shareable, even when the
     # caller didn't pick one.
@@ -194,4 +195,10 @@ def build_world(seed: int = None, season_preset: str = DEFAULT_SEASON_PRESET) ->
 
     from hoopsim.systems.draft_system import init_draft_picks
     init_draft_picks(world)
+
+    # Layer synthetic history on top — fabricated career arcs for veterans plus a retired-legends
+    # cohort — using a separate rng so the league above is byte-for-byte the same with or without it.
+    if backstory:
+        from hoopsim.gen.backstory import apply_backstory
+        apply_backstory(world, seed)
     return world
