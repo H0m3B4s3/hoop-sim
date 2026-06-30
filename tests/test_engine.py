@@ -46,7 +46,9 @@ def test_scoring_in_realistic_band():
     scores = [s for _, _, r in results for s in (r.home_score, r.away_score)]
     mean = st.mean(scores)
     assert 104 <= mean <= 124, f"mean team score {mean:.1f} out of band"
-    assert min(scores) > 70 and max(scores) < 175
+    # Rare "unicorn" archetypes widen the upper tail (a stacked elite roster can erupt) without
+    # moving the mean/median; the ceiling is a sanity bound against truly broken blowouts.
+    assert min(scores) > 70 and max(scores) < 190
 
 
 def test_minutes_sum_near_240():

@@ -70,9 +70,9 @@ def test_short_deal_demands_a_premium():
 
 def test_lesser_free_agents_are_more_flexible_on_term():
     """The security discount for extra years is larger for lesser FAs than for stars."""
+    from hoopsim.config import VETERAN_MINIMUM
     w = build_world(seed=3)
     star = _fa(w, overall=88, age=27)
-    fringe = _fa(w, overall=68, age=27)
 
     def discount(p):
         pref = FA.contract_years_for(p)
@@ -82,6 +82,13 @@ def test_lesser_free_agents_are_more_flexible_on_term():
         base = FA.required_salary(w, p, pref)
         return (base - FA.required_salary(w, p, y)) / base
 
+    # A clearly-lesser FA, but one whose ask sits above the minimum so a discount is expressible
+    # (a true minimum player is already floored and can't discount further).
+    fringe = min((p for p in w.free_agent_players()
+                  if p.age < 30 and p.overall < 80
+                  and FA.required_salary(w, p, FA.contract_years_for(p)) > VETERAN_MINIMUM),
+                 key=lambda p: p.overall)
+    assert fringe.overall < star.overall
     assert discount(fringe) > discount(star)
 
 

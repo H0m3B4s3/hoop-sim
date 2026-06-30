@@ -10,7 +10,7 @@ from typing import List, Optional
 
 from hoopsim.config import RATING_MAX, RATING_MIN, ROOKIE_AGE_RANGE
 from hoopsim.models.attributes import (ALL_RATINGS, ARCHETYPES_BY_POSITION, POSITIONS,
-                                     clamp_rating, overall)
+                                     RARE_ARCHETYPES_BY_POSITION, clamp_rating, overall)
 from hoopsim.models.player import Player
 from hoopsim.gen.namegen import NameGenerator
 from hoopsim.rng import Rng
@@ -38,6 +38,29 @@ def _secondary_position(rng: Rng, primary: str) -> Optional[str]:
     return None
 
 
+# Rare "unicorn" archetypes are gated to elite-ceiling players so they stay special. The gate uses
+# a quick ceiling estimate (target overall plus expected youth growth), and even then only fires on
+# a roll — so a league has a handful of unicorns, mostly among its young stars and top prospects.
+ELITE_CEILING = 84
+RARE_ARCHETYPE_CHANCE = 0.40
+
+
+def _ceiling_estimate(target_overall: int, age: int) -> int:
+    """Rough talent ceiling for archetype gating: current target plus expected growth if young."""
+    if age >= 27:
+        return target_overall
+    return min(99, target_overall + int(round((27 - age) * 1.1)))
+
+
+def _choose_archetype(rng: Rng, position: str, target_overall: int, age: int):
+    """Pick a generation archetype: usually from the normal pool, rarely a unicorn for elite talent."""
+    rare = RARE_ARCHETYPES_BY_POSITION.get(position, [])
+    if (rare and _ceiling_estimate(target_overall, age) >= ELITE_CEILING
+            and rng.chance(RARE_ARCHETYPE_CHANCE)):
+        return rng.choice(rare)
+    return rng.choice(ARCHETYPES_BY_POSITION[position])
+
+
 def _potential(rng: Rng, ovr: int, age: int) -> int:
     if age >= 29:
         return int(min(RATING_MAX, ovr + rng.randint(0, 1)))
@@ -57,7 +80,6 @@ def make_player(rng: Rng, pid: int, names: NameGenerator, *,
                 age: Optional[int] = None,
                 is_prospect: bool = False) -> Player:
     position = position or _pick_position(rng)
-    archetype = rng.choice(ARCHETYPES_BY_POSITION[position])
 
     if age is None:
         age = (rng.randint(*ROOKIE_AGE_RANGE) if is_prospect
@@ -67,6 +89,8 @@ def make_player(rng: Rng, pid: int, names: NameGenerator, *,
         # scores at target PPP. The 90 cap keeps the very top end scarce; stars are earned through
         # development, not handed out at generation.
         target_overall = int(min(90, max(55, round(rng.gauss(70, 8)))))
+    # Archetype is chosen after talent is known so rare unicorn archetypes can be gated to elites.
+    archetype = _choose_archetype(rng, position, target_overall, age)
 
     # Build a bland player and calibrate him to the target overall FIRST, then carve out the
     # archetype identity. Skewing after the calibration shift keeps signature spikes spiked and

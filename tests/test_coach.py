@@ -223,13 +223,18 @@ def test_presets_offer_five_available_players_each():
 def test_presets_pick_the_right_skill_for_the_situation():
     _, sim = _sim()
     _ready_lineups(sim)
+    from hoopsim.sim.coach import PRESET_WEIGHTS
     view = sim._build_view(sim.home, sim.away, sim.home)
     players = sim.home.players
-    # The FT unit can't be beaten on free-throw shooting by any available five.
-    ft_sum = sum(players[pid].ratings["free_throw"] for pid in view.presets["ft"])
     avail = [pid for pid in sim.home.available if pid not in sim.home.unavailable]
-    best_ft = sum(sorted((players[pid].ratings["free_throw"] for pid in avail),
-                         reverse=True)[:5])
+    # The FT unit maximizes the preset's free-throw-weighted blend (heavy FT, light overall so a
+    # competent player isn't benched for a pure FT specialist). No available five scores higher.
+    def ft_score(pid):
+        p = players[pid]
+        return sum((p.overall if f == "overall" else p.ratings[f]) * w
+                   for f, w in PRESET_WEIGHTS["ft"].items())
+    ft_sum = sum(ft_score(pid) for pid in view.presets["ft"])
+    best_ft = sum(sorted((ft_score(pid) for pid in avail), reverse=True)[:5])
     assert ft_sum == best_ft
     # Closers are the five best by overall.
     best_ovr = sum(sorted((players[pid].overall for pid in avail), reverse=True)[:5])
