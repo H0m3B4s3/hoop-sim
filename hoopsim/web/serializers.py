@@ -311,6 +311,7 @@ def player_detail(world: World, p: Player) -> dict:
         "weight_lb": p.weight_lb,
         "experience": p.experience,
         "college": p.college,
+        "draft": dict(p.draft) if p.draft else None,
         "morale": p.morale,
         "rating_groups": groups,
         "composites": composites,
@@ -374,6 +375,7 @@ def _resume_row(world: World, snap: dict, legacy) -> dict:
         "last_team": snap.get("last_team"),
         "first_year": snap.get("first_year"),
         "last_year": snap.get("last_year"),
+        "draft": snap.get("draft"),
         "active": snap.get("active", snap.get("pid") in world.players),
         "totals": snap.get("totals", {}),
         "accolades": [{"key": k, "label": legacy.ACCOLADE_LABELS.get(k, k), "count": v}

@@ -62,6 +62,10 @@ class Player:
     # so the user can read a stat profile, not just an archetype; ``None`` for everyone else.
     pre_draft: Optional[Dict[str, float]] = None
 
+    # How the player entered the league: ``{"year", "round", "pick", "team"}`` or ``None`` if
+    # undrafted. Set when drafted (or fabricated at world creation); pure bio flavor.
+    draft: Optional[Dict] = None
+
     season: StatLine = field(default_factory=StatLine)
     playoffs: StatLine = field(default_factory=StatLine)
     career: List[dict] = field(default_factory=list)   # one summary dict per finished season
@@ -135,6 +139,7 @@ class Player:
             "playoffs": self.playoffs.to_dict(),
             "career": list(self.career),
             "accolades": dict(self.accolades),
+            "draft": dict(self.draft) if self.draft else None,
         }
 
     @classmethod
@@ -169,4 +174,5 @@ class Player:
             playoffs=StatLine.from_dict(d.get("playoffs", {})),
             career=list(d.get("career", [])),
             accolades={k: int(v) for k, v in d.get("accolades", {}).items()},
+            draft=(dict(d["draft"]) if d.get("draft") else None),
         )

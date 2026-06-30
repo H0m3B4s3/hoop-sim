@@ -66,7 +66,7 @@ def test_role_player_misses_hof():
 
 # -- accolade accrual -------------------------------------------------------
 def test_record_accolades_ticks_winners():
-    w = build_world(seed=4)
+    w = build_world(seed=4, backstory=False)        # clean slate — no fabricated accolades
     champ = w.team_list()[0]
     for pid in champ.roster:
         w.players[pid].season.gp = 10                # qualify for the champion tally
@@ -101,7 +101,7 @@ def test_retiree_retained_and_inducted():
 
 # -- leaderboards -----------------------------------------------------------
 def test_leaderboards_rank_living_and_retired():
-    w = build_world(seed=6)
+    w = build_world(seed=6, backstory=False)        # no fabricated legends competing on the board
     living = next(iter(w.players.values()))
     living.career = _star_career(years=10, ppg=20.0)   # 15,000 pts
     w.retired.append({"pid": -1, "name": "Old Legend", "position": "SF", "seasons": 18,

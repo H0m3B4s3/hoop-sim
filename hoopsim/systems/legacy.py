@@ -89,6 +89,7 @@ def resume(world: World, player: Player, retired_year: Optional[int] = None) -> 
         "last_team": last_team,
         "first_year": career[0].get("year") if career else world.season_year,
         "last_year": career[-1].get("year") if career else world.season_year,
+        "draft": dict(player.draft) if player.draft else None,
     }
     out["hof_score"] = hof_score(out)
     out["hof"] = out["hof_score"] >= HOF_THRESHOLD

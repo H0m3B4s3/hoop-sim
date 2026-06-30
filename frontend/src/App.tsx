@@ -1331,12 +1331,17 @@ function HallOfFameView({ onPlayer }: { onPlayer: (pid: number) => void }) {
     <div className="card">
       <h3>Hall of Fame</h3>
       {data.map((m) => (
-        <div className="hofRow clickable" key={m.pid} onClick={() => onPlayer(m.pid)}>
+        <div
+          className={m.active ? "hofRow clickable" : "hofRow"}
+          key={m.pid}
+          onClick={m.active ? () => onPlayer(m.pid) : undefined}
+        >
           <div className="hofMain">
             <b>{m.name}</b>
             <span className="muted small">
               {" "}
               {m.position} · {m.last_team} · {m.first_year}–{m.last_year} · peak {OVR(m.peak_ovr)}
+              {m.draft && ` · #${m.draft.pick} (${m.draft.year})`}
             </span>
           </div>
           <div className="muted small">
@@ -1384,7 +1389,11 @@ function RecordsView({ onPlayer }: { onPlayer: (pid: number) => void }) {
           </thead>
           <tbody>
             {data.rows.map((r: Row, i: number) => (
-              <tr key={r.pid} className="clickable" onClick={() => onPlayer(r.pid)}>
+              <tr
+                key={r.pid}
+                className={r.active ? "clickable" : undefined}
+                onClick={r.active ? () => onPlayer(r.pid) : undefined}
+              >
                 <td>{i + 1}</td>
                 <td>
                   {r.name}
@@ -3519,6 +3528,12 @@ function PlayerModal({
             {p.height} · {p.weight_lb} lb · Age {p.age}
             {mode !== "college" && ` · ${money(p.salary)} × ${p.years_remaining}y`}
             {p.is_injured && <span className="injury"> · {p.injury}</span>}
+          </div>
+          <div className="muted small">
+            {p.draft
+              ? `Drafted ${p.draft.year} · Round ${p.draft.round}, Pick ${p.draft.pick} (${p.draft.team})`
+              : "Undrafted"}
+            {p.college && ` · ${p.college}`}
           </div>
           <div className="statRow">
             <Stat label="PPG" value={p.season_stats.ppg} />
