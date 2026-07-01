@@ -33,6 +33,7 @@ class Team:
     auto_lineup: bool = True                               # False -> user set the starting five
     rotation: List[int] = field(default_factory=list)      # user-pinned rotation beyond the starters; [] -> automatic
     roles: Dict[str, int] = field(default_factory=dict)    # role tag -> pid (one player per role); see ROLE_TAGS
+    chemistry: Dict[str, float] = field(default_factory=dict)  # "lo,hi" pid pair -> shared on-court seconds
     tactics: Tactics = field(default_factory=Tactics)
     coach: Optional[Coach] = None                          # head coach (rotation/tactics identity)
 
@@ -100,6 +101,9 @@ class Team:
             if holder == pid:
                 del self.roles[role]
         self.minutes_target.pop(pid, None)
+        # Chemistry travels with the pairing: a departing player takes his shared history with him.
+        self.chemistry = {k: v for k, v in self.chemistry.items()
+                          if pid not in _pair_pids(k)}
 
     # -- results ------------------------------------------------------------
     def record_result(self, won: bool, pf: int, pa: int, conference_game: bool) -> None:
@@ -140,6 +144,7 @@ class Team:
             "auto_lineup": self.auto_lineup,
             "rotation": list(self.rotation),
             "roles": {k: v for k, v in self.roles.items()},
+            "chemistry": {k: round(v, 1) for k, v in self.chemistry.items()},
             "tactics": self.tactics.to_dict(),
             "coach": self.coach.to_dict() if self.coach else None,
             "wins": self.wins,
@@ -176,6 +181,7 @@ class Team:
             auto_lineup=d.get("auto_lineup", True),
             rotation=list(d.get("rotation", [])),
             roles={k: int(v) for k, v in d.get("roles", {}).items()},
+            chemistry={k: float(v) for k, v in d.get("chemistry", {}).items()},
             tactics=Tactics.from_dict(d.get("tactics", {})),
             coach=Coach.from_dict(d["coach"]) if d.get("coach") else None,
             wins=d.get("wins", 0),
@@ -216,6 +222,45 @@ def team_salary(team: Team, players: Dict[int, Player]) -> int:
 
 def available_players(team: Team, players: Dict[int, Player]) -> List[Player]:
     return [p for p in roster_players(team, players) if p.available]
+
+
+# ---------------------------------------------------------------------------
+# Chemistry (lineup familiarity)
+# ---------------------------------------------------------------------------
+def pair_key(a: int, b: int) -> str:
+    """Order-independent key for a pair of player ids in ``team.chemistry``."""
+    return f"{a},{b}" if a < b else f"{b},{a}"
+
+
+def _pair_pids(key: str) -> tuple:
+    lo, hi = key.split(",")
+    return int(lo), int(hi)
+
+
+def lineup_familiarity_secs(chemistry: Dict[str, float], five: List[int]) -> float:
+    """Average shared on-court seconds across the pairs of a lineup (a missing pair counts as 0).
+
+    Averaging (rather than taking the minimum) means slotting one new face into a settled five
+    dents chemistry partway and recovers as he logs minutes, instead of dropping the whole unit to
+    the floor.
+    """
+    if len(five) < 2:
+        return 0.0
+    pairs = [(five[i], five[j]) for i in range(len(five)) for j in range(i + 1, len(five))]
+    total = sum(chemistry.get(pair_key(a, b), 0.0) for a, b in pairs)
+    return total / len(pairs)
+
+
+def seed_chemistry(team: Team, secs: float) -> None:
+    """Seed every current roster pair to ``secs`` shared time (an established, gelled roster).
+
+    Called at world creation so a league that has "already existed" plays at full chemistry from
+    the opening tip; players who arrive later start cold.
+    """
+    roster = team.roster
+    for i in range(len(roster)):
+        for j in range(i + 1, len(roster)):
+            team.chemistry[pair_key(roster[i], roster[j])] = secs
 
 
 _POSITION_INDEX = {pos: i for i, pos in enumerate(POSITIONS)}
