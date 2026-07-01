@@ -20,7 +20,8 @@ from hoopsim.gen.playergen import make_player
 from hoopsim.models.coach import apply_coach_tactics, assign_coach
 from hoopsim.models.league import Phase
 from hoopsim.models.player import Player
-from hoopsim.models.team import Team, auto_set_lineup
+from hoopsim.models.team import Team, auto_set_lineup, seed_chemistry
+from hoopsim.sim import ratings as R
 from hoopsim.models.world import World
 from hoopsim.rng import Rng
 
@@ -125,6 +126,7 @@ def _build_college_roster(world: World, team: Team, names: NameGenerator) -> Non
         world.add_player(p)
         team.add_player(p.pid)
     auto_set_lineup(team, world.players)
+    seed_chemistry(team, R.FULL_CHEM_SECS)
     team.nil_budget = int(team.prestige * world.rng.uniform(0.8, 1.4) * 1_000_000)
 
 

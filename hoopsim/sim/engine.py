@@ -13,7 +13,7 @@ from hoopsim.config import HOME_COURT_BONUS, IN_GAME_INJURY_RATE, OT_SECONDS, ga
 from hoopsim.models.attributes import POSITIONS
 from hoopsim.models.coach import profile_for
 from hoopsim.models.player import Player
-from hoopsim.models.team import Team, position_distance
+from hoopsim.models.team import Team, lineup_familiarity_secs, pair_key, position_distance
 from hoopsim.sim import ratings as R
 from hoopsim.sim.boxscore import GameResult, PBPEvent
 from hoopsim.sim.coach import Coach, CoachOrders, CoachView, PlayerView, PRESET_WEIGHTS
@@ -103,12 +103,18 @@ class _TeamState:
         self.period_fouls: int = 0                      # team fouls in the current period
         self.locked_lineup: Optional[List[int]] = None  # coach-pinned on-court five
         self.opp_off_strength: float = 0.0              # opponent offense, 0..1; set once by GameSim
+        # This game's shared-floor time per pair, flushed into team.chemistry when the game ends.
+        # Chemistry read during the game uses team.chemistry as it stood at tip-off (unmutated
+        # until _finalize), so a game can't lift its own lineups' familiarity mid-flight.
+        self.pair_secs: Dict[str, float] = {}
 
     def players_on_court(self) -> List[Player]:
         return [self.players[pid] for pid in self.on_court]
 
     def rebuild_cache(self) -> None:
-        self.cache = build_lineup_cache(self.players_on_court())
+        secs = lineup_familiarity_secs(self.team.chemistry, self.on_court)
+        self.cache = build_lineup_cache(self.players_on_court(),
+                                        chem_real=R.familiarity_realization(secs))
 
     def choose_lineup(self, game_secs: float, clutch: bool = False) -> None:
         candidates = [pid for pid in self.available if pid not in self.unavailable]
@@ -723,24 +729,33 @@ class GameSim:
         comeback = max(-0.030, min(0.030, -off_margin * 0.0011))
         edge = home_edge - fat_pen + comeback + self._play_boost
         r = shooter.ratings
+        # Realization scales how much of a player's skill *gap* over the 70 baseline actually shows
+        # up: the shooter's morale and his lineup's chemistry on offense, the defending five's
+        # chemistry and morale on defense, plus the shooter's clutch resistance under pressure. All
+        # factors are capped at 1.0 (reach your ceiling, never beyond), so neutral play is today's
+        # tuning and only slumps / scrambled fives / chokes dip below.
+        r_off = R.morale_realization(shooter.morale) * oc.chem_real
+        if clutch:
+            r_off *= R.clutch_realization(r["clutch"])
+        r_def = dc.chem_real * dc.avg_morale_real
         # Defender coefficients are held at parity with the matching shooter coefficient so a
         # league-wide ratings drift nets to zero on make probability (scores track skill *gaps*,
         # not absolute level). Parity also keeps an elite shooter from running away from an average
-        # defense, which is what produced 160-point regulation games.
+        # defense, which is what produced 160-point regulation games. Realization scales both sides
+        # symmetrically, preserving that parity.
         if shot_type == "rim":
-            make_p = (0.560 + (r["finishing"] - 70) * 0.0030 - (dc.interior_anchor - 70) * 0.0030
+            make_p = (0.560 + (r["finishing"] - 70) * 0.0030 * r_off
+                      - (dc.interior_anchor - 70) * 0.0030 * r_def
                       + edge + scheme[1] + pressure[3])
             foul_p = 0.195 + (r["draw_foul"] - 70) * 0.002 + pressure[1]
         elif shot_type == "mid":
-            make_p = (0.380 + (r["mid_range"] - 70) * 0.0030 - (dc.avg_perimeter_def - 70) * 0.0030
-                      + edge)
+            make_p = (0.380 + (r["mid_range"] - 70) * 0.0030 * r_off
+                      - (dc.avg_perimeter_def - 70) * 0.0030 * r_def + edge)
             foul_p = 0.06 + (r["draw_foul"] - 70) * 0.0015 + pressure[1] * 0.5
         else:  # three
-            make_p = (0.330 + (r["three_point"] - 70) * 0.0034
-                      - (dc.avg_perimeter_def - 70) * 0.0034 + edge + scheme[0])
+            make_p = (0.330 + (r["three_point"] - 70) * 0.0034 * r_off
+                      - (dc.avg_perimeter_def - 70) * 0.0034 * r_def + edge + scheme[0])
             foul_p = 0.05 + (r["draw_foul"] - 70) * 0.001
-        if clutch:
-            make_p += (r["clutch"] - 70) * 0.0008
         make_p = max(0.02, min(0.97, make_p))
         foul_p = max(0.01, min(0.40, foul_p))
 
@@ -931,7 +946,13 @@ class GameSim:
 
     def _apply_fatigue(self, poss_secs: float) -> None:
         for state in (self.home, self.away):
-            on = set(state.on_court)
+            on = state.on_court
+            # Chemistry: every pair sharing the floor this trip banks the time together.
+            for i in range(len(on)):
+                for j in range(i + 1, len(on)):
+                    k = pair_key(on[i], on[j])
+                    state.pair_secs[k] = state.pair_secs.get(k, 0.0) + poss_secs
+            on = set(on)
             for pid in state.available:
                 if pid in on:
                     state.secs_played[pid] += poss_secs
@@ -969,6 +990,10 @@ class GameSim:
             tid=tid, text=text))
 
     def _finalize(self) -> None:
+        # Flush this game's shared-floor time into each team's season-long chemistry store.
+        for state in (self.home, self.away):
+            for k, secs in state.pair_secs.items():
+                state.team.chemistry[k] = state.team.chemistry.get(k, 0.0) + secs
         # record seconds played into each player's box line
         for state in (self.home, self.away):
             for pid, secs in state.secs_played.items():

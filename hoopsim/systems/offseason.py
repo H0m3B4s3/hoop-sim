@@ -157,6 +157,8 @@ def post_offseason(world: World) -> None:
     world.season_year += 1
     draft_system.roll_draft_picks(world)
     world.draft_class = None        # retire this year's class so next offseason starts clean
+    from hoopsim.systems.momentum import offseason_reset
+    offseason_reset(world)          # rust chemistry, drift morale toward baseline for the new year
     start_season(world)
 
 

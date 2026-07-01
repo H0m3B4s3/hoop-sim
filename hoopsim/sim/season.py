@@ -11,6 +11,7 @@ from hoopsim.models.team import auto_set_lineup
 from hoopsim.models.world import World
 from hoopsim.sim.boxscore import GameResult
 from hoopsim.sim.engine import simulate_game
+from hoopsim.systems.momentum import update_morale
 
 DayResults = List[Tuple[Game, GameResult]]
 
@@ -66,6 +67,8 @@ def _apply_result(world: World, game: Game, result: GameResult, is_playoff: bool
         player = world.players[pid]
         if player.injury is None or games > player.injury.games_remaining:
             player.injury = Injury(desc, games, severity)
+
+    update_morale(world, home, away, result)
 
 
 def sim_one(world: World, game: Game, *, collect_pbp: bool = False,

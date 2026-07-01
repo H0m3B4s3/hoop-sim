@@ -15,9 +15,10 @@ from hoopsim.models.coach import apply_coach_tactics, assign_coach
 from hoopsim.models.contract import flat_contract
 from hoopsim.models.league import Phase
 from hoopsim.models.player import Player
-from hoopsim.models.team import Team, auto_set_lineup
+from hoopsim.models.team import Team, auto_set_lineup, seed_chemistry
 from hoopsim.models.world import World
 from hoopsim.rng import Rng
+from hoopsim.sim import ratings as R
 
 _TEAMS_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "teams.json")
 
@@ -103,6 +104,9 @@ def _build_roster(world: World, team: Team, names: NameGenerator) -> None:
 
     _assign_contracts(world, team, players)
     auto_set_lineup(team, world.players)
+    # An existing league has played together: seed every pair to full familiarity so opening-night
+    # rosters are gelled. Players who arrive later (draft/FA/trade) start cold and gel over time.
+    seed_chemistry(team, R.FULL_CHEM_SECS)
 
 
 def _assign_contracts(world: World, team: Team, players: List[Player]) -> None:
