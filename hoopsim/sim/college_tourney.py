@@ -11,7 +11,7 @@ from typing import List, Optional, Tuple
 from hoopsim.models.league import Game, Phase
 from hoopsim.models.world import World
 from hoopsim.sim.boxscore import GameResult
-from hoopsim.sim.season import _apply_result, sim_one
+from hoopsim.sim.season import _apply_result, _heal_injuries, sim_one
 
 NATIONAL_FIELD = 32
 
@@ -178,6 +178,7 @@ def advance_college_slate(world: World, *, watch_user: bool = False, coach=None
         if all(cb["champion"] is not None for cb in b["conf"].values()):
             _build_national_field(world)
             b["stage"] = "national"
+        _heal_injuries(world)
         return results, user_result
     if b["stage"] == "national":
         r, ur = _play_round_slate(world, b["national"], watch_user, coach)
@@ -185,6 +186,7 @@ def advance_college_slate(world: World, *, watch_user: bool = False, coach=None
             b["champion"] = b["national"]["champion"]
             b["stage"] = "done"
             world.phase = Phase.DRAFT
+        _heal_injuries(world)
         return r, ur
     return [], None
 
@@ -265,6 +267,7 @@ def finish_user_college_game(world: World, match: dict, game: Game, result: Game
             b["champion"] = b["national"]["champion"]
             b["stage"] = "done"
             world.phase = Phase.DRAFT
+    _heal_injuries(world)
 
 
 def college_postseason_complete(world: World) -> bool:

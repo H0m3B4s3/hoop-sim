@@ -11,7 +11,7 @@ from hoopsim.config import CONFERENCES
 from hoopsim.models.league import Game, Phase, conference_standings
 from hoopsim.models.world import World
 from hoopsim.sim.boxscore import GameResult
-from hoopsim.sim.season import _apply_result, sim_one
+from hoopsim.sim.season import _apply_result, _heal_injuries, sim_one
 
 BEST_OF = 7
 WINS_NEEDED = BEST_OF // 2 + 1            # 4
@@ -154,6 +154,7 @@ def advance_playoff_slate(world: World, *, watch_user: bool = False, coach=None
         if is_user:
             user_result = res
 
+    _heal_injuries(world)
     if not active_series(world):
         _build_next_round(world)
     return results, user_result
@@ -206,6 +207,7 @@ def finish_user_series_game(world: World, s: dict, game: Game, result: GameResul
     round is now complete."""
     _apply_result(world, game, result, is_playoff=True)
     _record_series_game(s, game.home, game.away, result)
+    _heal_injuries(world)
     if not active_series(world):
         _build_next_round(world)
 
