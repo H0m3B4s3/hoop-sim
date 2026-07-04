@@ -16,10 +16,11 @@ from hoopsim.models.world import World
 
 # -- accolades --------------------------------------------------------------
 # Tally keys accrued in offseason.archive_season as each season's awards are crowned.
-ACCOLADE_KEYS = ("mvp", "all_league", "dpoy", "roy", "mip", "scoring_title", "champion")
+ACCOLADE_KEYS = ("mvp", "all_league", "dpoy", "roy", "mip", "smoy", "scoring_title", "champion")
 ACCOLADE_LABELS = {
     "mvp": "MVP", "all_league": "All-League", "dpoy": "Defensive POY", "roy": "Rookie of the Year",
-    "mip": "Most Improved", "scoring_title": "Scoring Title", "champion": "Champion",
+    "mip": "Most Improved", "smoy": "Sixth Man of the Year",
+    "scoring_title": "Scoring Title", "champion": "Champion",
 }
 
 # -- Hall of Fame scoring ---------------------------------------------------
@@ -27,7 +28,7 @@ ACCOLADE_LABELS = {
 # / former-MVP-caliber career gets in while a long-tenured role player does not.
 ACCOLADE_WEIGHTS = {
     "mvp": 12.0, "all_league": 5.0, "dpoy": 5.0, "scoring_title": 3.0,
-    "champion": 3.0, "roy": 2.0, "mip": 1.0,
+    "champion": 3.0, "roy": 2.0, "mip": 1.0, "smoy": 1.5,
 }
 PEAK_ANCHOR = 78            # overall above which peak play starts adding HoF weight
 HOF_THRESHOLD = 50.0
@@ -118,6 +119,8 @@ def record_accolades(world: World, awards: dict, champion_tid) -> None:
         _tick(world, awards["dpoy"].get("pid"), "dpoy")
     if awards.get("mip"):
         _tick(world, awards["mip"].get("pid"), "mip")
+    if awards.get("smoy"):
+        _tick(world, awards["smoy"].get("pid"), "smoy")
     leaders = awards.get("leaders") or {}
     if leaders.get("pts"):
         _tick(world, leaders["pts"].get("pid"), "scoring_title")

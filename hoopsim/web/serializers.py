@@ -264,7 +264,7 @@ def history_view(world: World) -> List[dict]:
         champ = world.find_team(entry.get("champion")) if entry.get("champion") is not None else None
         awards = entry.get("awards") or {}
         enriched: dict = {}
-        for key in ("mvp", "roy", "dpoy", "mip"):
+        for key in ("mvp", "roy", "dpoy", "mip", "smoy"):
             if key in awards:
                 enriched[key] = _enrich_award(world, awards[key])
         if "all_league" in awards:
