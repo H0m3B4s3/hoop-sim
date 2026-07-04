@@ -37,6 +37,15 @@ def test_compute_awards_picks_winners():
     assert {"name", "team", "overall", "ppg"} <= set(a["mvp"])
 
 
+def test_smoy_never_started_more_than_he_came_off_the_bench():
+    w = _played_world(seed=2)
+    a = awards.compute_awards(w)
+    if "smoy" not in a:
+        return  # a tiny league/season may field no qualifying bench player
+    smoy = w.players[a["smoy"]["pid"]]
+    assert (smoy.season.gp - smoy.season.gs) > smoy.season.gs
+
+
 def test_roy_is_a_rookie():
     w = _played_world(seed=4)
     a = awards.compute_awards(w)

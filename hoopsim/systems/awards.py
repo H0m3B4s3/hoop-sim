@@ -99,6 +99,12 @@ def compute_awards(world: World) -> dict:
         if improvement(best) >= MIP_MIN_JUMP:
             awards["mip"] = _entry(world, best, improvement=improvement(best))
 
+    # Sixth Man of the Year: same production bar as MVP/DPOY, but restricted to players who came
+    # off the bench in more games than they started — the real NBA eligibility rule.
+    bench_eligible = [p for p in eligible if (p.season.gp - p.season.gs) > p.season.gs]
+    if bench_eligible:
+        awards["smoy"] = _entry(world, max(bench_eligible, key=val))
+
     if eligible:
         awards["leaders"] = {
             "pts": _entry(world, max(eligible, key=lambda p: p.season.ppg)),

@@ -1279,7 +1279,7 @@ function SeasonsView({ onPlayer }: { onPlayer: (pid: number) => void }) {
               <b style={{ color: teamText(s.champion_color) }}>{s.champion_abbrev}</b>
               <span>{s.champion_name} — Champions</span>
             </div>
-            {(a.mvp || a.roy || a.dpoy || a.mip) && (
+            {(a.mvp || a.roy || a.dpoy || a.mip || a.smoy) && (
               <div className="awardGrid">
                 {a.mvp && <AwardCard label="MVP" e={a.mvp} onPlayer={onPlayer} />}
                 {a.roy && <AwardCard label="Rookie of the Year" e={a.roy} onPlayer={onPlayer} />}
@@ -1287,6 +1287,9 @@ function SeasonsView({ onPlayer }: { onPlayer: (pid: number) => void }) {
                   <AwardCard label="Defensive POY" e={a.dpoy} onPlayer={onPlayer} />
                 )}
                 {a.mip && <AwardCard label="Most Improved" e={a.mip} onPlayer={onPlayer} />}
+                {a.smoy && (
+                  <AwardCard label="Sixth Man of the Year" e={a.smoy} onPlayer={onPlayer} />
+                )}
               </div>
             )}
             {a.leaders && (

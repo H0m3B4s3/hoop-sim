@@ -69,7 +69,7 @@ class Player:
     season: StatLine = field(default_factory=StatLine)
     playoffs: StatLine = field(default_factory=StatLine)
     career: List[dict] = field(default_factory=list)   # one summary dict per finished season
-    accolades: Dict[str, int] = field(default_factory=dict)  # award tally: mvp/all_league/champion/roy/dpoy/mip
+    accolades: Dict[str, int] = field(default_factory=dict)  # award tally: mvp/all_league/champion/roy/dpoy/mip/smoy
 
     # -- identity -----------------------------------------------------------
     @property
