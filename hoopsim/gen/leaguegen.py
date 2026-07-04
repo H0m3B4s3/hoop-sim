@@ -6,10 +6,9 @@ import os
 import random
 from typing import List
 
-from hoopsim.config import (DEFAULT_SEASON_PRESET, ROOKIE_AGE_RANGE, SALARY_CAP, SEASON_PRESETS,
-                          VETERAN_MINIMUM)
+from hoopsim.config import DEFAULT_SEASON_PRESET, SALARY_CAP, SEASON_PRESETS, VETERAN_MINIMUM
 from hoopsim.gen.namegen import NameGenerator
-from hoopsim.gen.playergen import _POSITION_WEIGHTS, make_player
+from hoopsim.gen.playergen import _POSITION_WEIGHTS, draft_age, make_player
 from hoopsim.models.attributes import POSITIONS
 from hoopsim.models.coach import apply_coach_tactics, assign_coach
 from hoopsim.models.contract import flat_contract
@@ -153,7 +152,7 @@ def _build_free_agents(world: World, names: NameGenerator) -> None:
         target = int(max(45, min(80, round(world.rng.gauss(62, 8)))))
         # Fewer young longshots than a roster carries — the opening pool skews toward aging vets.
         is_young = world.rng.chance(0.22)
-        age = (world.rng.randint(*ROOKIE_AGE_RANGE) if is_young
+        age = (draft_age(world.rng) if is_young
                else int(min(38, max(23, round(world.rng.triangular(23, 38, 30))))))
         p = make_player(world.rng, world.new_pid(), names, target_overall=target, age=age)
         p.potential = _free_agent_potential(world.rng, p.overall, p.age)

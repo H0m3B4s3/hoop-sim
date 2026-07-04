@@ -888,12 +888,16 @@ class GameSim:
         return passer
 
     def _maybe_block(self, deff, dc, shot_type: str) -> bool:
-        block_p = max(0.0, (dc.block_anchor - 62) * 0.004)
+        block_p = max(0.0, (dc.block_anchor - 60) * 0.0055)
         if shot_type == "mid":
             block_p *= 0.4
-        block_p = min(0.16, block_p)
+        block_p = min(0.22, block_p)
         if self.rng.chance(block_p):
-            idx = _weighted_index(self.rng, [p.ratings["block"] for p in dc.players])
+            # Weight is baseline-subtracted and exponentiated (like usage/passing above) so a
+            # real rim protector actually dominates his team's blocks instead of splitting them
+            # evenly with teammates who barely have the skill.
+            weights = [max(0.3, p.ratings["block"] - 55) ** 1.3 for p in dc.players]
+            idx = _weighted_index(self.rng, weights)
             blocker = dc.players[idx]
             self.result.line(blocker.pid).blk += 1
             self._log(deff.team.tid, f"{blocker.short_name} blocks the shot")

@@ -26,6 +26,17 @@ def _pick_position(rng: Rng) -> str:
     return rng.weighted_one(POSITIONS, [_POSITION_WEIGHTS[p] for p in POSITIONS])
 
 
+# ``ROOKIE_AGE_RANGE`` (19-23) is a flat draw across those five ages; the modern draft skews much
+# younger — one-and-done and international entries make 19-20 the bulk of a class, with each extra
+# year of college pulling a shrinking slice.
+_DRAFT_AGE_WEIGHTS = {19: 0.32, 20: 0.30, 21: 0.20, 22: 0.12, 23: 0.06}
+
+
+def draft_age(rng: Rng) -> int:
+    ages = list(_DRAFT_AGE_WEIGHTS)
+    return rng.weighted_one(ages, [_DRAFT_AGE_WEIGHTS[a] for a in ages])
+
+
 def _secondary_position(rng: Rng, primary: str) -> Optional[str]:
     idx = POSITIONS.index(primary)
     neighbors = []
@@ -61,12 +72,35 @@ def _choose_archetype(rng: Rng, position: str, target_overall: int, age: int):
     return rng.choice(ARCHETYPES_BY_POSITION[position])
 
 
+# Potential is squeezed above a soft ceiling so 90+ is uncommon and the far tail (96-99) is a
+# career-defining rarity. Shared by every generation path (initial rosters, draft classes) so no
+# one pool systematically out-produces another.
+_POT_SOFT_CAP = 90
+_POT_ELITE_CAP = 95
+
+
+def _cap_potential(rng: Rng, raw: int) -> int:
+    if raw <= _POT_SOFT_CAP:
+        return raw
+    if not rng.chance(0.20):                        # most rolls above the soft cap get reined in
+        return _POT_SOFT_CAP
+    if raw <= _POT_ELITE_CAP or not rng.chance(0.15):
+        return min(raw, _POT_ELITE_CAP)
+    if not rng.chance(0.10):                         # 96-98: a handful of generational prospects
+        return min(raw, rng.randint(96, 98))
+    return RATING_MAX                                 # 99: roughly a once-a-decade prospect
+
+
 def _potential(rng: Rng, ovr: int, age: int) -> int:
     if age >= 29:
-        return int(min(RATING_MAX, ovr + rng.randint(0, 1)))
-    mu = max(0.0, (27 - age) * 1.8)
-    upside = max(0.0, rng.gauss(mu, mu * 0.6 + 2.0))
-    return int(min(RATING_MAX, round(ovr + upside)))
+        raw = int(min(RATING_MAX, ovr + rng.randint(0, 1)))
+    else:
+        mu = max(0.0, (27 - age) * 1.8)
+        upside = max(0.0, rng.gauss(mu, mu * 0.6 + 2.0))
+        raw = int(round(ovr + upside))
+    # The squeeze can pull an already-high current overall below itself; potential must never
+    # trail current ability.
+    return max(ovr, _cap_potential(rng, raw))
 
 
 def _weight_for(rng: Rng, height_in: int, strength: int) -> int:

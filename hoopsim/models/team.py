@@ -403,6 +403,9 @@ def set_auto_minutes(team: Team, players: Dict[int, Player]) -> None:
         floor = starter_floor if p.pid in team.starters else 0
         targets[p.pid] = int(max(floor, min(cap, round(share))))
     # Spread any leftover/excess minutes across the rotation, never exceeding the per-player cap.
+    # A tagged sixth man is meant to top the bench queue (see the weight boost above); the drift
+    # pass must not undo that by handing another reserve one more minute than him via rounding.
+    sixth_is_bench = sixth is not None and sixth not in team.starters
     drift = total_minutes - sum(targets.values())
     step = 1 if drift > 0 else -1
     guard = 0
@@ -412,6 +415,9 @@ def set_auto_minutes(team: Team, players: Dict[int, Player]) -> None:
                 break
             floor = starter_floor if p.pid in team.starters else 0
             new_val = targets[p.pid] + step
+            if (step > 0 and sixth_is_bench and p.pid != sixth
+                    and p.pid not in team.starters and new_val > targets[sixth]):
+                continue
             if floor <= new_val <= cap:
                 targets[p.pid] = new_val
                 drift -= step
