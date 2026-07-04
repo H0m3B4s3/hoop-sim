@@ -3,10 +3,9 @@ from __future__ import annotations
 
 from typing import List
 
-from hoopsim.config import (FUTURE_PICK_YEARS, ROOKIE_AGE_RANGE, ROOKIE_CONTRACT_YEARS,
-                            ROOKIE_SCALE)
+from hoopsim.config import FUTURE_PICK_YEARS, ROOKIE_CONTRACT_YEARS, ROOKIE_SCALE
 from hoopsim.gen.namegen import NameGenerator
-from hoopsim.gen.playergen import make_player
+from hoopsim.gen.playergen import _cap_potential, draft_age, make_player
 from hoopsim.models.contract import flat_contract
 from hoopsim.models.draft import DraftClass, DraftPick
 from hoopsim.models.league import Phase
@@ -38,11 +37,29 @@ def _class_profile(rng) -> tuple:
     return top, depth
 
 
-def _prospect_potential(rng, top: float, depth: float, rank: int) -> int:
+# Chance any given class's #1 pick turns out to be a true generational prospect — roughly one
+# class in ten, so about once a decade leaguewide, give or take. Rolled explicitly rather than
+# left to the normal potential curve's tail because the curve's #1-pick ceiling (~90) structurally
+# can't reach 96-99 on its own; this is the one deliberate exception to that ceiling.
+_GENERATIONAL_CHANCE = 0.10
+_GENERATIONAL_99_CHANCE = 0.08
+
+
+# Ceiling is nudged by draft age: a 19-year-old one-and-done carries more unproven upside than a
+# 23-year-old senior, so age (rolled independently per prospect) still needs to pull potential
+# down as it climbs — otherwise an older, more polished prospect would keep the same ceiling as a
+# teenager and end up drafted just as high, which real classes don't do (a good older prospect
+# reads as NBA-ready now, not a future star, and slides to the back of the lottery instead).
+_AGE_POTENTIAL_ADJ = {19: 1.5, 20: 0.0, 21: -2.0, 22: -4.5, 23: -7.5}
+
+
+def _prospect_potential(rng, top: float, depth: float, rank: int, age: int) -> int:
     import math
     cliff = _POT_CLIFF * (1.0 - math.exp(-rank / _POT_CLIFF_TAU))
     drop = depth * (cliff + _POT_TAIL * rank)
-    return int(round(max(55.0, min(95.0, top - drop + rng.gauss(0, 1.7)))))
+    age_adj = _AGE_POTENTIAL_ADJ.get(age, 0.0)
+    raw = int(round(max(50.0, top - drop + age_adj + rng.gauss(0, 1.7))))
+    return _cap_potential(rng, raw)
 
 
 # ---------------------------------------------------------------------------
@@ -52,10 +69,16 @@ def generate_draft_class(world: World) -> List[int]:
     names = NameGenerator(world.rng)
     rng = world.rng
     top, depth = _class_profile(rng)
+    generational = rng.chance(_GENERATIONAL_CHANCE)
     ids: List[int] = []
     for i in range(PROSPECTS):
-        pot = _prospect_potential(rng, top, depth, i)
-        age = rng.randint(*ROOKIE_AGE_RANGE)
+        age = draft_age(rng)
+        # A generational ceiling reads as a young phenom's, not a college senior's — gate the
+        # rare tail to the ages where that's plausible instead of letting it land on anyone.
+        if i == 0 and generational and age <= 21:
+            pot = 99 if rng.chance(_GENERATIONAL_99_CHANCE) else rng.randint(96, 98)
+        else:
+            pot = _prospect_potential(rng, top, depth, i, age)
         # Current ability trails potential by a youth gap — younger prospects are rawer, so the
         # gap is bigger; the floor keeps a few polished, NBA-ready picks each year.
         gap = max(2.0, min(22.0, rng.gauss(13.0 - (age - 19) * 2.0, 3.0)))

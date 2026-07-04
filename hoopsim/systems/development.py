@@ -26,7 +26,11 @@ def _overall_delta(player: Player, rng) -> float:
     elif age <= 26:
         growth = gap * rng.uniform(0.08, 0.18) + rng.gauss(-0.4, 1.0)
     elif age <= 29:
-        growth = rng.gauss(-0.5, 1.2)
+        # A late bloomer who only broke into real minutes in his mid-20s shouldn't hit a hard
+        # wall the moment he turns 27 — give this window a small residual pull toward potential
+        # too, well below 24-26's rate, so a real gap can still close instead of just evaporating
+        # via potential decay below.
+        growth = gap * rng.uniform(0.03, 0.08) + rng.gauss(-0.5, 1.2)
     elif age <= 32:
         growth = rng.gauss(-2.0, 1.2)
     elif age <= 35:
@@ -34,7 +38,7 @@ def _overall_delta(player: Player, rng) -> float:
     else:
         growth = rng.gauss(-5.4, 2.0)
 
-    if age <= 26 and growth > 0:
+    if age <= 29 and growth > 0:
         mpg = player.season.mpg if player.season.gp else 0.0
         growth *= 0.6 + min(1.0, mpg / 28.0) * 0.8        # playing time accelerates growth
     growth += (player.ratings["work_ethic"] - 70) * 0.015
