@@ -18,7 +18,7 @@ from hoopsim.sim.season import start_season
 
 def archive_season(world: World, champion_tid) -> List[dict]:
     """Record the season into history, roll careers, accrue accolades. Returns milestone events."""
-    from hoopsim.systems import awards, legacy
+    from hoopsim.systems import awards, legacy, news
     standings = {conf: [t.tid for t in conference_standings(world.team_list(), conf)]
                  for conf in ("East", "West")}
     # Awards must be computed before careers roll over (rookies still have empty career,
@@ -33,6 +33,21 @@ def archive_season(world: World, champion_tid) -> List[dict]:
     })
     # Tally each winner's personal accolades so career résumés stay self-contained for the HoF.
     legacy.record_accolades(world, season_awards, champion_tid)
+    # Emit awards to the news wire
+    award_labels = {
+        "mvp": "MVP",
+        "roy": "Rookie of the Year",
+        "dpoy": "Defensive Player of the Year",
+        "mip": "Most Improved Player",
+        "smoy": "Sixth Man of the Year",
+    }
+    for key, label in award_labels.items():
+        if key in season_awards:
+            news.award(world, label, season_awards[key])
+    # Emit champion to the news wire
+    champion_team = world.teams.get(champion_tid)
+    if champion_team:
+        news.champion(world, champion_team)
     milestones: List[dict] = []
     for p in world.players.values():
         if p.season.gp > 0:
@@ -86,7 +101,7 @@ def age_and_retire(world: World) -> dict:
     dropped — :func:`legacy.retire` snapshots them into ``world.retired`` (and the Hall of Fame if
     they clear the bar) so their careers survive being removed from the active player pool.
     """
-    from hoopsim.systems import legacy
+    from hoopsim.systems import legacy, news as news_module
     retiring: List[int] = []
     for p in list(world.players.values()):
         p.age += 1
@@ -97,9 +112,13 @@ def age_and_retire(world: World) -> dict:
     inducted: List[dict] = []
     for pid in retiring:
         p = world.players[pid]
+        # Emit retirement before removing from world.players
+        news_module.retirement(world, p)
         snap = legacy.retire(world, p)               # snapshot + (maybe) Hall of Fame induction
         if snap["hof"]:
             inducted.append(snap)
+            # Emit Hall of Fame induction
+            news_module.hall_of_fame(world, snap)
         world.players.pop(pid)
         if p.team_id in world.teams:
             world.teams[p.team_id].remove_player(pid)
@@ -132,6 +151,10 @@ def fill_rosters(world: World) -> None:
 def pre_draft(world: World, champion_tid) -> dict:
     """Archive the year, develop players, expire contracts, age and retire. (Pre-draft.)"""
     milestones = archive_season(world, champion_tid)
+    # Emit milestones to the news wire
+    from hoopsim.systems import news as news_module
+    for ms in milestones:
+        news_module.milestone(world, ms)
     for team in world.team_list():
         team.mle_used = False          # each team gets its one mid-level exception back
     from hoopsim.systems import carousel, development, freeagency

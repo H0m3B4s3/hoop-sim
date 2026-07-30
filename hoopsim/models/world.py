@@ -14,6 +14,7 @@ from hoopsim.models.coach import Coach
 from hoopsim.models.contract import Contract
 from hoopsim.models.draft import DraftClass, DraftPick
 from hoopsim.models.league import Game, Phase
+from hoopsim.models.news import NewsItem
 from hoopsim.models.player import Player
 from hoopsim.models.staff import Assistant
 from hoopsim.models.team import Team
@@ -50,6 +51,9 @@ class World:
         # back in ``coach_pool`` carrying their career record, so the pool is readable.
         self.coach_pool: List[Coach] = []
         self.staff_pool: List[Assistant] = []
+        # League news wire, oldest first. Capped as a ring buffer by systems/news.py so a save
+        # never grows without bound.
+        self.news: List[NewsItem] = []
 
         # Mode & the college layer. ``mode`` is the league the user controls; ``other_teams``
         # holds the *other* league (the pipeline partner) as Team objects (their players live in
@@ -232,6 +236,7 @@ class World:
             "retired": list(self.retired),
             "coach_pool": [c.to_dict() for c in self.coach_pool],
             "staff_pool": [a.to_dict() for a in self.staff_pool],
+            "news": [n.to_dict() for n in self.news],
             "next_pid": self._next_pid,
             "next_gid": self._next_gid,
             "next_offer_id": self._next_offer_id,
@@ -271,6 +276,7 @@ class World:
         w.retired = list(d.get("retired", []))
         w.coach_pool = [Coach.from_dict(c) for c in d.get("coach_pool", [])]
         w.staff_pool = [Assistant.from_dict(a) for a in d.get("staff_pool", [])]
+        w.news = [NewsItem.from_dict(n) for n in d.get("news", [])]
         w._next_pid = d.get("next_pid", max(w.players, default=0) + 1)
         w._next_gid = d.get("next_gid", 1)
         w._next_offer_id = d.get("next_offer_id", 1)

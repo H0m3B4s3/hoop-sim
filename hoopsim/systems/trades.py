@@ -462,3 +462,8 @@ def execute_trade(world: World, offer: TradeOffer) -> None:
     b.block_list = [pid for pid in b.block_list if pid in b.roster]
     auto_set_lineup(a, world.players)
     auto_set_lineup(b, world.players)
+    # Emit the trade to the news wire
+    from hoopsim.systems import news
+    a_out = [world.players[pid] for pid in offer.a_sends]
+    b_out = [world.players[pid] for pid in offer.b_sends]
+    news.trade(world, a, b, a_out, b_out, len(offer.a_picks), len(offer.b_picks))

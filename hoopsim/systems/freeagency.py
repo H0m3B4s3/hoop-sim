@@ -154,6 +154,8 @@ def sign_free_agent(world: World, team: Team, pid: int, salary: int, years: int
     if spent_mle:
         team.mle_used = True
     auto_set_lineup(team, world.players)
+    from hoopsim.systems import news
+    news.signing(world, player, team, salary, years)
     return True, why
 
 
@@ -215,6 +217,8 @@ def run_fa_wave(world: World) -> dict:
         if cap.uses_exception(world, team, salary):
             team.mle_used = True
         world.sign_player(player.pid, team.tid, flat_contract(salary, years, world.season_year))
+        from hoopsim.systems import news
+        news.signing(world, player, team, salary, years)
         signings += 1
     for t in ai_teams:
         auto_set_lineup(t, world.players)

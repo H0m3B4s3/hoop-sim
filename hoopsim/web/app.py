@@ -327,6 +327,17 @@ def team_injuries(tid: int, sid: str = Depends(_sid)):
     return ser.injury_report_view(world, team)
 
 
+@app.get("/api/news")
+def news(category: Optional[str] = None, team_only: bool = False, min_importance: int = 1,
+         limit: int = 60, sid: str = Depends(_sid)):
+    world = _world(sid)
+    from hoopsim.systems import news as N
+    # When team_only is true, filter to the user's team by passing its tid to news.recent
+    tid = world.user_team_id if team_only else None
+    items = N.recent(world, category=category, tid=tid, min_importance=min_importance, limit=limit)
+    return ser.news_view(world, items)
+
+
 @app.get("/api/teams/{tid}/picks")
 def team_picks(tid: int, sid: str = Depends(_sid)):
     world = _world(sid)

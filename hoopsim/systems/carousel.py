@@ -227,6 +227,7 @@ def run_carousel(world: World) -> dict:
 
     Returns a summary of what moved, so the caller can report it.
     """
+    from hoopsim.systems import news
     fired: List[dict] = []
     hired: List[dict] = []
     refill_market(world)
@@ -236,17 +237,21 @@ def run_carousel(world: World) -> dict:
         if team.coach is not None and world.rng.chance(fire_chance(team)):
             coach = fire_coach(world, team)
             if coach is not None:
-                fired.append({"tid": team.tid, "team": team.full_name, "coach": coach.name,
-                              "record": f"{team.wins}-{team.losses}",
-                              "seasons": coach.seasons})
+                entry = {"tid": team.tid, "team": team.full_name, "coach": coach.name,
+                         "record": f"{team.wins}-{team.losses}",
+                         "seasons": coach.seasons}
+                fired.append(entry)
+                news.coach_fired(world, entry)
     # Vacancies fill after every firing resolves, so a fired coach can land another job the
     # same offseason — which is what actually makes it read like a carousel.
     for team in world.team_list():
         if team.coach is None and team.tid != world.user_team_id:
             coach = hire_best_available(world, team)
             if coach is not None:
-                hired.append({"tid": team.tid, "team": team.full_name, "coach": coach.name,
-                              "record": coach.record_str, "seasons": coach.seasons})
+                entry = {"tid": team.tid, "team": team.full_name, "coach": coach.name,
+                         "record": coach.record_str, "seasons": coach.seasons}
+                hired.append(entry)
+                news.coach_hired(world, entry)
         if team.tid != world.user_team_id:
             ai_build_staff(world, team)
     refill_market(world)

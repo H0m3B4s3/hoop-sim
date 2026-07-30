@@ -10,7 +10,7 @@ from hoopsim.models.team import auto_set_lineup
 from hoopsim.models.world import World
 from hoopsim.sim.boxscore import GameResult
 from hoopsim.sim.engine import simulate_game
-from hoopsim.systems import injuries
+from hoopsim.systems import injuries, news
 from hoopsim.systems.momentum import update_morale
 
 DayResults = List[Tuple[Game, GameResult]]
@@ -69,13 +69,24 @@ def _apply_result(world: World, game: Game, result: GameResult, is_playoff: bool
     # flavor; give them a real ailment and log them to the player's history like any other.
     for pid, games, _desc, severity in result.injuries:
         player = world.players[pid]
-        injuries.record_injury(world, player,
-                               injuries.make_injury(world.rng, severity, games))
+        inj = injuries.make_injury(world.rng, severity, games)
+        injuries.record_injury(world, player, inj)
+        if player.injury is inj:                   # not superseded by something worse
+            news.injury(world, player, inj)
 
     # Then the between-game layer: conditioning load and wear-and-tear for everyone who dressed.
     for team in (home, away):
         minutes = {pid: result.box[pid].minutes for pid in team.roster if pid in result.box}
-        injuries.post_game(world, team, minutes)
+        for player, inj in injuries.post_game(world, team, minutes):
+            news.injury(world, player, inj)
+
+    if not is_playoff:
+        for team in (home, away):
+            news.streak(world, team)
+    for team in (home, away):
+        for pid in team.roster:
+            if pid in result.box:
+                news.big_game(world, world.players[pid], result.box[pid])
 
     update_morale(world, home, away, result)
 
@@ -99,7 +110,10 @@ def sim_one(world: World, game: Game, *, collect_pbp: bool = False,
 def _heal_injuries(world: World) -> None:
     for p in world.players.values():
         if p.injury is not None:
-            injuries.heal_one(p)
+            if injuries.heal_one(p) and p.rtp_games >= injuries.RTP_GAMES["moderate"]:
+                # Only report real returns. Everyone shaking off a two-game ankle tweak would
+                # bury the wire under a few hundred non-stories a season.
+                news.returned(world, p)
         else:
             injuries.tick_rtp(p)
 
