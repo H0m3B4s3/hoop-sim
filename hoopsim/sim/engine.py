@@ -35,6 +35,11 @@ DEF_ACE_MINUTES_BONUS = 250.0       # normal-priority bump, scaled by opponent o
 FOUL_OUT = 6
 MAX_PUTBACKS = 3
 BONUS_FOULS = 5             # team fouls in a period that put the opponent in the bonus
+# In real basketball, ~10% of rebounds are "team rebounds" (ball goes out of bounds off a miss,
+# period ends, or dead-ball rebound) rather than credited to an individual. This engine used to
+# credit every miss to a player, inflating per-player rebound totals. Team rebounds keep possession
+# the same but skip individual credit and play-by-play logging.
+TEAM_REBOUND_RATE = 0.10
 
 # -- interactive end-game coaching window -----------------------------------
 COACH_WINDOW_SECONDS = 120.0   # final-period clock at/under which the coach is consulted
@@ -846,7 +851,10 @@ class GameSim:
         multi-shot set (the legal sub window) when ``off``/``deff`` are supplied. Returns
         ``(makes, last_made)`` as the generator's value. The synchronous :meth:`_shoot_fts` and the
         and-one (``n == 1``) path pass no states and so never pause."""
-        ft_pct = max(0.40, min(0.97, 0.05 + shooter.ratings["free_throw"] * 0.0095))
+        # Slope/intercept are fit to the whole curve, not the anchor: a 70 shoots .75 here, but
+        # attempts skew to good shooters so the league lands ~3pts higher, at a realistic ~78%.
+        # The old slope let the entire 90+ band shoot 94.6% — above what any real shooter sustains.
+        ft_pct = max(0.40, min(0.97, 0.26 + shooter.ratings["free_throw"] * 0.007))
         line = self.result.line(shooter.pid)
         makes = 0
         last_made = False
@@ -873,7 +881,9 @@ class GameSim:
             return done.value
 
     def _maybe_assist(self, off, oc, shooter: Player, shot_type: str) -> Optional[Player]:
-        base = {"three": 0.82, "mid": 0.45, "rim": 0.50}[shot_type]
+        # Sets how often an assist happens at all; passing_w (ratings.py) sets who gets credited.
+        # Tuned to the real split — threes are nearly always assisted, mid-range rarely.
+        base = {"three": 0.89, "mid": 0.48, "rim": 0.565}[shot_type]
         base += R.BALL_MOVEMENT_ASSIST[off.team.tactics.ball_movement]
         base = max(0.05, min(0.95, base))
         if not self.rng.chance(base):
@@ -924,6 +934,9 @@ class GameSim:
 
     def _credit_rebound(self, team, cache, offensive: bool) -> None:
         if not cache.players:
+            return
+        # Chance of a team rebound (out of bounds, dead ball, period end) instead of individual credit
+        if self.rng.chance(TEAM_REBOUND_RATE):
             return
         idx = _weighted_index(self.rng, cache.rebound_w)
         rebounder = cache.players[idx]

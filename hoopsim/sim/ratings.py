@@ -128,7 +128,9 @@ def build_lineup_cache(players: List[Player], chem_real: float = 1.0) -> LineupC
         r = p.ratings
         scoring = 0.4 * r["finishing"] + 0.3 * r["three_point"] + 0.3 * r["mid_range"]
         cache.usage.append(max(1.0, scoring + 0.4 * r["ball_handle"] + 0.3 * r["off_iq"] - 60))
-        cache.passing_w.append(max(0.5, r["passing"] * 0.7 + r["off_iq"] * 0.3 - 40))
+        # Elite passers dominate their lineup's assist credit (like blocks), and ball_handle
+        # boosts guards who control the ball more than centers do.
+        cache.passing_w.append((max(0.5, r["passing"] * 0.50 + r["off_iq"] * 0.15 + r["ball_handle"] * 0.35 - 58)) ** 1.6)
         cache.rebound_w.append(max(0.5, r["rebounding"] * _frontcourt_factor(p)))
         # Bigs and aggressive perimeter players pick up more fouls.
         cache.foul_w.append(max(0.5, 40 + _frontcourt_factor(p) * 20 - 0.2 * r["def_iq"]))
