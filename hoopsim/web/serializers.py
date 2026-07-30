@@ -13,6 +13,7 @@ from typing import Dict, List, Optional
 from rich.color import Color
 
 from hoopsim.config import CONFERENCES, ROSTER_MAX, SCHOLARSHIP_LIMIT
+from hoopsim.models import advanced
 from hoopsim.models.attributes import COMPOSITES, POSITIONS, RATING_GROUPS, all_composites
 from hoopsim.models.league import Phase, conference_standings
 from hoopsim.models.player import Player
@@ -185,6 +186,10 @@ def player_row(world: World, p: Player, *, is_starter: bool = False) -> dict:
         "rpg": round(s.rpg, 1),
         "apg": round(s.apg, 1),
         "gp": s.gp,
+        "ts_pct": round(s.ts_pct, 3),
+        "usg_pct": round(advanced.usage_pct(s, team.season_stats), 1) if team else 0.0,
+        "ortg": round(advanced.player_ortg_proxy(s, team.season_stats, team.opp_season_stats), 1) if team else 0.0,
+        "drtg": round(advanced.player_drtg_proxy(s, team.season_stats, team.opp_season_stats), 1) if team else 0.0,
         "salary": p.contract.current_salary,
         "years_remaining": p.contract.years_remaining,
         "is_starter": is_starter,
@@ -297,6 +302,12 @@ def roster_view(world: World, team: Team) -> dict:
     return {
         "team": team_brief(team),
         "players": rows,
+        "team_advanced": {
+            "pace": round(advanced.pace(team.season_stats, team.opp_season_stats), 1),
+            "ortg": round(advanced.team_ortg(team.season_stats, team.opp_season_stats), 1),
+            "drtg": round(advanced.team_drtg(team.season_stats, team.opp_season_stats), 1),
+            "ts_pct": round(team.season_stats.ts_pct, 3),
+        },
         "roster_max": ROSTER_MAX,
         "starters": list(team.starters),
         "auto_lineup": team.auto_lineup,
@@ -319,6 +330,7 @@ def player_detail(world: World, p: Player) -> dict:
     }
     composites = {name: round(v, 1) for name, v in all_composites(p.ratings).items()}
     s = p.season
+    team = world.find_team(p.team_id) if p.team_id is not None else None
     base = player_row(world, p)
     base.update({
         "height": p.height_str,
@@ -337,6 +349,9 @@ def player_detail(world: World, p: Player) -> dict:
             "topg": round(s.per_game("tov"), 1),
             "fg_pct": round(s.fg_pct, 3), "tp_pct": round(s.tp_pct, 3),
             "ft_pct": round(s.ft_pct, 3), "ts_pct": round(s.ts_pct, 3),
+            "usg_pct": round(advanced.usage_pct(s, team.season_stats), 1) if team else 0.0,
+            "ortg": round(advanced.player_ortg_proxy(s, team.season_stats, team.opp_season_stats), 1) if team else 0.0,
+            "drtg": round(advanced.player_drtg_proxy(s, team.season_stats, team.opp_season_stats), 1) if team else 0.0,
         },
         "career": list(p.career),
         "legacy": legacy_resume_view(world, p),
@@ -659,7 +674,7 @@ def fa_wave_view(world: World) -> dict:
 # ---------------------------------------------------------------------------
 # Game results (box score, line score, play-by-play)
 # ---------------------------------------------------------------------------
-def _box_rows(world: World, result: GameResult, tid: int) -> List[dict]:
+def _box_rows(world: World, result: GameResult, tid: int, team_line) -> List[dict]:
     team = world.find_team(tid)
     lines = [(pid, result.box[pid]) for pid in team.roster if pid in result.box]
     lines.sort(key=lambda kv: kv[1].secs, reverse=True)
@@ -673,6 +688,8 @@ def _box_rows(world: World, result: GameResult, tid: int) -> List[dict]:
             "pts": s.pts, "reb": s.reb, "ast": s.ast, "stl": s.stl, "blk": s.blk,
             "tov": s.tov, "fgm": s.fgm, "fga": s.fga, "tpm": s.tpm, "tpa": s.tpa,
             "ftm": s.ftm, "fta": s.fta, "plus_minus": s.plus_minus,
+            "ts_pct": round(s.ts_pct, 3),
+            "usg_pct": round(advanced.usage_pct(s, team_line), 1),
         })
     return rows
 
@@ -680,6 +697,8 @@ def _box_rows(world: World, result: GameResult, tid: int) -> List[dict]:
 def game_result_view(world: World, result: GameResult) -> dict:
     home = world.find_team(result.home_tid)
     away = world.find_team(result.away_tid)
+    home_line = result.team_line(list(home.roster))
+    away_line = result.team_line(list(away.roster))
     return {
         "home": team_brief(home),
         "away": team_brief(away),
@@ -688,8 +707,22 @@ def game_result_view(world: World, result: GameResult) -> dict:
         "period_label": result.period_label,
         "line_score": [{"home": ls[0], "away": ls[1]} for ls in result.line_score],
         "box": {
-            "home": _box_rows(world, result, result.home_tid),
-            "away": _box_rows(world, result, result.away_tid),
+            "home": _box_rows(world, result, result.home_tid, home_line),
+            "away": _box_rows(world, result, result.away_tid, away_line),
+        },
+        "advanced": {
+            "home": {
+                "pace": round(advanced.pace(home_line, away_line), 1),
+                "ortg": round(advanced.team_ortg(home_line, away_line), 1),
+                "drtg": round(advanced.team_drtg(home_line, away_line), 1),
+                "ts_pct": round(home_line.ts_pct, 3),
+            },
+            "away": {
+                "pace": round(advanced.pace(away_line, home_line), 1),
+                "ortg": round(advanced.team_ortg(away_line, home_line), 1),
+                "drtg": round(advanced.team_drtg(away_line, home_line), 1),
+                "ts_pct": round(away_line.ts_pct, 3),
+            },
         },
         "pbp": [{
             "quarter": e.quarter, "clock": e.clock,

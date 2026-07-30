@@ -828,8 +828,11 @@ function BoxScore({ result, onClose }: { result: any; onClose: () => void }) {
     { accessorKey: "tov", header: "TO" },
     { id: "fg", header: "FG", accessorFn: (r) => `${r.fgm}/${r.fga}` },
     { id: "tp", header: "3P", accessorFn: (r) => `${r.tpm}/${r.tpa}` },
+    { id: "ts", header: "TS%", accessorFn: (r) => `${(r.ts_pct * 100).toFixed(1)}` },
+    { id: "usg", header: "USG%", accessorFn: (r) => `${r.usg_pct.toFixed(1)}` },
     { accessorKey: "plus_minus", header: "+/-" },
   ];
+  const adv = result.advanced;
   return (
     <div className="card">
       <div className="scoreboard">
@@ -846,6 +849,15 @@ function BoxScore({ result, onClose }: { result: any; onClose: () => void }) {
           Close
         </button>
       </div>
+      {adv && (
+        <div className="statRow">
+          <Stat label={`${result.away.abbrev} ORtg`} value={adv.away.ortg} />
+          <Stat label={`${result.away.abbrev} DRtg`} value={adv.away.drtg} />
+          <Stat label={`${result.home.abbrev} ORtg`} value={adv.home.ortg} />
+          <Stat label={`${result.home.abbrev} DRtg`} value={adv.home.drtg} />
+          <Stat label="Pace" value={adv.home.pace} />
+        </div>
+      )}
       <div className="boxGrid">
         <div>
           <h4>{result.away.abbrev}</h4>
@@ -1027,6 +1039,10 @@ function rosterColumns(
     { accessorKey: "ppg", header: "PPG" },
     { accessorKey: "rpg", header: "RPG" },
     { accessorKey: "apg", header: "APG" },
+    { id: "ts", header: "TS%", accessorFn: (r) => ((r.ts_pct ?? 0) * 100).toFixed(1) },
+    { id: "usg", header: "USG%", accessorFn: (r) => (r.usg_pct ?? 0).toFixed(1) },
+    { accessorKey: "ortg", header: "ORtg" },
+    { accessorKey: "drtg", header: "DRtg" },
   ];
   if (mode !== "college") {
     cols.push({ accessorKey: "salary", header: "Salary", cell: (c) => money(c.getValue() as number) });
@@ -1083,6 +1099,14 @@ function RosterPanel({
   return (
     <div className="card">
       <h3>{data.team.full_name} — Roster</h3>
+      {data.team_advanced && (
+        <div className="statRow">
+          <Stat label="Pace" value={data.team_advanced.pace} />
+          <Stat label="ORtg" value={data.team_advanced.ortg} />
+          <Stat label="DRtg" value={data.team_advanced.drtg} />
+          <Stat label="TS%" value={(data.team_advanced.ts_pct * 100).toFixed(1)} />
+        </div>
+      )}
       <DataTable
         data={data.players}
         columns={rosterColumns(mode, actions)}
@@ -3594,6 +3618,26 @@ function CollegeOffseason({
 // ---------------------------------------------------------------------------
 // Player modal
 // ---------------------------------------------------------------------------
+const pct = (v: any) => (v == null ? "—" : (v * 100).toFixed(1));
+const num = (v: any, digits = 1) => (v == null ? "—" : Number(v).toFixed(digits));
+
+const careerColumns: ColumnDef<any, any>[] = [
+  { accessorKey: "year", header: "Year" },
+  { accessorKey: "team", header: "Team" },
+  { accessorKey: "gp", header: "GP" },
+  { accessorKey: "ppg", header: "PPG" },
+  { accessorKey: "rpg", header: "RPG" },
+  { accessorKey: "apg", header: "APG" },
+  { id: "fg", header: "FG%", accessorFn: (r) => pct(r.fg_pct) },
+  { id: "tp", header: "3P%", accessorFn: (r) => pct(r.tp_pct) },
+  { id: "ft", header: "FT%", accessorFn: (r) => pct(r.ft_pct) },
+  { id: "ts", header: "TS%", accessorFn: (r) => pct(r.ts_pct) },
+  { id: "usg", header: "USG%", accessorFn: (r) => num(r.usg_pct) },
+  { id: "ortg", header: "ORtg", accessorFn: (r) => num(r.ortg) },
+  { id: "drtg", header: "DRtg", accessorFn: (r) => num(r.drtg) },
+  { accessorKey: "ovr", header: "OVR" },
+];
+
 function PlayerModal({
   pid,
   onClose,
@@ -3647,6 +3691,9 @@ function PlayerModal({
             <Stat label="RPG" value={p.season_stats.rpg} />
             <Stat label="APG" value={p.season_stats.apg} />
             <Stat label="TS%" value={(p.season_stats.ts_pct * 100).toFixed(1)} />
+            <Stat label="USG%" value={p.season_stats.usg_pct} />
+            <Stat label="ORtg" value={p.season_stats.ortg} />
+            <Stat label="DRtg" value={p.season_stats.drtg} />
             <Stat label="MPG" value={p.season_stats.mpg} />
           </div>
           {p.legacy && p.legacy.seasons > 0 && (
@@ -3668,6 +3715,16 @@ function PlayerModal({
                   ))}
                 </div>
               )}
+            </div>
+          )}
+          {p.career && p.career.length > 0 && (
+            <div className="card">
+              <h4>Year by Year</h4>
+              <DataTable
+                data={[...p.career].reverse()}
+                columns={careerColumns}
+                search={false}
+              />
             </div>
           )}
           <div className="ratingGroups">

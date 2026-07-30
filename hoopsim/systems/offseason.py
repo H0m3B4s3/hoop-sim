@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import List
 
 from hoopsim.config import RETIREMENT_AGE, ROSTER_MAX, ROSTER_MIN, VETERAN_MINIMUM
+from hoopsim.models import advanced
 from hoopsim.models.contract import flat_contract
 from hoopsim.models.league import conference_standings
 from hoopsim.models.world import World
@@ -42,6 +43,16 @@ def archive_season(world: World, champion_tid) -> List[dict]:
                 "team": team.abbrev if team else "FA",
                 "gp": p.season.gp, "ppg": round(p.season.ppg, 1),
                 "rpg": round(p.season.rpg, 1), "apg": round(p.season.apg, 1),
+                "spg": round(p.season.per_game("stl"), 1),
+                "bpg": round(p.season.per_game("blk"), 1),
+                "topg": round(p.season.per_game("tov"), 1),
+                "fg_pct": round(p.season.fg_pct, 3), "tp_pct": round(p.season.tp_pct, 3),
+                "ft_pct": round(p.season.ft_pct, 3), "ts_pct": round(p.season.ts_pct, 3),
+                "usg_pct": round(advanced.usage_pct(p.season, team.season_stats), 1) if team else 0.0,
+                "ortg": round(advanced.player_ortg_proxy(
+                    p.season, team.season_stats, team.opp_season_stats), 1) if team else 0.0,
+                "drtg": round(advanced.player_drtg_proxy(
+                    p.season, team.season_stats, team.opp_season_stats), 1) if team else 0.0,
                 "ovr": p.overall,
             })
             # A completed pro season; experience drives salary tiers (cap.max_salary) and how

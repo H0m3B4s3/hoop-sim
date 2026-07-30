@@ -33,6 +33,21 @@ def test_archiving_a_season_accrues_experience():
             assert w.players[pid].experience == exp + 1
 
 
+def test_archived_season_includes_advanced_stats():
+    w = _played_world(seed=3)
+    played = [p for p in w.players.values() if p.season.gp > 0]
+    assert played
+    offseason.pre_draft(w, P.champion(w))
+    for p in played:
+        if p.pid not in w.players:
+            continue
+        entry = w.players[p.pid].career[-1]
+        for key in ("ts_pct", "usg_pct", "ortg", "drtg", "fg_pct", "tp_pct", "ft_pct",
+                    "spg", "bpg", "topg"):
+            assert key in entry
+            assert entry[key] == entry[key]  # not NaN
+
+
 def test_rookie_salary_monotonic():
     salaries = [draft_system.rookie_salary(p) for p in range(1, 61)]
     assert salaries == sorted(salaries, reverse=True)

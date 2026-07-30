@@ -51,6 +51,20 @@ def test_standings_ordered_by_win_pct():
     assert pcts == sorted(pcts, reverse=True)
 
 
+def test_opp_season_stats_accumulate_and_reset():
+    w = _quick_world(seed=5, games=16)
+    while not S.regular_season_complete(w):
+        S.advance_one_day(w)
+    for t in w.teams.values():
+        assert t.opp_season_stats.pts > 0
+        # Points a team allowed should roughly track its opponents' scoring, i.e. be nonzero
+        # and on the same order of magnitude as its own scoring across the same games.
+        assert t.opp_season_stats.pts == t.points_against
+    S.start_season(w)
+    for t in w.teams.values():
+        assert t.opp_season_stats.pts == 0
+
+
 def test_injuries_stay_reasonable():
     w = _quick_world(seed=7, games=20)
     while not S.regular_season_complete(w):

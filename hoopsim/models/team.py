@@ -56,6 +56,7 @@ class Team:
     nil_budget: int = 0                                    # annual NIL collective funds (college)
 
     season_stats: StatLine = field(default_factory=StatLine)
+    opp_season_stats: StatLine = field(default_factory=StatLine)  # opponent totals allowed, for DRtg/pace
 
     # -- identity -----------------------------------------------------------
     @property
@@ -126,6 +127,7 @@ class Team:
         self.points_for = self.points_against = 0
         self.streak = 0
         self.season_stats.reset()
+        self.opp_season_stats.reset()
 
     # -- serialization ------------------------------------------------------
     def to_dict(self) -> dict:
@@ -162,6 +164,7 @@ class Team:
             "prestige": self.prestige,
             "nil_budget": self.nil_budget,
             "season_stats": self.season_stats.to_dict(),
+            "opp_season_stats": self.opp_season_stats.to_dict(),
         }
 
     @classmethod
@@ -199,6 +202,7 @@ class Team:
             prestige=d.get("prestige", 3),
             nil_budget=d.get("nil_budget", 0),
             season_stats=StatLine.from_dict(d.get("season_stats", {})),
+            opp_season_stats=StatLine.from_dict(d.get("opp_season_stats", {})),
         )
 
 

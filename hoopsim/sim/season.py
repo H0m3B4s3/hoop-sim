@@ -58,6 +58,8 @@ def _apply_result(world: World, game: Game, result: GameResult, is_playoff: bool
             team.season_stats.add(result.team_line(list(roster)))
 
     if not is_playoff:
+        home.opp_season_stats.add(result.team_line(list(away.roster)))
+        away.opp_season_stats.add(result.team_line(list(home.roster)))
         conf_game = home.conference == away.conference
         home_won = result.home_score > result.away_score
         home.record_result(home_won, result.home_score, result.away_score, conf_game)
