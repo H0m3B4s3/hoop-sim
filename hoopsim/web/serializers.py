@@ -329,6 +329,93 @@ def injury_report_view(world: World, team: Team) -> dict:
     }
 
 
+def coach_view(coach) -> Optional[dict]:
+    """Serialize a coach for the coaching staff panel, or null if none."""
+    if coach is None:
+        return None
+    return {
+        "name": coach.name,
+        "archetype": coach.archetype,
+        "archetype_label": coach.profile.label,
+        "blurb": coach.profile.blurb,
+        "wins": coach.wins,
+        "losses": coach.losses,
+        "record": coach.record_str,
+        "win_pct": round(coach.win_pct, 3),
+        "seasons": coach.seasons,
+        "hired_year": coach.hired_year,
+    }
+
+
+def staff_view(world: World, team: Team) -> dict:
+    """Full coaching staff view: head coach, hired assistants, open slots, markets, budget."""
+    from hoopsim.systems import carousel
+    from hoopsim.models.staff import ROLES, ROLE_KEYS
+
+    # Hired staff in ROLE_KEYS order
+    staff_entries = []
+    for role in ROLE_KEYS:
+        for assistant in team.staff:
+            if assistant.role == role:
+                staff_entries.append({
+                    "role": assistant.role,
+                    "role_label": assistant.label,
+                    "blurb": ROLES[assistant.role].blurb,
+                    "name": assistant.name,
+                    "level": assistant.level,
+                    "level_label": assistant.level_label,
+                    "salary": assistant.salary,
+                })
+                break
+
+    # Open roles
+    open_roles = []
+    for role in ROLE_KEYS:
+        if not any(a.role == role for a in team.staff):
+            open_roles.append({
+                "role": role,
+                "role_label": ROLES[role].label,
+                "blurb": ROLES[role].blurb,
+            })
+
+    # Budget
+    budget_slice = team.owner_budget // carousel.STAFF_BUDGET_DIVISOR
+    spent = sum(a.salary for a in team.staff)
+    room = carousel.staff_budget_room(team)
+
+    # Markets
+    coach_market = [coach_view(c) for c in world.coach_pool]
+
+    staff_market = []
+    for assistant in world.staff_pool:
+        entry = {
+            "role": assistant.role,
+            "role_label": assistant.label,
+            "blurb": ROLES[assistant.role].blurb,
+            "name": assistant.name,
+            "level": assistant.level,
+            "level_label": assistant.level_label,
+            "salary": assistant.salary,
+            "affordable": assistant.salary <= room,
+        }
+        staff_market.append(entry)
+
+    return {
+        "team": team_brief(team),
+        "coach": coach_view(team.coach),
+        "hot_seat": carousel.fire_chance(team),
+        "staff": staff_entries,
+        "open_roles": open_roles,
+        "budget": {
+            "slice": budget_slice,
+            "spent": spent,
+            "room": room,
+        },
+        "coach_market": coach_market,
+        "staff_market": staff_market,
+    }
+
+
 def _enrich_award(world: World, e) -> dict:
     """Add a display color to a stored award entry from its (live) team id."""
     if not isinstance(e, dict):

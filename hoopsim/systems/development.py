@@ -14,6 +14,10 @@ from hoopsim.gen.playergen import SKILL_RATINGS
 _PHYSICAL = {"athleticism", "speed", "vertical", "strength", "stamina"}
 _IQ = {"off_iq", "def_iq", "basketball_iq"}
 
+# Extra growth per level of a Player Development assistant (1-5), so an elite one is worth
+# roughly a 50% faster climb toward potential for the young players on his roster.
+DEV_COACH_GROWTH_BONUS = 0.10
+
 
 def _overall_delta(player: Player, rng) -> float:
     # Growth is conserved league-wide: young players close the gap to their potential, but the
@@ -59,10 +63,17 @@ def _apply_delta(player: Player, delta: float, rng) -> None:
         player.ratings[skill] = clamp_rating(player.ratings[skill] + change)
 
 
-def develop_player(player: Player, rng) -> int:
-    """Develop one player; return the change in overall (for reporting)."""
+def develop_player(player: Player, rng, dev_coach_level: int = 0) -> int:
+    """Develop one player; return the change in overall (for reporting).
+
+    ``dev_coach_level`` is the team's Player Development grade (0 = nobody on staff). It only
+    amplifies *growth*, never softens decline — a development coach makes a young player reach
+    more of his ceiling; he does not stop a 34-year-old from aging.
+    """
     before = player.overall
     delta = _overall_delta(player, rng)
+    if delta > 0 and dev_coach_level:
+        delta *= 1.0 + dev_coach_level * DEV_COACH_GROWTH_BONUS
     _apply_delta(player, delta, rng)
     # Potential converges toward overall as a player ages out of his growth window. Starting this
     # at 25 (and a touch faster) keeps unrealized ceilings from lingering and inflating the league.
@@ -73,5 +84,8 @@ def develop_player(player: Player, rng) -> int:
 
 
 def develop_all(world: World) -> None:
+    from hoopsim.models import staff
+    # Cache per team: every player on a roster shares his team's development coach.
+    dev_levels = {tid: staff.level_of(t.staff, "development") for tid, t in world.teams.items()}
     for player in world.players.values():
-        develop_player(player, world.rng)
+        develop_player(player, world.rng, dev_levels.get(player.team_id, 0))

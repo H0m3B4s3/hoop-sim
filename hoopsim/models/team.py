@@ -12,6 +12,7 @@ from hoopsim.config import DEFAULT_OWNER_BUDGET, STARTERS, game_minutes
 from hoopsim.models.attributes import POSITIONS
 from hoopsim.models.coach import Coach, profile_for
 from hoopsim.models.player import Player
+from hoopsim.models.staff import Assistant
 from hoopsim.models.stats import StatLine
 from hoopsim.models.tactics import Tactics
 
@@ -36,6 +37,7 @@ class Team:
     chemistry: Dict[str, float] = field(default_factory=dict)  # "lo,hi" pid pair -> shared on-court seconds
     tactics: Tactics = field(default_factory=Tactics)
     coach: Optional[Coach] = None                          # head coach (rotation/tactics identity)
+    staff: List[Assistant] = field(default_factory=list)   # assistant specialists; see models/staff.py
 
     wins: int = 0
     losses: int = 0
@@ -149,6 +151,7 @@ class Team:
             "chemistry": {k: round(v, 1) for k, v in self.chemistry.items()},
             "tactics": self.tactics.to_dict(),
             "coach": self.coach.to_dict() if self.coach else None,
+            "staff": [a.to_dict() for a in self.staff],
             "wins": self.wins,
             "losses": self.losses,
             "conf_wins": self.conf_wins,
@@ -187,6 +190,7 @@ class Team:
             chemistry={k: float(v) for k, v in d.get("chemistry", {}).items()},
             tactics=Tactics.from_dict(d.get("tactics", {})),
             coach=Coach.from_dict(d["coach"]) if d.get("coach") else None,
+            staff=[Assistant.from_dict(a) for a in d.get("staff", [])],
             wins=d.get("wins", 0),
             losses=d.get("losses", 0),
             conf_wins=d.get("conf_wins", 0),

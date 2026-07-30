@@ -192,9 +192,18 @@ def build_world(seed: int = None, season_preset: str = DEFAULT_SEASON_PRESET,
         world.register_team(team)
         _build_roster(world, team, names)
         team.coach = assign_coach(coach_rng, coach_names.name()[1])
+        team.coach.hired_year = world.season_year   # tenure is measured from here
         apply_coach_tactics(team)
 
     _build_free_agents(world, names)
+
+    # Seed the coaching market and give every bench a staff, drawing from the same salted coach
+    # stream so none of it perturbs the main sequence that built the rosters above.
+    from hoopsim.systems import carousel
+    carousel.refill_market(world, coach_rng)
+    for team in world.team_list():
+        carousel.ai_build_staff(world, team, coach_rng)
+    carousel.refill_market(world, coach_rng)
 
     from hoopsim.systems.draft_system import init_draft_picks
     init_draft_picks(world)

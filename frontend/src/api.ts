@@ -133,6 +133,12 @@ export const api = {
   getTactics: () => get<any>("/tactics"),
   setTactic: (key: string, value: string) => post<any>("/tactics", { key, value }),
 
+  staff: () => get<any>("/staff"),
+  hireStaff: (role: string, name: string) => post<any>("/staff/hire", { role, name }),
+  fireStaff: (role: string) => post<any>("/staff/fire", { role }),
+  hireCoach: (name: string) => post<any>("/coach/hire", { name }),
+  fireCoach: () => post<any>("/coach/fire"),
+
   preDraft: () => post<any>("/offseason/pre-draft"),
   draftBoard: () => get<any>("/draft/board"),
   draftPick: (pid: number | null) => post<any>("/draft/pick", { pid }),

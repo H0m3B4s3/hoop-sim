@@ -36,6 +36,10 @@ _UNC_ROOKIE = 5
 _UNC_SOPHOMORE = 3
 _UNC_KNOWN = 1
 
+# Band narrowing per level of a Head Scout (1-5), floored at _UNC_KNOWN so even the best scout
+# in the league still leaves a sliver of doubt on an unproven prospect.
+SCOUT_BAND_NARROWING = 0.12
+
 # Letter grade cut points on the (scouted) potential scale. Coarse on purpose — a grade leaks
 # far less than a precise integer.
 _GRADE_CUTS = [
@@ -55,15 +59,24 @@ class PotentialView:
     value: int          # point estimate — only meaningful/shown when ``known``
 
 
-def pot_uncertainty(player) -> int:
-    """Half-width of the potential band: wide for prospects, tight for veterans."""
+def pot_uncertainty(player, scout_level: int = 0) -> int:
+    """Half-width of the potential band: wide for prospects, tight for veterans.
+
+    ``scout_level`` is the viewing team's Head Scout grade (0 = nobody on staff). A good scout
+    narrows the band — you see a tighter read on the same prospect — but never collapses it to
+    certainty, so the last of the guesswork always stays yours.
+    """
     if player.age >= 27 or player.experience >= 4:
-        return _UNC_KNOWN
-    if player.experience >= 2:
-        return _UNC_SOPHOMORE
-    if player.experience >= 1:
-        return _UNC_ROOKIE
-    return _UNC_PROSPECT
+        base = _UNC_KNOWN
+    elif player.experience >= 2:
+        base = _UNC_SOPHOMORE
+    elif player.experience >= 1:
+        base = _UNC_ROOKIE
+    else:
+        base = _UNC_PROSPECT
+    if scout_level:
+        base = max(_UNC_KNOWN, int(round(base * (1.0 - scout_level * SCOUT_BAND_NARROWING))))
+    return base
 
 
 def potential_grade(value: int) -> str:
@@ -73,7 +86,7 @@ def potential_grade(value: int) -> str:
     return "D"
 
 
-def pot_view(player) -> PotentialView:
+def pot_view(player, scout_level: int = 0) -> PotentialView:
     """Fogged potential for display: a band + grade, with the raw number only once it's settled.
 
     With fog disabled the band collapses to the exact ceiling so the raw numbers are visible.
@@ -81,7 +94,7 @@ def pot_view(player) -> PotentialView:
     est = player.scouted_potential()
     if not fog_enabled():
         return PotentialView(grade=potential_grade(est), low=est, high=est, known=True, value=est)
-    unc = pot_uncertainty(player)
+    unc = pot_uncertainty(player, scout_level)
     floor = player.overall
     low = max(floor, est - unc)
     high = min(RATING_MAX, est + unc)
