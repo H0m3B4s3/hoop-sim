@@ -196,6 +196,13 @@ def player_row(world: World, p: Player, *, is_starter: bool = False) -> dict:
         "is_injured": p.is_injured,
         "injury": (p.injury.description if p.is_injured else None),
         "injury_games": (p.injury.games_remaining if p.is_injured else 0),
+        "condition": round(p.condition, 1),
+        "resting": p.resting,
+        "games_missed": p.games_missed,
+        "injury_severity": (p.injury.severity if p.is_injured else None),
+        "injury_body_part": (p.injury.body_part if p.is_injured else None),
+        "injury_games_total": (p.injury.games_total if p.is_injured else 0),
+        "durability": p.ratings.get("durability", 25),
         "team_id": p.team_id,
         "team_abbrev": (team.abbrev if team else "FA"),
         "team_color": (color_hex(team.color) if team else "#9aa0a6"),
@@ -250,6 +257,76 @@ def depth_chart_view(world: World, team: Team) -> dict:
             "players": [player_row(world, p, is_starter=p.pid in starters) for p in players],
         })
     return {"team": team_brief(team), "positions": groups, "roster_max": ROSTER_MAX}
+
+
+def injury_report_view(world: World, team: Team) -> dict:
+    """Players with active injuries, resting status, or ongoing return-to-play windows."""
+    players = roster_players(team, world.players)
+    # Filter: injured, resting, or in return-to-play window
+    flagged = [p for p in players if p.is_injured or p.resting or p.rtp_games > 0]
+
+    def sort_key(p):
+        # Priority: currently injured > resting > rtp-only; within each, games_remaining desc
+        if p.is_injured:
+            priority = 0
+            games_out = p.injury.games_remaining
+        elif p.resting:
+            priority = 1
+            games_out = 0
+        else:  # rtp_games > 0
+            priority = 2
+            games_out = p.rtp_games
+        return (priority, -games_out)
+
+    flagged.sort(key=sort_key)
+
+    rows = []
+    for p in flagged:
+        row = {
+            "pid": p.pid,
+            "name": p.name,
+            "position": p.position,
+            "overall": p.overall,
+            "durability": p.ratings.get("durability", 25),
+            "condition": round(p.condition, 1),
+            "is_injured": p.is_injured,
+            "resting": p.resting,
+            "rtp_games": p.rtp_games,
+            "games_missed": p.games_missed,
+        }
+        if p.is_injured:
+            row.update({
+                "injury_description": p.injury.description,
+                "injury_severity": p.injury.severity,
+                "injury_body_part": p.injury.body_part,
+                "injury_games_remaining": p.injury.games_remaining,
+                "injury_games_total": p.injury.games_total,
+                "injury_games_out": p.injury.games_out,
+            })
+        else:
+            row.update({
+                "injury_description": None,
+                "injury_severity": None,
+                "injury_body_part": None,
+                "injury_games_remaining": 0,
+                "injury_games_total": 0,
+                "injury_games_out": 0,
+            })
+        rows.append(row)
+
+    count_injured = sum(1 for p in flagged if p.is_injured)
+    count_resting = sum(1 for p in flagged if p.resting)
+    total_games_missed = sum(p.games_missed for p in players)
+
+    return {
+        "team": team_brief(team),
+        "players": rows,
+        "summary": {
+            "currently_out": count_injured,
+            "currently_resting": count_resting,
+            "total_games_missed": total_games_missed,
+        },
+    }
 
 
 def _enrich_award(world: World, e) -> dict:
@@ -339,6 +416,8 @@ def player_detail(world: World, p: Player) -> dict:
         "college": p.college,
         "draft": dict(p.draft) if p.draft else None,
         "morale": p.morale,
+        "injury_history": list(p.injury_history),
+        "rtp_games": p.rtp_games,
         "rating_groups": groups,
         "composites": composites,
         "composite_order": list(COMPOSITES),
