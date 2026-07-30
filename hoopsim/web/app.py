@@ -143,6 +143,11 @@ class FogBody(BaseModel):
     enabled: bool                          # toggle potential fog of war
 
 
+class RestBody(BaseModel):
+    pid: int
+    resting: bool
+
+
 class RecruitSignBody(BaseModel):
     """College Signing Day: recruit pid -> NIL amount (NIL mode) or any truthy value
     (scholarship mode means 'offer extended'). Keys arrive as strings over JSON."""
@@ -298,6 +303,15 @@ def depth_chart(tid: int, sid: str = Depends(_sid)):
     if team is None:
         raise HTTPException(status_code=404, detail="Unknown team.")
     return ser.depth_chart_view(world, team)
+
+
+@app.get("/api/teams/{tid}/injuries")
+def team_injuries(tid: int, sid: str = Depends(_sid)):
+    world = _world(sid)
+    team = world.find_team(tid)
+    if team is None:
+        raise HTTPException(status_code=404, detail="Unknown team.")
+    return ser.injury_report_view(world, team)
 
 
 @app.get("/api/teams/{tid}/picks")
@@ -792,6 +806,23 @@ def set_role(body: RoleBody, sid: str = Depends(_sid)):
     auto_set_lineup(team, world.players)
     SESSIONS.autosave(sid)
     return ser.roster_view(world, team)
+
+
+@app.post("/api/rest")
+def rest_player(body: RestBody, sid: str = Depends(_sid)):
+    """Toggle a player's resting flag. Cannot rest an injured player."""
+    world = _world(sid)
+    team = _user_team(world)
+    p = world.players.get(body.pid)
+    if p is None:
+        raise HTTPException(status_code=404, detail="Unknown player.")
+    if p.team_id != team.tid:
+        raise HTTPException(status_code=400, detail="Player is not on your roster.")
+    if body.resting and p.is_injured:
+        raise HTTPException(status_code=400, detail="Cannot rest an injured player.")
+    p.resting = body.resting
+    SESSIONS.autosave(sid)
+    return ser.injury_report_view(world, team)
 
 
 @app.get("/api/tactics")

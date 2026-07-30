@@ -14,14 +14,29 @@ class Injury:
     description: str
     games_remaining: int
     severity: str = "minor"   # minor | moderate | major
+    body_part: str = ""       # flavor for the injury report and news wire
+    games_total: int = 0      # original length, so the UI can show progress through a recovery
+
+    def __post_init__(self) -> None:
+        # Older saves (and terse constructions) carry no total; the current length is the best
+        # estimate available, and it keeps ``games_out`` from reading negative.
+        if self.games_total <= 0:
+            self.games_total = self.games_remaining
+
+    @property
+    def games_out(self) -> int:
+        """Games already missed on this injury."""
+        return max(0, self.games_total - self.games_remaining)
 
     def to_dict(self) -> dict:
         return {"description": self.description, "games_remaining": self.games_remaining,
-                "severity": self.severity}
+                "severity": self.severity, "body_part": self.body_part,
+                "games_total": self.games_total}
 
     @classmethod
     def from_dict(cls, d: dict) -> "Injury":
-        return cls(d["description"], d["games_remaining"], d.get("severity", "minor"))
+        return cls(d["description"], d["games_remaining"], d.get("severity", "minor"),
+                   d.get("body_part", ""), d.get("games_total", 0))
 
 
 @dataclass
@@ -45,6 +60,19 @@ class Player:
     condition: float = 100.0             # 0-100 between-game freshness (100 = fully rested)
     morale: int = 70                     # 0-100
     injury: Optional[Injury] = None
+
+    # Injury track record. ``injury_history`` is append-only across a career (one dict per
+    # injury, recorded when it happens); ``games_missed`` counts the current season only.
+    # ``rtp_games`` is the return-to-play window still remaining after coming back — while it
+    # is above zero the player re-injures more easily, which is what makes a fragile player
+    # stay fragile instead of resetting clean the moment he is cleared.
+    injury_history: List[dict] = field(default_factory=list)
+    games_missed: int = 0
+    rtp_games: int = 0
+
+    # Held out of the next game to recover condition. Advisory when set — ``systems/injuries.py``
+    # clears it at tip-off if honoring it would leave the team unable to field a rotation.
+    resting: bool = False
 
     # Brand/marketability (dormant for pros; drives recruiting/NIL in college mode).
     brand_value: int = 0
@@ -94,7 +122,7 @@ class Player:
 
     @property
     def available(self) -> bool:
-        return not self.is_injured
+        return not self.is_injured and not self.resting
 
     @property
     def height_str(self) -> str:
@@ -129,6 +157,10 @@ class Player:
             "condition": self.condition,
             "morale": self.morale,
             "injury": self.injury.to_dict() if self.injury else None,
+            "injury_history": [dict(h) for h in self.injury_history],
+            "games_missed": self.games_missed,
+            "rtp_games": self.rtp_games,
+            "resting": self.resting,
             "brand_value": self.brand_value,
             "class_year": self.class_year,
             "college": self.college,
@@ -164,6 +196,10 @@ class Player:
             condition=d.get("condition", 100.0),
             morale=d.get("morale", 70),
             injury=Injury.from_dict(d["injury"]) if d.get("injury") else None,
+            injury_history=[dict(h) for h in d.get("injury_history", [])],
+            games_missed=d.get("games_missed", 0),
+            rtp_games=d.get("rtp_games", 0),
+            resting=d.get("resting", False),
             brand_value=d.get("brand_value", 0),
             class_year=d.get("class_year", 0),
             college=d.get("college", ""),

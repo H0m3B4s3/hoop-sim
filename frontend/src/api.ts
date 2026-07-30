@@ -100,6 +100,7 @@ export const api = {
   leaderboards: (category: string) => get<any>(`/leaderboards?category=${category}`),
   tradeBlock: (tid: number) => get<{ tid: number; pids: number[] }>(`/teams/${tid}/trade-block`),
   teamPicks: (tid: number) => get<{ tid: number; picks: Row[] }>(`/teams/${tid}/picks`),
+  teamInjuries: (tid: number) => get<any>(`/teams/${tid}/injuries`),
   player: (pid: number) => get<any>(`/players/${pid}`),
 
   simGame: (watch: boolean) => post<any>(`/sim/game?watch=${watch}`),
@@ -128,6 +129,7 @@ export const api = {
     post<any>("/lineup", { starters, auto }),
   setRotation: (rotation: number[] | null) => post<any>("/rotation", { rotation }),
   setRole: (role: string, pid: number | null) => post<any>("/role", { role, pid }),
+  setRest: (pid: number, resting: boolean) => post<any>("/rest", { pid, resting }),
   getTactics: () => get<any>("/tactics"),
   setTactic: (key: string, value: string) => post<any>("/tactics", { key, value }),
 

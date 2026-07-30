@@ -18,8 +18,10 @@ def test_top_prospect_is_a_plausible_ceiling():
     for seed in range(20):
         pots = _class_top_pots(seed)
         assert 70 <= pots[0] <= 99
-        # The board is sorted best-first by scouted talent.
-        assert pots[0] >= pots[10]
+        # The board ranks on current ability *and* ceiling (prospect_rank), so the top pick can
+        # legitimately carry a lower raw ceiling than someone below him — a polished 71/71 outranks
+        # a raw 56/72. What has to hold is that the top of the board out-ceilings the middle.
+        assert sum(pots[:5]) / 5 >= sum(pots[10:20]) / 10
 
 
 def test_classes_vary_in_strength_and_depth():

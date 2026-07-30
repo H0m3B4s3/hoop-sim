@@ -215,6 +215,7 @@ const NAV: { key: string; label: string }[] = [
   { key: "play", label: "Play" },
   { key: "roster", label: "Roster" },
   { key: "depth", label: "Depth Chart" },
+  { key: "injuries", label: "Injury Report" },
   { key: "lineup", label: "Lineup" },
   { key: "tactics", label: "Tactics" },
   { key: "standings", label: "Standings" },
@@ -309,6 +310,15 @@ function Hub({
               refresh={refresh}
               toast={toast}
               onPlayer={setOpenPid}
+            />
+          )}
+          {tab === "injuries" && (
+            <InjuryReport
+              tid={summary.user_team_id!}
+              onPlayer={setOpenPid}
+              manage={summary.mode !== "college"}
+              refresh={refresh}
+              toast={toast}
             />
           )}
           {tab === "lineup" && <LineupPanel onPlayer={setOpenPid} toast={toast} />}
@@ -1188,6 +1198,163 @@ function DepthChartPanel({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function InjuryReport({
+  tid,
+  onPlayer,
+  manage,
+  refresh,
+  toast,
+}: {
+  tid: number;
+  onPlayer: (pid: number) => void;
+  manage?: boolean;
+  refresh?: (s?: Summary) => void;
+  toast?: (m: string) => void;
+}) {
+  const [data, setData] = useState<any | null>(null);
+  const reload = () => api.teamInjuries(tid).then(setData).catch(() => {});
+  useEffect(() => {
+    reload();
+  }, [tid]);
+  if (!data) return <Loading />;
+  if (!data.players || data.players.length === 0) {
+    return (
+      <div className="card">
+        <h3>{data.team.full_name} — Injury Report</h3>
+        <p className="muted pad">Team is fully healthy.</p>
+      </div>
+    );
+  }
+  const canManage = !!(manage && refresh && toast);
+  const toggleRest = async (pid: number, currentResting: boolean) => {
+    try {
+      const r = await api.setRest(pid, !currentResting);
+      setData(r);
+      toast!("Updated rest status");
+    } catch (e) {
+      toast!(String(e));
+    }
+  };
+  const cols: ColumnDef<Row, any>[] = [
+    {
+      accessorKey: "name",
+      header: "Name",
+      cell: (c) => (
+        <span className="clickable" onClick={() => onPlayer((c.row.original as Row).pid)}>
+          {c.getValue() as string}
+        </span>
+      ),
+    },
+    { accessorKey: "position", header: "Pos" },
+    { accessorKey: "overall", header: "OVR", cell: (c) => OVR(c.getValue() as number) },
+    { accessorKey: "durability", header: "Durability", cell: (c) => OVR(c.getValue() as number) },
+    {
+      accessorKey: "condition",
+      header: "Condition",
+      cell: (c) => {
+        const cond = c.getValue() as number;
+        const pct = Math.round((cond / 100) * 100);
+        const barClass = cond < 70 ? "conditionBar warning" : "conditionBar";
+        return (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span>{cond}</span>
+            <div
+              className={barClass}
+              style={{
+                width: "60px",
+                height: "6px",
+                background: "var(--border)",
+                borderRadius: "3px",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  width: `${pct}%`,
+                  height: "100%",
+                  background: cond < 70 ? "var(--bad)" : "var(--good)",
+                  transition: "width 0.2s",
+                }}
+              />
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: (c) => {
+        const p = c.row.original as Row;
+        if (p.is_injured) {
+          const severity = p.injury_severity || "unknown";
+          const severityClass = `injury severity-${severity}`;
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <span className={severityClass}>{p.injury_description}</span>
+              <span className="muted small">
+                {p.injury_games_out} of {p.injury_games_total} games
+              </span>
+            </div>
+          );
+        }
+        if (p.resting) {
+          return <span className="injury">Resting</span>;
+        }
+        if (p.rtp_games && p.rtp_games > 0) {
+          return <span className="muted">{p.rtp_games} games RTP</span>;
+        }
+        return <span className="muted">—</span>;
+      },
+    },
+    {
+      accessorKey: "games_missed",
+      header: "Missed",
+      cell: (c) => c.getValue() as number,
+    },
+  ];
+  if (canManage) {
+    cols.push({
+      id: "action",
+      header: "",
+      enableSorting: false,
+      cell: (c) => {
+        const p = c.row.original as Row;
+        if (p.is_injured) return null;
+        return (
+          <button
+            className="mini"
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleRest(p.pid, p.resting);
+            }}
+          >
+            {p.resting ? "Un-rest" : "Rest"}
+          </button>
+        );
+      },
+    });
+  }
+  return (
+    <div className="card">
+      <h3>{data.team.full_name} — Injury Report</h3>
+      {data.summary && (
+        <p className="muted small" style={{ marginBottom: "12px" }}>
+          {data.summary.currently_out} out · {data.summary.currently_resting} resting ·{" "}
+          {data.summary.total_games_missed} total games missed
+        </p>
+      )}
+      <DataTable
+        data={data.players}
+        columns={cols}
+        initialSort={[{ id: "status", desc: false }]}
+        onRowClick={(r) => onPlayer((r as Row).pid)}
+        searchPlaceholder="Search players…"
+      />
     </div>
   );
 }

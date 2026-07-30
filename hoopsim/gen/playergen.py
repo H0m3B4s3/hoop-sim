@@ -141,6 +141,13 @@ def make_player(rng: Rng, pid: int, names: NameGenerator, *,
         if key in ratings:
             ratings[key] = clamp_rating(ratings[key] + delta)
 
+    # Durability is rolled independently of talent, unlike every other rating. It feeds no
+    # composite, so this never moves a player's overall — but leaving it correlated with the
+    # target made every star an iron man and every fragile player a scrub (fragile players
+    # averaged 60 overall, durable ones 82), so "injury prone" could never describe anyone you
+    # actually cared about. Staying healthy is not a basketball skill.
+    ratings["durability"] = clamp_rating(round(rng.gauss(70, 14)))
+
     # Marketability group is dormant in Phase 1 but populated so saves stay stable.
     ratings["marketability"] = rng.randint(RATING_MIN, 85)
     ratings["charisma"] = rng.randint(RATING_MIN, 85)

@@ -6,11 +6,11 @@ from typing import List, Optional, Tuple
 
 from hoopsim.config import SEASON_START_DAY, SEASON_START_MONTH
 from hoopsim.models.league import Game, Phase
-from hoopsim.models.player import Injury
 from hoopsim.models.team import auto_set_lineup
 from hoopsim.models.world import World
 from hoopsim.sim.boxscore import GameResult
 from hoopsim.sim.engine import simulate_game
+from hoopsim.systems import injuries
 from hoopsim.systems.momentum import update_morale
 
 DayResults = List[Tuple[Game, GameResult]]
@@ -65,10 +65,17 @@ def _apply_result(world: World, game: Game, result: GameResult, is_playoff: bool
         home.record_result(home_won, result.home_score, result.away_score, conf_game)
         away.record_result(not home_won, result.away_score, result.home_score, conf_game)
 
-    for pid, games, desc, severity in result.injuries:
+    # Injuries the engine rolled mid-game come through with a severity and a length but no
+    # flavor; give them a real ailment and log them to the player's history like any other.
+    for pid, games, _desc, severity in result.injuries:
         player = world.players[pid]
-        if player.injury is None or games > player.injury.games_remaining:
-            player.injury = Injury(desc, games, severity)
+        injuries.record_injury(world, player,
+                               injuries.make_injury(world.rng, severity, games))
+
+    # Then the between-game layer: conditioning load and wear-and-tear for everyone who dressed.
+    for team in (home, away):
+        minutes = {pid: result.box[pid].minutes for pid in team.roster if pid in result.box}
+        injuries.post_game(world, team, minutes)
 
     update_morale(world, home, away, result)
 
@@ -77,6 +84,9 @@ def sim_one(world: World, game: Game, *, collect_pbp: bool = False,
             is_playoff: bool = False, coach=None, coach_tid=None) -> GameResult:
     """Simulate and apply a single scheduled game."""
     home, away = world.teams[game.home], world.teams[game.away]
+    # Rest is advisory — a roster too thin to field a rotation plays its healthy bodies anyway.
+    injuries.resolve_rest(home, world.players)
+    injuries.resolve_rest(away, world.players)
     # Make sure lineups reflect the current healthy roster.
     auto_set_lineup(home, world.players)
     auto_set_lineup(away, world.players)
@@ -89,9 +99,9 @@ def sim_one(world: World, game: Game, *, collect_pbp: bool = False,
 def _heal_injuries(world: World) -> None:
     for p in world.players.values():
         if p.injury is not None:
-            p.injury.games_remaining -= 1
-            if p.injury.games_remaining <= 0:
-                p.injury = None
+            injuries.heal_one(p)
+        else:
+            injuries.tick_rtp(p)
 
 
 # ---------------------------------------------------------------------------
@@ -150,6 +160,9 @@ def start_season(world: World) -> None:
         p.season.reset()
         p.injury = None
         p.condition = 100.0
+        p.games_missed = 0
+        p.rtp_games = 0
+        p.resting = False
     generate_schedule(world)
     world.bracket = None
     world.day = 0
