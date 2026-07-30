@@ -102,22 +102,43 @@ ARCHETYPES: Dict[str, CoachProfile] = {p.key: p for p in [
 
 @dataclass
 class Coach:
-    """A team's head coach. The archetype keys into :data:`ARCHETYPES` for its tendencies."""
+    """A team's head coach. The archetype keys into :data:`ARCHETYPES` for its tendencies.
+
+    ``wins``/``losses``/``seasons`` are the coach's whole career, carried with him from job to
+    job — that is what makes the carousel legible, since a fired coach shows up in the hiring
+    pool with a record you can judge. ``hired_year`` is when the *current* tenure started.
+    """
     name: str = "Coach"
     archetype: str = "Balanced"
+    wins: int = 0
+    losses: int = 0
+    seasons: int = 0
+    hired_year: int = 0
 
     @property
     def profile(self) -> CoachProfile:
         return ARCHETYPES.get(self.archetype, BALANCED)
 
+    @property
+    def win_pct(self) -> float:
+        played = self.wins + self.losses
+        return self.wins / played if played else 0.0
+
+    @property
+    def record_str(self) -> str:
+        return f"{self.wins}-{self.losses}"
+
     def to_dict(self) -> dict:
-        return {"name": self.name, "archetype": self.archetype}
+        return {"name": self.name, "archetype": self.archetype, "wins": self.wins,
+                "losses": self.losses, "seasons": self.seasons, "hired_year": self.hired_year}
 
     @classmethod
     def from_dict(cls, d: dict) -> "Coach":
         arch = d.get("archetype", "Balanced")
         return cls(name=d.get("name", "Coach"),
-                   archetype=arch if arch in ARCHETYPES else "Balanced")
+                   archetype=arch if arch in ARCHETYPES else "Balanced",
+                   wins=d.get("wins", 0), losses=d.get("losses", 0),
+                   seasons=d.get("seasons", 0), hired_year=d.get("hired_year", 0))
 
 
 def profile_for(team: "Team") -> CoachProfile:

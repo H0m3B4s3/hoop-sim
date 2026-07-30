@@ -134,13 +134,19 @@ def pre_draft(world: World, champion_tid) -> dict:
     milestones = archive_season(world, champion_tid)
     for team in world.team_list():
         team.mle_used = False          # each team gets its one mid-level exception back
-    from hoopsim.systems import development, freeagency
+    from hoopsim.systems import carousel, development, freeagency
+    # The coaching carousel resolves first, on the record the season just produced, and before
+    # development runs — so a team that hired a development coach gets him for this offseason's
+    # growth rather than having to wait a full year for the hire to mean anything.
+    carousel.record_coach_season(world)
+    coaching = carousel.run_carousel(world)
     development.develop_all(world)
     resigned = freeagency.run_retention(world)["resigned"]   # AI keeps its own before FA opens
     new_fas = expire_contracts(world)
     ar = age_and_retire(world)
     return {"new_fas": len(new_fas), "retired": len(ar["retired"]), "resigned": resigned,
-            "inducted": ar["inducted"], "milestones": milestones}
+            "inducted": ar["inducted"], "milestones": milestones,
+            "coaching": coaching}
 
 
 def cull_free_agents(world: World, keep: int = 80) -> int:

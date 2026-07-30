@@ -26,7 +26,7 @@ from hoopsim.sim import playoffs as P
 from hoopsim.sim import season as S
 from hoopsim.sim.coach import Coach, CoachOrders
 from hoopsim.sim.engine import GameSim
-from hoopsim.systems import (cap, college_offseason as CO, collegefin, draft_system as D,
+from hoopsim.systems import (cap, carousel, college_offseason as CO, collegefin, draft_system as D,
                            freeagency, offseason, recruiting, trades)
 from hoopsim.web import serializers as ser
 from hoopsim.web.session import SESSIONS
@@ -161,6 +161,19 @@ class CoachOrdersBody(BaseModel):
     offensive_set: str = "motion"          # motion | iso | inside | spread (offense)
     defensive_foul: str = "auto"           # auto | foul | no (defense)
     lineup: Optional[List[int]] = None     # new on-court five, or None to leave it
+
+
+class StaffHireBody(BaseModel):
+    role: str
+    name: str
+
+
+class CoachHireBody(BaseModel):
+    name: str
+
+
+class StaffFireBody(BaseModel):
+    role: str
 
 
 # ---------------------------------------------------------------------------
@@ -848,6 +861,78 @@ def set_tactic(body: TacticBody, sid: str = Depends(_sid)):
     setattr(team.tactics, body.key, body.value)
     SESSIONS.autosave(sid)
     return get_tactics(sid)
+
+
+# ---------------------------------------------------------------------------
+# Coaching carousel (head coach & assistant staff)
+# ---------------------------------------------------------------------------
+@app.get("/api/staff")
+def get_staff(sid: str = Depends(_sid)):
+    world = _world(sid)
+    team = _user_team(world)
+    return ser.staff_view(world, team)
+
+
+@app.post("/api/staff/hire")
+def hire_staff(body: StaffHireBody, sid: str = Depends(_sid)):
+    world = _world(sid)
+    team = _user_team(world)
+    # Find the assistant in the market by name (unique enough in practice).
+    assistant = None
+    for a in world.staff_pool:
+        if a.name == body.name:
+            assistant = a
+            break
+    if assistant is None:
+        raise HTTPException(status_code=400, detail="Assistant not found in market.")
+    if assistant.salary > carousel.staff_budget_room(team):
+        raise HTTPException(status_code=400,
+                           detail=f"Salary ${assistant.salary:,} exceeds available budget.")
+    carousel.hire_assistant(world, team, assistant)
+    SESSIONS.autosave(sid)
+    return ser.staff_view(world, team)
+
+
+@app.post("/api/staff/fire")
+def fire_staff(body: StaffFireBody, sid: str = Depends(_sid)):
+    world = _world(sid)
+    team = _user_team(world)
+    result = carousel.fire_assistant(world, team, body.role)
+    if result is None:
+        raise HTTPException(status_code=400, detail="No assistant in that role.")
+    SESSIONS.autosave(sid)
+    return ser.staff_view(world, team)
+
+
+@app.post("/api/coach/hire")
+def hire_coach(body: CoachHireBody, sid: str = Depends(_sid)):
+    world = _world(sid)
+    team = _user_team(world)
+    # Find the coach in the market by name.
+    coach = None
+    for c in world.coach_pool:
+        if c.name == body.name:
+            coach = c
+            break
+    if coach is None:
+        raise HTTPException(status_code=400, detail="Coach not found in market.")
+    if team.coach is not None:
+        raise HTTPException(status_code=400,
+                           detail="You must fire your current coach before hiring a new one.")
+    carousel.hire_coach(world, team, coach)
+    SESSIONS.autosave(sid)
+    return ser.staff_view(world, team)
+
+
+@app.post("/api/coach/fire")
+def fire_coach(sid: str = Depends(_sid)):
+    world = _world(sid)
+    team = _user_team(world)
+    if team.coach is None:
+        raise HTTPException(status_code=400, detail="You do not have a head coach.")
+    carousel.fire_coach(world, team)
+    SESSIONS.autosave(sid)
+    return ser.staff_view(world, team)
 
 
 # ---------------------------------------------------------------------------

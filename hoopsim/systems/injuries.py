@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Dict, List, Optional
 
 from hoopsim.config import BASE_INJURY_RATE
+from hoopsim.models import staff
 from hoopsim.models.player import Injury, Player
 from hoopsim.models.team import Team, roster_players
 from hoopsim.models.world import World
@@ -48,6 +49,13 @@ MINUTES_SCALE = 0.03           # per minute past HEAVY_MINUTES in the game just 
 RTP_MULTIPLIER = 2.4           # re-injury risk while inside the return-to-play window
 MAX_RISK = 0.20                # hard ceiling so no single game becomes a coin flip
 
+# -- staff effects ----------------------------------------------------------
+# Per level of the relevant specialist (1-5). Capped well below 1.0 so a full elite staff shifts
+# the odds meaningfully without making a team injury-proof — an elite trainer is worth about a
+# third of the risk, not all of it.
+TRAINER_RISK_REDUCTION = 0.07      # Athletic Trainer: fewer wear-and-tear injuries
+CONDITIONING_RECOVERY_BONUS = 0.06  # Strength & Conditioning: better nightly recovery
+
 # Return-to-play window by severity: how many games a returning player stays fragile.
 RTP_GAMES = {"minor": 2, "moderate": 6, "major": 14}
 
@@ -77,12 +85,16 @@ def _stamina_factor(player: Player) -> float:
     return 1.0 + (RATING_PIVOT - player.ratings["stamina"]) * 0.006
 
 
-def update_condition(player: Player, minutes: float) -> None:
-    """Apply one game's load, then a night of recovery."""
+def update_condition(player: Player, minutes: float, conditioning_level: int = 0) -> None:
+    """Apply one game's load, then a night of recovery.
+
+    ``conditioning_level`` is the team's Strength & Conditioning grade (0 = nobody on staff).
+    """
     if minutes > 0:
         player.condition -= minutes * CONDITION_DRAIN_PER_MIN * _stamina_factor(player)
     deficit = max(0.0, 100.0 - player.condition)
-    recovery = (CONDITION_RECOVERY_BASE + deficit * CONDITION_RECOVERY_RATE)
+    rate = CONDITION_RECOVERY_RATE + conditioning_level * CONDITIONING_RECOVERY_BONUS
+    recovery = (CONDITION_RECOVERY_BASE + deficit * rate)
     recovery /= max(0.6, _stamina_factor(player))
     if player.is_injured or player.resting:
         recovery *= 1.25                      # sitting is how you actually get it back
@@ -92,11 +104,14 @@ def update_condition(player: Player, minutes: float) -> None:
 # ---------------------------------------------------------------------------
 # Risk
 # ---------------------------------------------------------------------------
-def injury_risk(player: Player, minutes: float) -> float:
-    """Per-game probability this player picks up a wear-and-tear injury."""
+def injury_risk(player: Player, minutes: float, trainer_level: int = 0) -> float:
+    """Per-game probability this player picks up a wear-and-tear injury.
+
+    ``trainer_level`` is the team's Athletic Trainer grade (0 = no trainer on staff).
+    """
     if minutes <= 0:
         return 0.0
-    risk = BASE_INJURY_RATE
+    risk = BASE_INJURY_RATE * (1.0 - trainer_level * TRAINER_RISK_REDUCTION)
     risk *= max(0.25, 1.0 + (RATING_PIVOT - player.ratings["durability"]) * DURABILITY_SCALE)
     risk *= max(1.0, 1.0 + (CONDITION_PIVOT - player.condition) * CONDITION_SCALE)
     risk *= max(1.0, 1.0 + (player.age - AGE_PIVOT) * AGE_SCALE)
@@ -154,11 +169,12 @@ def record_injury(world: World, player: Player, injury: Injury) -> None:
     })
 
 
-def check_wear_and_tear(world: World, player: Player, minutes: float) -> Optional[Injury]:
+def check_wear_and_tear(world: World, player: Player, minutes: float,
+                        trainer_level: int = 0) -> Optional[Injury]:
     """Roll the between-game injury check for one player. Returns the injury, if any."""
     if player.is_injured or minutes <= 0:
         return None
-    if not world.rng.chance(injury_risk(player, minutes)):
+    if not world.rng.chance(injury_risk(player, minutes, trainer_level)):
         return None
     severity = _roll_severity(world.rng, player)
     injury = make_injury(world.rng, severity, _length_for(world.rng, severity))
@@ -174,11 +190,13 @@ def post_game(world: World, team: Team, minutes_by_pid: Dict[int, float]) -> Lis
 
     Returns ``(player, injury)`` pairs for anything new, so callers can report it.
     """
+    trainer = staff.level_of(team.staff, "trainer")
+    conditioning = staff.level_of(team.staff, "conditioning")
     new_injuries = []
     for player in roster_players(team, world.players):
         minutes = minutes_by_pid.get(player.pid, 0.0)
-        update_condition(player, minutes)
-        injury = check_wear_and_tear(world, player, minutes)
+        update_condition(player, minutes, conditioning)
+        injury = check_wear_and_tear(world, player, minutes, trainer)
         if injury is not None:
             new_injuries.append((player, injury))
     return new_injuries

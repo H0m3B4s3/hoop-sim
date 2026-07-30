@@ -10,10 +10,12 @@ from typing import Dict, List, Optional
 
 from hoopsim.config import (DEFAULT_COLLEGE_ECONOMY, FIRST_APRON, LUXURY_TAX_LINE, SALARY_CAP,
                           SCHEMA_VERSION, VETERAN_MINIMUM)
+from hoopsim.models.coach import Coach
 from hoopsim.models.contract import Contract
 from hoopsim.models.draft import DraftClass, DraftPick
 from hoopsim.models.league import Game, Phase
 from hoopsim.models.player import Player
+from hoopsim.models.staff import Assistant
 from hoopsim.models.team import Team
 from hoopsim.rng import Rng
 
@@ -44,6 +46,10 @@ class World:
         self.history: List[dict] = []                # champions / awards per finished season
         self.hall_of_fame: List[dict] = []           # legacy résumé snapshots of inducted greats
         self.retired: List[dict] = []                # résumé snapshots of everyone who has retired
+        # The coaching market: head coaches and assistants available for hire. Fired coaches land
+        # back in ``coach_pool`` carrying their career record, so the pool is readable.
+        self.coach_pool: List[Coach] = []
+        self.staff_pool: List[Assistant] = []
 
         # Mode & the college layer. ``mode`` is the league the user controls; ``other_teams``
         # holds the *other* league (the pipeline partner) as Team objects (their players live in
@@ -224,6 +230,8 @@ class World:
             "history": list(self.history),
             "hall_of_fame": list(self.hall_of_fame),
             "retired": list(self.retired),
+            "coach_pool": [c.to_dict() for c in self.coach_pool],
+            "staff_pool": [a.to_dict() for a in self.staff_pool],
             "next_pid": self._next_pid,
             "next_gid": self._next_gid,
             "next_offer_id": self._next_offer_id,
@@ -261,6 +269,8 @@ class World:
         w.history = list(d.get("history", []))
         w.hall_of_fame = list(d.get("hall_of_fame", []))
         w.retired = list(d.get("retired", []))
+        w.coach_pool = [Coach.from_dict(c) for c in d.get("coach_pool", [])]
+        w.staff_pool = [Assistant.from_dict(a) for a in d.get("staff_pool", [])]
         w._next_pid = d.get("next_pid", max(w.players, default=0) + 1)
         w._next_gid = d.get("next_gid", 1)
         w._next_offer_id = d.get("next_offer_id", 1)
