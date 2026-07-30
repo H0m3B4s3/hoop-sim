@@ -329,6 +329,39 @@ def injury_report_view(world: World, team: Team) -> dict:
     }
 
 
+def news_view(world: World, items: List) -> dict:
+    """League news wire items, newest first, with category labels and team context.
+
+    Each item is serialized with year, day, category, category_label, headline, detail,
+    importance, tids, pids, plus computed fields team_abbrev (first tid's abbreviation)
+    and team_color (hex of first tid's team color).
+    """
+    from hoopsim.models.news import CATEGORY_LABELS
+
+    rows = []
+    for item in items:
+        team = world.find_team(item.tids[0]) if item.tids else None
+        row = {
+            "year": item.year,
+            "day": item.day,
+            "category": item.category,
+            "category_label": CATEGORY_LABELS.get(item.category, item.category),
+            "headline": item.headline,
+            "detail": item.detail,
+            "importance": item.importance,
+            "tids": list(item.tids),
+            "pids": list(item.pids),
+            "team_abbrev": (team.abbrev if team else None),
+            "team_color": (color_hex(team.color) if team else None),
+        }
+        rows.append(row)
+
+    return {
+        "items": rows,
+        "categories": [{"key": k, "label": CATEGORY_LABELS[k]} for k in CATEGORY_LABELS.keys()],
+    }
+
+
 def coach_view(coach) -> Optional[dict]:
     """Serialize a coach for the coaching staff panel, or null if none."""
     if coach is None:

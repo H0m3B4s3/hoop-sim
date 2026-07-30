@@ -991,12 +991,16 @@ class GameSim:
                 self._log(state.team.tid, f"{p.short_name} is injured and leaves the game")
 
     def _injury_severity(self):
+        # Split must stay in step with systems/injuries._roll_severity — these are two rolls for
+        # the same real-world event (hurt in a game vs. hurt from the grind), and when this one
+        # sat at a 10% major rate the league produced ~35 season-enders a year. The length here
+        # is advisory: systems/injuries.make_injury clamps it into the chosen ailment's own range.
         roll = self.rng.random()
-        if roll < 0.6:
-            return self.rng.randint(1, 3), "minor"
-        if roll < 0.9:
-            return self.rng.randint(4, 12), "moderate"
-        return self.rng.randint(15, 45), "major"
+        if roll < 0.72:
+            return self.rng.randint(1, 4), "minor"
+        if roll < 0.98:
+            return self.rng.randint(5, 15), "moderate"
+        return self.rng.randint(20, 60), "major"
 
     def _log(self, tid: int, text: str) -> None:
         if not self.collect_pbp:

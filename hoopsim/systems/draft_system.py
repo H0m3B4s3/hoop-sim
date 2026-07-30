@@ -246,13 +246,17 @@ def make_pick(world: World, pid: int) -> None:
     # Record draft provenance (bio flavor): round and overall pick from the slot.
     n_teams = len(world.teams)
     team = world.teams.get(tid)
+    rnd = 1 if pick_no <= n_teams else 2
     world.players[pid].draft = {
         "year": dc.year,
-        "round": 1 if pick_no <= n_teams else 2,
+        "round": rnd,
         "pick": pick_no,
         "team": team.abbrev if team else "",
     }
     dc.record_pick(pid)
+    # Emit the draft pick to the news wire
+    from hoopsim.systems import news
+    news.drafted(world, world.players[pid], team, rnd, pick_no)
 
 
 def best_available(world: World) -> int:

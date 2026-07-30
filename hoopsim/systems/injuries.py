@@ -62,18 +62,29 @@ RTP_GAMES = {"minor": 2, "moderate": 6, "major": 14}
 # A player needs a fieldable rotation; rest requests that would breach this are overridden.
 MIN_AVAILABLE = 8
 
-# Injury flavor. Severity picks the pool, so a "major" reads like a major injury.
+# Injury flavor: (body part, description, min games, max games). The length range belongs to the
+# specific ailment rather than the severity band, because "torn ACL — out 15 games" reads as
+# broken no matter how well the numbers balance. Descriptions are all countable singular nouns so
+# they survive being dropped into "is out with a {description}".
 _AILMENTS: Dict[str, List[tuple]] = {
-    "minor": [("ankle", "sprained ankle"), ("knee", "knee soreness"), ("back", "back spasms"),
-              ("hand", "jammed finger"), ("hip", "hip pointer"), ("shoulder", "shoulder contusion"),
-              ("quad", "quad contusion"), ("foot", "foot soreness")],
-    "moderate": [("hamstring", "strained hamstring"), ("groin", "groin strain"),
-                 ("knee", "sprained MCL"), ("ankle", "high ankle sprain"),
-                 ("calf", "calf strain"), ("shoulder", "shoulder strain"),
-                 ("wrist", "wrist sprain"), ("rib", "bruised ribs")],
-    "major": [("knee", "torn ACL"), ("achilles", "ruptured Achilles"), ("foot", "fractured foot"),
-              ("back", "herniated disc"), ("knee", "torn meniscus"), ("hand", "fractured hand"),
-              ("shoulder", "torn labrum"), ("leg", "stress fracture")],
+    "minor": [
+        ("ankle", "sprained ankle", 2, 5), ("knee", "sore knee", 1, 3),
+        ("back", "back strain", 2, 4), ("hand", "jammed finger", 1, 3),
+        ("hip", "hip pointer", 1, 4), ("shoulder", "shoulder contusion", 1, 3),
+        ("quad", "quad contusion", 1, 3), ("foot", "sore foot", 1, 3),
+    ],
+    "moderate": [
+        ("hamstring", "strained hamstring", 6, 14), ("groin", "groin strain", 5, 12),
+        ("knee", "sprained MCL", 8, 18), ("ankle", "high ankle sprain", 6, 15),
+        ("calf", "calf strain", 5, 12), ("shoulder", "shoulder strain", 4, 10),
+        ("wrist", "wrist sprain", 4, 10), ("rib", "rib contusion", 3, 8),
+    ],
+    "major": [
+        ("knee", "torn ACL", 60, 82), ("achilles", "ruptured Achilles", 65, 82),
+        ("foot", "fractured foot", 25, 45), ("back", "herniated disc", 22, 40),
+        ("knee", "torn meniscus", 18, 35), ("hand", "fractured hand", 15, 28),
+        ("shoulder", "torn labrum", 30, 50), ("leg", "stress fracture", 20, 38),
+    ],
 }
 
 
@@ -125,7 +136,9 @@ def _roll_severity(rng, player: Player) -> str:
     """Pick a severity. A player still inside his return-to-play window skews worse."""
     roll = rng.random()
     if player.rtp_games > 0:
-        roll *= 0.75                          # a re-injury is more likely to be the serious kind
+        # Skew toward the serious end for a re-injury. Note the direction: the bands below run
+        # minor-first, so making a re-injury worse means pushing the roll UP, not down.
+        roll = roll ** 0.6
     if roll < 0.72:
         return "minor"
     if roll < 0.98:
@@ -135,17 +148,15 @@ def _roll_severity(rng, player: Player) -> str:
     return "major"
 
 
-def _length_for(rng, severity: str) -> int:
-    if severity == "minor":
-        return rng.randint(1, 3)
-    if severity == "moderate":
-        return rng.randint(4, 12)
-    return rng.randint(15, 45)
+def make_injury(rng, severity: str, games: Optional[int] = None) -> Injury:
+    """Build an injury with flavor appropriate to its severity.
 
-
-def make_injury(rng, severity: str, games: int) -> Injury:
-    """Build an injury with flavor appropriate to its severity."""
-    body_part, description = rng.choice(_AILMENTS[severity])
+    ``games`` is normally left to the ailment's own range. The engine's in-game roll passes a
+    length it already picked; that length is honored, but clamped into the chosen ailment's range
+    so a torn ACL can never come back as a two-week absence.
+    """
+    body_part, description, lo, hi = rng.choice(_AILMENTS[severity])
+    games = rng.randint(lo, hi) if games is None else max(lo, min(hi, games))
     return Injury(description=description, games_remaining=games, severity=severity,
                   body_part=body_part, games_total=games)
 
@@ -177,7 +188,7 @@ def check_wear_and_tear(world: World, player: Player, minutes: float,
     if not world.rng.chance(injury_risk(player, minutes, trainer_level)):
         return None
     severity = _roll_severity(world.rng, player)
-    injury = make_injury(world.rng, severity, _length_for(world.rng, severity))
+    injury = make_injury(world.rng, severity)
     record_injury(world, player, injury)
     return injury
 

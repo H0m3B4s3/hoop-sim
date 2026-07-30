@@ -213,6 +213,7 @@ function TeamSelect({
 // ---------------------------------------------------------------------------
 const NAV: { key: string; label: string }[] = [
   { key: "play", label: "Play" },
+  { key: "news", label: "League News" },
   { key: "roster", label: "Roster" },
   { key: "depth", label: "Depth Chart" },
   { key: "injuries", label: "Injury Report" },
@@ -293,6 +294,7 @@ function Hub({
         </nav>
         <main className="content">
           {tab === "play" && <PlayPanel summary={summary} refresh={refresh} toast={toast} />}
+          {tab === "news" && <NewsFeed />}
           {tab === "roster" && (
             <RosterPanel
               tid={summary.user_team_id!}
@@ -1569,6 +1571,123 @@ function InjuryReport({
         onRowClick={(r) => onPlayer((r as Row).pid)}
         searchPlaceholder="Search players…"
       />
+    </div>
+  );
+}
+
+function NewsFeed() {
+  const [data, setData] = useState<any | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | undefined>();
+  const [teamOnly, setTeamOnly] = useState(false);
+  const [bigStoriesOnly, setBigStoriesOnly] = useState(false);
+
+  const reload = () => {
+    api.news({
+      category: selectedCategory,
+      team_only: teamOnly,
+      min_importance: bigStoriesOnly ? 3 : 1,
+      limit: 60,
+    }).then(setData).catch(() => {});
+  };
+
+  useEffect(() => {
+    reload();
+  }, [selectedCategory, teamOnly, bigStoriesOnly]);
+
+  if (!data) return <Loading />;
+
+  if (!data.items || data.items.length === 0) {
+    return (
+      <div className="card">
+        <h3>League News</h3>
+        <p className="muted pad">The wire is quiet. Simulate some games to see news.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card">
+      <h3>League News</h3>
+      <div style={{ marginBottom: "16px", display: "flex", gap: "12px", flexWrap: "wrap" }}>
+        <select
+          value={selectedCategory || ""}
+          onChange={(e) => setSelectedCategory(e.target.value || undefined)}
+          style={{ padding: "6px 8px", borderRadius: "4px" }}
+        >
+          <option value="">All Categories</option>
+          {data.categories.map((cat: any) => (
+            <option key={cat.key} value={cat.key}>{cat.label}</option>
+          ))}
+        </select>
+        <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <input
+            type="checkbox"
+            checked={teamOnly}
+            onChange={(e) => setTeamOnly(e.target.checked)}
+          />
+          <span>My team only</span>
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <input
+            type="checkbox"
+            checked={bigStoriesOnly}
+            onChange={(e) => setBigStoriesOnly(e.target.checked)}
+          />
+          <span>Big stories only</span>
+        </label>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        {data.items.map((item: any, idx: number) => {
+          const isMajor = item.importance === 3;
+          const itemClass = isMajor ? "newsItem major" : "newsItem";
+          return (
+            <div key={idx} className={itemClass}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+                {item.team_color && (
+                  <div
+                    style={{
+                      width: "4px",
+                      height: "100%",
+                      backgroundColor: item.team_color,
+                      borderRadius: "2px",
+                      flexShrink: 0,
+                      opacity: 0.8,
+                    }}
+                  />
+                )}
+                <div style={{ flex: 1 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    <span className={`newsHeadline${isMajor ? " major" : ""}`}>
+                      {item.headline}
+                    </span>
+                    <span
+                      className="pill"
+                      style={{
+                        fontSize: "11px",
+                        padding: "2px 6px",
+                      }}
+                    >
+                      {item.category_label}
+                    </span>
+                  </div>
+                  {item.detail && (
+                    <p className="muted small" style={{ margin: "4px 0 0 0" }}>
+                      {item.detail}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

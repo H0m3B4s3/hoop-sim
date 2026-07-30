@@ -182,3 +182,31 @@
     border-right-color: var(--border);
   }
 }
+
+.newsItem {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  background: var(--surface-hover);
+  transition: background 0.2s;
+}
+
+.newsItem:hover {
+  background: var(--surface);
+}
+
+.newsItem.major {
+  border-left: 3px solid var(--bad);
+  font-weight: 500;
+}
+
+.newsHeadline {
+  display: inline;
+  font-weight: 500;
+  color: var(--text-h);
+}
+
+.newsHeadline.major {
+  font-weight: 600;
+  color: var(--bad);
+}

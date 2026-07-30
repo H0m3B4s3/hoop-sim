@@ -101,6 +101,15 @@ export const api = {
   tradeBlock: (tid: number) => get<{ tid: number; pids: number[] }>(`/teams/${tid}/trade-block`),
   teamPicks: (tid: number) => get<{ tid: number; picks: Row[] }>(`/teams/${tid}/picks`),
   teamInjuries: (tid: number) => get<any>(`/teams/${tid}/injuries`),
+  news: (opts?: { category?: string; team_only?: boolean; min_importance?: number; limit?: number }) => {
+    const p = new URLSearchParams();
+    if (opts?.category) p.set("category", opts.category);
+    if (opts?.team_only) p.set("team_only", "true");
+    if (opts?.min_importance !== undefined) p.set("min_importance", String(opts.min_importance));
+    if (opts?.limit !== undefined) p.set("limit", String(opts.limit));
+    const qs = p.toString();
+    return get<any>(`/news${qs ? "?" + qs : ""}`);
+  },
   player: (pid: number) => get<any>(`/players/${pid}`),
 
   simGame: (watch: boolean) => post<any>(`/sim/game?watch=${watch}`),
