@@ -24,6 +24,9 @@ saves/
 # Internal dev docs — kept local, not shared while in development
 docs/
 
+# Claude Code directory docs (local dev aid, not tracked)
+CLAUDE.md
+
 # OS / editor
 .DS_Store
 .idea/
