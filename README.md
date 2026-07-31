@@ -125,7 +125,8 @@ hoopsim/
   gen/               # procedural generation: names, players, NBA league, college world
   sim/               # engine (possessions + PBP), ratings, boxscore, season, playoffs,
                      #   college_tourney (single-elim conference + national tournaments)
-  systems/           # cap, trades, free agency, draft, development, offseason
+  systems/           # cap, trades, free agency, draft, development, offseason, injuries,
+                     #   carousel (coaching), news
                      #   + college: recruiting, collegefin (scholarship/NIL), college_offseason
   save/              # JSON serialization (schema-versioned) + save slots
   ui/                # rich terminal UI: console, theme, widgets, screens, college_ui
@@ -146,9 +147,13 @@ testable and let the web UI drop in as a second front-end over the same resumabl
 pytest -q
 ```
 
-The suite covers box-score reconciliation, realistic stat distributions, schedule/standings
-correctness, cap legality, trade validation, draft/development, and byte-identical save
+299 tests, about two to three minutes. They cover box-score reconciliation, realistic stat
+distributions, schedule/standings correctness, cap legality, trade validation, draft/development,
+injuries and conditioning, the coaching carousel, the news wire, and byte-identical save
 round-trips with reproducible RNG.
+
+Statistical assertions pool across several seeds rather than trusting one: a single simulated
+season is noisy enough that an effect can invert on an unlucky seed.
 
 ## Roadmap
 
@@ -209,13 +214,48 @@ engine is a resumable generator, so the terminal blocks on your input while the 
 very same simulation across HTTP requests; it runs in the terminal and the web app alike (NBA &
 college, regular season + postseason).
 
+Latest — **availability, the bench behind the bench, and a league that talks about itself**:
+
+**Injuries are now a system rather than a counter.** Players carry a **condition** that drains
+with minutes and recovers on light nights, so a star riding 38 minutes a night wears down over a
+season while a bench player stays fresh. Wear-and-tear injuries roll off durability, condition,
+age and workload; coming back opens a **return-to-play window** where re-injury is likelier and
+tends to be worse, so a serious injury echoes forward instead of resetting the day a player is
+cleared. Injuries have real names and sensible lengths — a torn ACL costs a season, a jammed
+finger costs a week — and every player keeps a permanent **injury history**. You can **rest**
+anyone to bank condition, though a roster too thin to field a rotation will play its healthy
+bodies regardless. Crucially, **durability is now rolled independently of talent**: it used to
+track a player's overall, which meant fragile players were always scrubs and an injury-prone star
+was impossible. Glass-cannon stars exist now, and they miss about twice the games durable players
+do.
+
+**Coaching is a decision.** Head coaches carry a **career record that travels with them between
+jobs**, so the hiring pool is something you can read — a 480-390 retread is a different bet from
+an unproven first-timer. Bad seasons get coaches fired (about six benches a year league-wide),
+vacancies fill from the market, and tenure splits hard by success. You also hire an **assistant
+staff** from the owner's budget: a *Player Development* coach grows your young players faster, an
+*Athletic Trainer* cuts injuries, a *Strength & Conditioning* coach keeps legs fresh into spring,
+and a *Head Scout* tightens your read on draft prospects. A full elite staff is out of reach, so
+it's a real tradeoff.
+
+**A league news wire** ties it all together: injuries, big performances, win streaks, trades,
+signings, draft picks, awards, career milestones, Hall of Fame inductions, retirements and the
+coaching carousel all surface in one filterable feed, so the league finally reads like it's
+happening rather than sitting in tables.
+
+Alongside these, a **box-score rebalance** brought three distributions in line with the real NBA:
+assist leaders now run around 11 a game (and are mostly guards, as they should be) instead of
+topping out under 7, free-throw shooting sits near 78% with elite shooters no longer superhuman,
+and rebounds land near 43 a team once team rebounds stopped being credited to individuals.
+
 Still on the roadmap:
 
 - **International prospects** entering via the NBA draft and recruitable to college programs.
 - **Transfer portal** for college rosters.
 - **Advanced NBA cap** rules (apron, sign-and-trade), two-way / G-League contracts.
-- **Deeper scouting**, chemistry and momentum, coaching staff.
 - A richer **NIL marketplace** (negotiated endorsement packages, brand events).
+- **Owner expectations and job security** — a mandate you're measured against, and a hot seat of
+  your own.
 
 ### Future work (not started)
 
@@ -265,7 +305,10 @@ Rotations & depth chart (built)
 
 - Teams and players are entirely fictional and procedurally generated.
 - A league is created from a random seed shown when you start a career; the same seed reproduces
-  the same league.
+  the same league **on the same build**. Changes to how players are generated shift the whole
+  random stream, so a seed shared across versions will not rebuild an identical league — the
+  durability rework in the injury update is one such change. Saves are unaffected: every field
+  added since has a default, so older saves load and continue normally.
 
 ## License
 

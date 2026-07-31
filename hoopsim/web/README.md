@@ -10,7 +10,10 @@ Works on mobile (≤768px): the sidebar becomes a slide-in drawer toggled by the
 **Coverage:** both modes play end to end in the browser — NBA (regular season → play-in →
 playoffs → draft → free agency) and college (regular season → conference & national tournaments →
 offseason: NBA draft pipeline + recruiting). Endpoints branch on `world.mode`; live crunch-time
-coaching works for the regular season and the postseason/tournament in both modes.
+coaching works for the regular season and the postseason/tournament in both modes. Three screens
+are browser-only, with no terminal equivalent: an **injury report** (conditioning, return-to-play
+windows, and resting players), a **coaching staff** page for hiring and firing the head coach and
+his assistants out of the league market, and a filterable **league news wire**.
 
 ## Layout
 
