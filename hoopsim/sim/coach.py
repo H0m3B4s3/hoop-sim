@@ -1,13 +1,13 @@
 """Interactive end-of-game coaching.
 
-The :class:`~hoopr.sim.engine.GameSim` is UI-agnostic; when a human wants to take over the
+The :class:`~hoopsim.sim.engine.GameSim` is UI-agnostic; when a human wants to take over the
 crunch-time decisions of a watched game it is handed a :class:`Coach`. At each of the user team's
 possessions inside the closing window the engine builds a read-only :class:`CoachView`, calls
 ``coach.decide(view)``, and applies the returned :class:`CoachOrders` (timeout, substitution,
 tempo, deliberate foul). After the possession resolves it calls ``coach.narrate(...)`` so the UI
 can show what happened. The default :class:`Coach` is a no-op (lets the engine play it straight),
 so non-interactive sims are unaffected; the console implementation lives in
-``hoopr.ui.screens.live_coach`` to keep this module free of UI imports.
+``hoopsim.ui.screens.live_coach`` to keep this module free of UI imports.
 """
 from __future__ import annotations
 

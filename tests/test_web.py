@@ -4,6 +4,8 @@ Skipped automatically if the optional ``web`` extra (fastapi/httpx) is not insta
 """
 from __future__ import annotations
 
+import json
+
 import pytest
 
 pytest.importorskip("fastapi")
@@ -15,7 +17,140 @@ from hoopsim.gen.leaguegen import build_world  # noqa: E402
 from hoopsim.models.league import conference_standings  # noqa: E402
 from hoopsim.models.team import roster_players  # noqa: E402
 from hoopsim.web import serializers as ser  # noqa: E402
-from hoopsim.web.app import app  # noqa: E402
+from hoopsim.web.app import _LIVE, app  # noqa: E402
+from hoopsim.web.session import SESSIONS  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _isolated_saves(tmp_path, monkeypatch):
+    """Saves land under the cwd, so keep every test's autosaves out of the real ``saves/``."""
+    monkeypatch.chdir(tmp_path)
+
+
+def _career(client, seed=3, pick_best=False):
+    """Start a Quick NBA career and return its world."""
+    state = client.post("/api/career/new",
+                        json={"league": "nba", "preset": "Quick", "seed": seed}).json()
+    world = SESSIONS.get(client.cookies.get("hoopsim_sid"))
+    tid = state["summary"]["teams"][0]["tid"]
+    if pick_best:
+        tid = max(world.team_list(), key=lambda t: sum(
+            sorted((world.players[p].overall for p in t.roster), reverse=True)[:8])).tid
+    client.post(f"/api/career/team/{tid}")
+    return world
+
+
+def _open_live_game(client, route="/api/sim/game?watch=true"):
+    """Watch games until one reaches a crunch-time decision, and return that response."""
+    for _ in range(60):
+        out = client.post(route).json()
+        if out.get("status") == "decision":
+            return out
+    pytest.fail("no watched game ever reached a crunch-time decision")
+
+
+def _user_games_played(world):
+    return sum(1 for g in world.schedule if g.played and g.involves(world.user_team_id))
+
+
+def test_export_then_import_restores_the_career_in_a_fresh_session():
+    original = TestClient(app)
+    _career(original)
+    original.post("/api/sim/week?days=3")
+    exported = original.get("/api/save/export")
+    assert exported.status_code == 200
+    assert 'attachment; filename="' in exported.headers["content-disposition"]
+
+    fresh = TestClient(app)
+    assert fresh.post("/api/save/import", content=exported.content).status_code == 200
+    assert fresh.get("/api/save/export").content == exported.content
+    # the imported autosave is on this session's disk too, so it survives a process restart
+    assert "autosave" in fresh.get("/api/saves").json()["saves"]
+
+
+def test_import_rejects_a_bad_file_and_keeps_the_current_career():
+    client = TestClient(app)
+    _career(client)
+    before = client.get("/api/save/export").content
+    for bad in (b"not json", b"[]", b"{}", b"\xff\xfe"):
+        assert client.post("/api/save/import", content=bad).status_code == 400
+    assert client.get("/api/save/export").content == before
+
+
+def test_export_waits_for_an_open_live_game():
+    client = TestClient(app)
+    _career(client)
+    _open_live_game(client)
+    assert client.get("/api/save/export").status_code == 409
+
+
+def test_simming_past_an_open_live_game_counts_it_exactly_once():
+    client = TestClient(app)
+    world = _career(client)
+    _open_live_game(client)
+    played = _user_games_played(world)
+    assert client.post("/api/sim/week?days=1").status_code == 200
+    team = world.user_team
+    # the open game finished, then one more day was simmed — every win or loss is a real game
+    assert _user_games_played(world) >= played + 1
+    assert team.wins + team.losses == _user_games_played(world)
+    assert client.cookies.get("hoopsim_sid") not in _LIVE
+    # the tab still showing that game can't apply it a second time
+    assert client.post("/api/sim/coach", json={}).status_code == 409
+    assert team.wins + team.losses == _user_games_played(world)
+
+
+def test_quick_sim_finishes_the_open_game_rather_than_skipping_to_the_next():
+    client = TestClient(app)
+    world = _career(client)
+    _open_live_game(client)
+    played = _user_games_played(world)
+    out = client.post("/api/sim/game").json()
+    assert out["status"] == "final" and "result" in out
+    assert _user_games_played(world) == played + 1
+
+
+def test_watch_reopens_the_open_game_with_its_decision_and_log():
+    client = TestClient(app)
+    world = _career(client)
+    # Some games end on the first order, and an empty log would prove nothing below.
+    for _ in range(30):
+        first = _open_live_game(client)
+        latest = client.post("/api/sim/coach", json={}).json()
+        log = first["events"] + latest.get("events", [])
+        if latest["status"] == "decision" and log:
+            break
+    else:
+        pytest.fail("no live game ran to a second decision with a log")
+    played = _user_games_played(world)
+    again = client.post("/api/sim/game?watch=true").json()
+    assert again["status"] == "decision"
+    assert again["decision"] == latest["decision"]
+    assert again["events"] == log
+    assert _user_games_played(world) == played
+
+
+def test_reopening_a_playoff_game_does_not_replay_the_other_series():
+    client = TestClient(app)
+    world = _career(client, pick_best=True)
+    while not client.post("/api/sim/week?days=10").json()["season_complete"]:
+        pass
+    client.post("/api/playoffs/start")
+    first = _open_live_game(client, "/api/playoffs/advance?watch=true")
+    bracket = json.dumps(world.bracket, sort_keys=True)
+    again = client.post("/api/playoffs/advance?watch=true").json()
+    assert again["decision"] == first["decision"]
+    assert json.dumps(world.bracket, sort_keys=True) == bracket
+
+
+def test_loading_a_save_discards_the_open_live_game():
+    client = TestClient(app)
+    _career(client)
+    client.post("/api/save", json={"slot": "before"})
+    _open_live_game(client)
+    assert client.post("/api/load", json={"slot": "before"}).status_code == 200
+    assert client.cookies.get("hoopsim_sid") not in _LIVE
+    assert client.post("/api/sim/coach", json={}).status_code == 409
 
 
 def test_roster_view_numbers_match_models():

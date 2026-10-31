@@ -1,9 +1,9 @@
 """Console-driven end-of-game coaching.
 
-:class:`LiveCoach` is the interactive implementation of :class:`hoopr.sim.coach.Coach`. The engine
-hands it a :class:`~hoopr.sim.coach.CoachView` before each of the user team's crunch-time
+:class:`LiveCoach` is the interactive implementation of :class:`hoopsim.sim.coach.Coach`. The engine
+hands it a :class:`~hoopsim.sim.coach.CoachView` before each of the user team's crunch-time
 possessions; this renders the situation, lets the user sub, call timeouts, set tempo, or order a
-deliberate foul, and returns the resulting :class:`~hoopr.sim.coach.CoachOrders`. After the
+deliberate foul, and returns the resulting :class:`~hoopsim.sim.coach.CoachOrders`. After the
 possession resolves the engine calls :meth:`narrate` to print what happened.
 """
 from __future__ import annotations

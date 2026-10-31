@@ -3,7 +3,7 @@
 The engine resolves one offensive trip at a time: turnover check, shooter + shot-type selection,
 make/miss with foul and free throws, then rebound (offensive rebounds extend the trip). Players
 tire, pick up fouls, and get substituted on a deficit-vs-fatigue rotation. Tactics feed in via
-:mod:`hoopr.sim.ratings`. Set ``collect_pbp=True`` to capture a readable play-by-play log.
+:mod:`hoopsim.sim.ratings`. Set ``collect_pbp=True`` to capture a readable play-by-play log.
 """
 from __future__ import annotations
 
@@ -243,9 +243,9 @@ class GameSim:
         """A generator driving the game that suspends at each user crunch-time decision.
 
         Pump it with ``next()`` and ``gen.send(orders)``: every yielded value is a
-        :class:`~hoopr.sim.coach.CoachView` to act on, resumed with the user's
-        :class:`~hoopr.sim.coach.CoachOrders`. When it raises ``StopIteration`` the finished
-        :class:`~hoopr.sim.boxscore.GameResult` is on ``self.result``. With no coach (or in a
+        :class:`~hoopsim.sim.coach.CoachView` to act on, resumed with the user's
+        :class:`~hoopsim.sim.coach.CoachOrders`. When it raises ``StopIteration`` the finished
+        :class:`~hoopsim.sim.boxscore.GameResult` is on ``self.result``. With no coach (or in a
         blowout that never reaches the window) it simply never yields. Possession narration is
         delivered through ``coach.narrate`` as each trip resolves.
         """
