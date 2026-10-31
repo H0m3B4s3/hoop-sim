@@ -1,6 +1,10 @@
 """World-generation sanity checks."""
 from __future__ import annotations
 
+import json
+import os
+
+from hoopsim import gen
 from hoopsim.config import NUM_TEAMS, RATING_MAX, RATING_MIN, ROSTER_MIN
 from hoopsim.gen.leaguegen import build_world
 from hoopsim.models.attributes import ALL_RATINGS
@@ -45,3 +49,12 @@ def test_free_agents_have_no_team():
     w = build_world(seed=5)
     for pid in w.free_agents:
         assert w.players[pid].team_id is None
+
+
+def test_surname_pool_keeps_its_punctuation():
+    # The source data strips punctuation, so a regenerated pool would lose these spellings.
+    with open(os.path.join(os.path.dirname(gen.__file__), "..", "data", "names.json"),
+              encoding="utf-8") as fh:
+        last = json.load(fh)["last"]
+    assert {"O'Brien", "St. Clair", "MacDonald", "De La Cruz", "Van Dyke"} <= set(last)
+    assert not {"Obrien", "Stclair", "Macdonald", "Delacruz", "Vandyke"} & set(last)

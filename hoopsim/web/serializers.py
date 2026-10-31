@@ -1,6 +1,6 @@
 """Turn World/Team/Player/GameResult into plain JSON-able dicts for the web API.
 
-This is the web analogue of ``hoopr.ui.widgets``: where the terminal builds ``rich`` tables,
+This is the web analogue of ``hoopsim.ui.widgets``: where the terminal builds ``rich`` tables,
 here we emit dicts of the *same computed numbers* and let the browser handle formatting and
 sorting. We deliberately reuse the models' computed properties and the existing engine helpers
 (``conference_standings``, ``cap`` math, ``team_salary``) rather than recomputing anything.
@@ -950,7 +950,7 @@ def coach_event_view(world: World, e) -> dict:
 
 
 def coach_view_json(world: World, view) -> dict:
-    """Serialize a :class:`~hoopr.sim.coach.CoachView` for the browser crunch-time panel."""
+    """Serialize a :class:`~hoopsim.sim.coach.CoachView` for the browser crunch-time panel."""
     def pj(p) -> dict:
         row = {"pid": p.pid, "name": p.name, "pos": p.pos, "overall": p.overall,
                "fouls": p.fouls, "fatigue": round(p.fatigue, 1), "secs": int(p.secs),

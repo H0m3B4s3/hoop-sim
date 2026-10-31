@@ -1,7 +1,7 @@
 """Draft structures.
 
 A :class:`DraftClass` is a pool of generated prospect players plus the pick order. Prospects
-are ordinary :class:`~hoopr.models.player.Player` objects with no team; once picked they sign a
+are ordinary :class:`~hoopsim.models.player.Player` objects with no team; once picked they sign a
 rookie-scale deal and join the drafting team's roster.
 """
 from __future__ import annotations

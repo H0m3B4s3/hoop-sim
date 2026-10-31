@@ -1,28 +1,42 @@
 // Thin typed client for the HoopSim FastAPI backend. Every call sends the session
 // cookie (credentials: include) so the backend resolves the right live World.
 
+async function errorDetail(res: Response): Promise<string> {
+  let detail: string = res.statusText;
+  try {
+    const d = (await res.json()).detail;
+    if (Array.isArray(d)) {
+      // FastAPI validation errors come back as a list of {loc, msg, ...} objects.
+      detail = d.map((e) => e.msg ?? String(e)).join("; ");
+    } else if (typeof d === "string") {
+      detail = d;
+    }
+  } catch {
+    /* ignore */
+  }
+  return detail;
+}
+
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const res = await fetch(`/api${path}`, {
     credentials: "include",
     headers: { "Content-Type": "application/json" },
     ...opts,
   });
-  if (!res.ok) {
-    let detail: string = res.statusText;
-    try {
-      const d = (await res.json()).detail;
-      if (Array.isArray(d)) {
-        // FastAPI validation errors come back as a list of {loc, msg, ...} objects.
-        detail = d.map((e) => e.msg ?? String(e)).join("; ");
-      } else if (typeof d === "string") {
-        detail = d;
-      }
-    } catch {
-      /* ignore */
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) throw new Error(await errorDetail(res));
   return res.json() as Promise<T>;
+}
+
+// Download the career as a file. Fetched rather than linked so a failure can show as a toast.
+async function exportSave(): Promise<void> {
+  const res = await fetch("/api/save/export", { credentials: "include" });
+  if (!res.ok) throw new Error(await errorDetail(res));
+  const name = /filename="(.+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1];
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(await res.blob());
+  link.download = name ?? "career.hoopsim.json";
+  link.click();
+  URL.revokeObjectURL(link.href);
 }
 
 const get = <T>(p: string) => req<T>(p);
@@ -84,6 +98,8 @@ export const api = {
   saves: () => get<{ saves: string[] }>("/saves"),
   save: (slot: string) => post<any>("/save", { slot }),
   load: (slot: string) => post<Summary>("/load", { slot }),
+  exportSave,
+  importSave: (text: string) => req<Summary>("/save/import", { method: "POST", body: text }),
 
   roster: (tid: number) => get<any>(`/teams/${tid}/roster`),
   depthChart: (tid: number) => get<any>(`/teams/${tid}/depth-chart`),

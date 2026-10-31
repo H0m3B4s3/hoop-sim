@@ -1235,6 +1235,10 @@ select:focus-visible {
     padding: 6px 10px;
     font-size: 13px;
   }
+  .exportLabel,
+  .seedChip {
+    display: none;
+  }
 
   /* sidebar: off-screen drawer */
   .side {

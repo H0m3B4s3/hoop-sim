@@ -56,6 +56,18 @@ def _is_clean(name: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z][A-Za-z'\-]*", name))
 
 
+# The surname source strips punctuation and spacing, so these are restored by hand.
+SURNAME_FIXES = {
+    "Macdonald": "MacDonald", "Obrien": "O'Brien", "Oconnell": "O'Connell", "Oconnor": "O'Connor",
+    "Odonnell": "O'Donnell", "Ohara": "O'Hara", "Okeefe": "O'Keefe", "Oleary": "O'Leary",
+    "Omalley": "O'Malley", "Oneal": "O'Neal", "Oneil": "O'Neil", "Oneill": "O'Neill",
+    "Orourke": "O'Rourke", "Stclair": "St. Clair", "Stjohn": "St. John",
+    "Delacruz": "De La Cruz", "Delarosa": "De La Rosa", "Delatorre": "De La Torre",
+    "Delossantos": "De Los Santos", "Dejesus": "De Jesus", "Deleon": "De Leon",
+    "Leblanc": "LeBlanc", "Vandyke": "Van Dyke", "Vanhorn": "Van Horn",
+}
+
+
 def first_names() -> List[str]:
     weight: dict = defaultdict(float)
     for row in csv.DictReader(io.StringIO(_fetch(FIRSTNAMES_URL))):
@@ -70,7 +82,8 @@ def last_names() -> List[str]:
     for row in csv.DictReader(io.StringIO(_fetch(SURNAMES_URL))):   # already rank-ordered
         name = row["name"]
         if name and name != "NULL" and _is_clean(name):
-            out.append(_titlecase(name))
+            cased = _titlecase(name)
+            out.append(SURNAME_FIXES.get(cased, cased))
         if len(out) >= N_LAST:
             break
     return out

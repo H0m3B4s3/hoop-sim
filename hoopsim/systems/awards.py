@@ -1,6 +1,6 @@
 """End-of-season awards, computed from regular-season production and team success.
 
-Run once per season from :func:`hoopr.systems.offseason.archive_season`, *before* the season's
+Run once per season from :func:`hoopsim.systems.offseason.archive_season`, *before* the season's
 stats roll into career history — so rookies still have an empty ``career`` and most-improved can
 compare against last year's overall. Results are stored as plain dicts on ``world.history`` and
 are self-contained (name/team/stat snapshots), so they survive players later retiring.

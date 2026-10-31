@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { api, money, type Row, type Summary, type TeamBrief } from "./api";
 import { DataTable, Modal, Pill, useToast } from "./ui";
@@ -53,6 +53,7 @@ function Setup({ onReady, toast }: { onReady: () => void; toast: (m: string) => 
   const [saves, setSaves] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [hasGame, setHasGame] = useState(false);
+  const importInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api.saves().then((r) => setSaves(r.saves)).catch(() => {});
@@ -72,6 +73,21 @@ function Setup({ onReady, toast }: { onReady: () => void; toast: (m: string) => 
       onReady();
     } catch (e) {
       toast(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const importFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // so choosing the same file again still fires
+    if (!file) return;
+    setBusy(true);
+    try {
+      await api.importSave(await file.text());
+      onReady();
+    } catch (err) {
+      toast(String(err));
     } finally {
       setBusy(false);
     }
@@ -152,6 +168,24 @@ function Setup({ onReady, toast }: { onReady: () => void; toast: (m: string) => 
             </div>
           </>
         )}
+
+        <h3>Import Save</h3>
+        <div className="saveList">
+          <button className="ghost" disabled={busy} onClick={() => importInput.current?.click()}>
+            📂 Import save file
+          </button>
+        </div>
+        <input
+          ref={importInput}
+          type="file"
+          accept=".json,application/json"
+          hidden
+          onChange={importFile}
+        />
+        <p className="muted small">
+          Saves on the hosted site are wiped whenever the server sleeps or updates. Use ⬇ Export
+          in the top bar to keep your career as a file, then import it here to pick it back up.
+        </p>
       </div>
     </div>
   );
@@ -409,6 +443,7 @@ function TopBar({
     const slot = prompt("Save slot name", `${t?.abbrev}_${summary.season_year}`);
     if (slot) api.save(slot).then((r) => toast(`Saved ${r.saved}`)).catch((e) => toast(String(e)));
   };
+  const exportFile = () => api.exportSave().catch((e) => toast(String(e)));
   return (
     <header className="topbar">
       <button className="menuBtn ghost" onClick={onMenuToggle} aria-label="Menu">☰</button>
@@ -435,6 +470,14 @@ function TopBar({
       <ThemeToggle />
       <button className="ghost" onClick={save}>
         💾 Save
+      </button>
+      <button
+        className="ghost"
+        onClick={exportFile}
+        aria-label="Export save file"
+        title="Download this career as a file you can import later"
+      >
+        ⬇<span className="exportLabel"> Export</span>
       </button>
       <button className="ghost" onClick={onQuit}>
         Menu
@@ -489,6 +532,8 @@ function useLiveCoach(
     try {
       handle(await api.coachOrders(orders));
     } catch (e) {
+      // The game may have finished elsewhere; if it's still open, Watch reopens it.
+      setCoach(null);
       toast(String(e));
     } finally {
       setSubmitting(false);

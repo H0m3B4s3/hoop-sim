@@ -1,8 +1,8 @@
 """FastAPI backend for HoopSim.
 
-Each route mirrors a terminal action in ``hoopr.ui`` and calls the *same* engine functions
+Each route mirrors a terminal action in ``hoopsim.ui`` and calls the *same* engine functions
 (``sim``/``systems``), so the web GUI and the CLI drive an identical game. State lives in
-``hoopr.web.session`` (one World per browser session); persistence reuses ``hoopr.save.store``.
+``hoopsim.web.session`` (one World per browser session); persistence reuses ``hoopsim.save.store``.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import webbrowser
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -21,6 +21,7 @@ from hoopsim.models.league import Game, Phase
 from hoopsim.models.team import auto_set_lineup
 from hoopsim.models.tactics import SETTINGS
 from hoopsim.models.world import World
+from hoopsim.save.serialize import world_from_json, world_to_json
 from hoopsim.sim import college_tourney as CT
 from hoopsim.sim import playoffs as P
 from hoopsim.sim import season as S
@@ -34,6 +35,7 @@ from hoopsim.web.session import SESSIONS
 app = FastAPI(title="HoopSim", version="0.1.0")
 
 _COOKIE = "hoopsim_sid"
+_MAX_IMPORT_BYTES = 32 * 1024 * 1024    # a 12-year career is about 2.3MB
 
 
 # ---------------------------------------------------------------------------
@@ -200,6 +202,7 @@ def career_new(body: NewCareer, sid: str = Depends(_sid)):
         from hoopsim.gen.leaguegen import build_world
         world = build_world(seed=seed, season_preset=preset)
     SESSIONS.set(sid, world)
+    _LIVE.pop(sid, None)
     return {"seed": seed, "needs_team": True, "summary": ser.world_summary(world)}
 
 
@@ -232,7 +235,37 @@ def load(body: SlotBody, sid: str = Depends(_sid)):
         world = SESSIONS.load(sid, body.slot)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Failed to load: {exc}") from exc
+    _LIVE.pop(sid, None)
     return ser.world_summary(world)
+
+
+@app.get("/api/save/export")
+def save_export(sid: str = Depends(_sid)):
+    """Download the career as a file, the only copy that outlives an ephemeral host."""
+    world = _world(sid)
+    if sid in _LIVE:
+        raise HTTPException(status_code=409, detail="Finish your live game before exporting.")
+    team = world.user_team
+    name = f"{team.abbrev if team else 'career'}_{world.season_year}.hoopsim.json"
+    return Response(world_to_json(world), media_type="application/json",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+@app.post("/api/save/import")
+async def save_import(request: Request, sid: str = Depends(_sid)):
+    """Resume a career from an exported file. A bad file leaves the current session untouched."""
+    raw = await request.body()
+    if len(raw) > _MAX_IMPORT_BYTES:
+        raise HTTPException(status_code=413, detail="That file is too large to be a save.")
+    try:
+        world = world_from_json(raw.decode("utf-8"))
+        summary = ser.world_summary(world)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="That file isn't a HoopSim save.") from exc
+    SESSIONS.set(sid, world)
+    _LIVE.pop(sid, None)
+    SESSIONS.autosave(sid)
+    return summary
 
 
 # ---------------------------------------------------------------------------
@@ -389,6 +422,8 @@ class _LiveGame:
     coach: _WebCoach
     game: Game
     finalize: object        # (world, result) -> dict of mode-specific "final" payload fields
+    feed: list = field(default_factory=list)    # every event so far, to rebuild a reopened page
+    decision: Optional[dict] = None             # the decision currently awaiting orders
 
 
 _LIVE: Dict[str, _LiveGame] = {}
@@ -421,12 +456,41 @@ def _pump(world: World, sid: str, live: _LiveGame, orders: Optional[CoachOrders]
         view = next(live.driver) if orders is None else live.driver.send(orders)
     except StopIteration:
         return _finish_live_game(world, sid, live)
+    events = [ser.coach_event_view(world, e) for e in live.coach.drain()]
+    live.feed.extend(events)
+    live.decision = ser.coach_view_json(world, view)
     return {
         "status": "decision",
-        "events": [ser.coach_event_view(world, e) for e in live.coach.drain()],
-        "decision": ser.coach_view_json(world, view),
+        "events": events,
+        "decision": live.decision,
         "summary": ser.world_summary(world),
     }
+
+
+def _resume_live_game(world: World, live: _LiveGame) -> dict:
+    """Hand a refreshed page the game it left: the full log so far and the pending decision."""
+    return {
+        "status": "decision",
+        "events": live.feed,
+        "decision": live.decision,
+        "summary": ser.world_summary(world),
+    }
+
+
+def _settle_live_game(world: World, sid: str) -> Optional[dict]:
+    """Finish any open live game on default orders, so it is applied exactly once.
+
+    Whatever moves the calendar must call this first. A game left open by a refreshed page or a
+    second tab would otherwise be simmed there and applied again when it finished, and restarting
+    it instead would replay the rest of its playoff slate.
+    """
+    live = _LIVE.get(sid)
+    if live is None:
+        return None
+    out = _pump(world, sid, live, CoachOrders())
+    while out["status"] == "decision":
+        out = _pump(world, sid, live, CoachOrders())
+    return out
 
 
 def _finish_live_game(world: World, sid: str, live: _LiveGame) -> dict:
@@ -446,6 +510,9 @@ def _finish_live_game(world: World, sid: str, live: _LiveGame) -> dict:
 @app.post("/api/sim/game")
 def sim_game(watch: bool = False, sid: str = Depends(_sid)):
     world = _world(sid)
+    live = _LIVE.get(sid)
+    if live is not None:
+        return _resume_live_game(world, live) if watch else _settle_live_game(world, sid)
     game = S.user_next_game(world)
     if game is None:
         while not S.regular_season_complete(world):
@@ -492,6 +559,7 @@ def sim_coach(body: CoachOrdersBody, sid: str = Depends(_sid)):
 @app.post("/api/sim/week")
 def sim_week(days: int = 4, sid: str = Depends(_sid)):
     world = _world(sid)
+    _settle_live_game(world, sid)
     uid = world.user_team_id
     user_games = []
     for _ in range(max(1, days)):
@@ -510,6 +578,7 @@ def sim_week(days: int = 4, sid: str = Depends(_sid)):
 @app.post("/api/sim/advance-day")
 def advance_day(sid: str = Depends(_sid)):
     world = _world(sid)
+    _settle_live_game(world, sid)
     uid = world.user_team_id
     results, _ = S.advance_one_day(world)
     new_offers = trades.refresh_offers(world)
@@ -536,6 +605,7 @@ def playoffs(sid: str = Depends(_sid)):
 @app.post("/api/playoffs/start")
 def playoffs_start(sid: str = Depends(_sid)):
     world = _world(sid)
+    _settle_live_game(world, sid)
     log = CT.start_college_postseason(world) if world.mode == "college" \
         else P.start_playoffs(world)
     SESSIONS.autosave(sid)
@@ -568,6 +638,9 @@ def _college_slate_out(world: World, results) -> dict:
 @app.post("/api/playoffs/advance")
 def playoffs_advance(watch: bool = False, sid: str = Depends(_sid)):
     world = _world(sid)
+    live = _LIVE.get(sid)
+    if live is not None:
+        return _resume_live_game(world, live) if watch else _settle_live_game(world, sid)
     if world.mode == "college":
         return _college_advance(world, sid, watch)
     if watch:

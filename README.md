@@ -1,12 +1,16 @@
 # 🏀 HoopSim
 
 A text-based, *Football-Manager-style* basketball management simulation that runs in your
-terminal. Take over an NBA franchise, set tactics, watch possession-by-possession games unfold
-in play-by-play, wheel and deal on the trade market, sign free agents under the salary cap,
-draft and develop prospects, and chase a championship across multiple seasons.
+browser or your terminal. Take over an NBA franchise, set tactics, watch possession-by-possession
+games unfold in play-by-play, wheel and deal on the trade market, sign free agents under the
+salary cap, draft and develop prospects, and chase a championship across multiple seasons.
 
 Built on a procedurally generated league (fictional teams and players), a deterministic,
-seedable simulation core, and a rich terminal UI.
+seedable simulation core, a web app, and a rich terminal UI.
+
+The **web app is the primary client** and gets new features first. The terminal plays the same
+core game on the same engine and save format, but it has no League News, Coaching Staff, Injury
+Report or advanced stats screens.
 
 ```
  _  _   ___    ___   ___  ___  ___  __  __
@@ -104,7 +108,10 @@ late-game intentional fouling**.
   ceiling is a guess, a settled veteran's is known. Toggle the fog on/off (🌫 / 👁 in the top bar,
   or `config.FOG_OF_WAR`) to inspect the exact numbers.
 - **Save & load** — multiple named save slots plus autosave, with fully reproducible simulations
-  (the RNG state is part of the save).
+  (the RNG state is part of the save). In the web app you can also **export** a career to a file
+  and **import** it later. On the hosted site that file is the only lasting copy, because server
+  storage is wiped whenever the host sleeps or updates; run `hoopsim-web` locally to keep saves on
+  your own disk.
 
 ## How a season flows
 
@@ -147,7 +154,7 @@ testable and let the web UI drop in as a second front-end over the same resumabl
 pytest -q
 ```
 
-299 tests, about two to three minutes. They cover box-score reconciliation, realistic stat
+308 tests, about two to three minutes. They cover box-score reconciliation, realistic stat
 distributions, schedule/standings correctness, cap legality, trade validation, draft/development,
 injuries and conditioning, the coaching carousel, the news wire, and byte-identical save
 round-trips with reproducible RNG.

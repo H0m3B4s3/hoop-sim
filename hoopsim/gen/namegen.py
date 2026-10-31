@@ -1,6 +1,6 @@
 """Procedural name generation from pooled name lists.
 
-Names are drawn from the world's shared :class:`~hoopr.rng.Rng`, and the dedup retry loop in
+Names are drawn from the world's shared :class:`~hoopsim.rng.Rng`, and the dedup retry loop in
 ``NameGenerator.name`` consumes a *variable* number of draws (more collisions in a small pool ->
 more draws). So the contents of ``data/names.json`` are part of the reproducibility surface:
 a fixed pool + fixed seed reproduces a league exactly, but editing the pool shifts the shared
