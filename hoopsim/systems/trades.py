@@ -90,6 +90,73 @@ def validate_trade(world: World, offer: TradeOffer) -> Tuple[bool, str]:
     return True, "Trade is legal."
 
 
+# ---------------------------------------------------------------------------
+# How an AI team sizes up a deal
+# ---------------------------------------------------------------------------
+ACCEPT_MARGIN = 1.03        # incoming worth must beat outgoing by this much for a yes
+CLOSE_MARGIN = 0.97         # within this much, the AI says it wants a bit more
+# Roster spots are finite, so each extra incoming player counts for less than the one before.
+PIECE_WEIGHTS = (1.0, 0.75, 0.5, 0.35)
+# A team pays extra to keep the young star it is built around.
+FRANCHISE_PREMIUM = 1.25
+FRANCHISE_MAX_AGE = 29
+# Rebuilders discount veterans and prize picks; contenders will spend picks to win now.
+TRADE_BLOCK_VET_AGE = 30
+REBUILDER_VET_FACTOR = 0.75
+REBUILDER_PICK_FACTOR = 1.2
+CONTENDER_PICK_FACTOR = 0.85
+
+
+def _contending(team: Team) -> bool:
+    """Whether a club is playing for now: a winning record, or prestige before games are played."""
+    return team.win_pct >= 0.5 if team.games_played else team.prestige >= 4
+
+
+def _player_worth(team: Team, player) -> float:
+    """What a player is worth to this team, given where it is in its cycle."""
+    value = cap.trade_value(player)
+    if value > 0 and player.age >= TRADE_BLOCK_VET_AGE and not _contending(team):
+        value *= REBUILDER_VET_FACTOR
+    return value
+
+
+def _pick_worth(world: World, team: Team, pick) -> float:
+    factor = CONTENDER_PICK_FACTOR if _contending(team) else REBUILDER_PICK_FACTOR
+    return cap.pick_value(world, pick) * factor
+
+
+def _picks_worth(world: World, team: Team, keys: List[PickKey]) -> float:
+    picks = (world.find_pick(*key) for key in keys)
+    return sum(_pick_worth(world, team, pick) for pick in picks if pick is not None)
+
+
+def _franchise_player(world: World, team: Team) -> Optional[int]:
+    """The young star this team is built around, if it has one."""
+    players = roster_players(team, world.players)
+    if not players:
+        return None
+    best = max(players, key=lambda p: cap.trade_value(p))
+    return best.pid if best.age <= FRANCHISE_MAX_AGE else None
+
+
+def _incoming_worth(world: World, team: Team, pids: List[int], picks: List[PickKey]) -> float:
+    """Worth of what ``team`` would receive. Liabilities always count in full."""
+    worths = sorted((_player_worth(team, world.players[pid]) for pid in pids), reverse=True)
+    total = _picks_worth(world, team, picks)
+    for i, worth in enumerate(worths):
+        total += worth * PIECE_WEIGHTS[min(i, len(PIECE_WEIGHTS) - 1)] if worth > 0 else worth
+    return total
+
+
+def _outgoing_worth(world: World, team: Team, pids: List[int], picks: List[PickKey]) -> float:
+    """Worth of what ``team`` would give up, including the premium on its franchise player."""
+    total = sum(_player_worth(team, world.players[pid]) for pid in pids)
+    franchise = _franchise_player(world, team)
+    if franchise in pids:
+        total += _player_worth(team, world.players[franchise]) * (FRANCHISE_PREMIUM - 1)
+    return total + _picks_worth(world, team, picks)
+
+
 def ai_evaluates(world: World, offer: TradeOffer, ai_tid: int) -> Tuple[bool, str]:
     """Decide whether the AI team ``ai_tid`` accepts the offer."""
     legal, reason = validate_trade(world, offer)
@@ -101,16 +168,20 @@ def ai_evaluates(world: World, offer: TradeOffer, ai_tid: int) -> Tuple[bool, st
     else:
         in_pids, out_pids = offer.a_sends, offer.b_sends
         in_picks, out_picks = offer.a_picks, offer.b_picks
-    v_in = sum(cap.trade_value(world.players[pid]) for pid in in_pids) + _picks_value(world, in_picks)
-    v_out = sum(cap.trade_value(world.players[pid]) for pid in out_pids) + _picks_value(world, out_picks)
-    if v_in >= v_out * 1.03:
+    team = world.teams[ai_tid]
+    v_in = _incoming_worth(world, team, in_pids, in_picks)
+    v_out = _outgoing_worth(world, team, out_pids, out_picks)
+    if v_in >= v_out * ACCEPT_MARGIN:
         return True, "The deal improves our team."
-    if v_in >= v_out * 0.97:
+    if v_in >= v_out * CLOSE_MARGIN:
         return False, "We'd want a bit more value to do this."
+    if _franchise_player(world, team) in out_pids:
+        return False, "We're building around him. It would take a franchise-changing offer."
+    if len(in_pids) > 1 and v_out > 0:
+        return False, "We'd rather have one real piece than several decent ones."
     return False, "That's too lopsided for us."
 
 
-TRADE_BLOCK_VET_AGE = 30
 TRADE_BLOCK_MAX_YEARS = 2   # last one or two years of the deal
 
 
@@ -122,8 +193,7 @@ def team_trade_block(world: World, team: Team) -> List[int]:
     it dangles players who are ``TRADE_BLOCK_VET_AGE``+ and in the last one or two years of
     their contract. Contenders hold everyone. Returned high-overall first for display.
     """
-    contending = team.win_pct >= 0.5 if team.games_played else team.prestige >= 4
-    if contending:
+    if _contending(team):
         return []
     block = [p.pid for p in roster_players(team, world.players)
              if p.age >= TRADE_BLOCK_VET_AGE
@@ -136,10 +206,9 @@ def team_trade_block(world: World, team: Team) -> List[int]:
 # ---------------------------------------------------------------------------
 # Soliciting offers — the user shops their own player(s) around the league
 # ---------------------------------------------------------------------------
-# A solicited package must be at least fair to the user, and AI teams won't wildly
-# overpay just to land a player — so offers sit in this value band around the target.
-OFFER_VALUE_FLOOR = 0.96
-OFFER_VALUE_CEIL = 1.22
+# An AI team only offers what it would accept itself, so the top of the range is the most it
+# can pay and still clear ACCEPT_MARGIN. Below this floor it isn't a serious offer.
+OFFER_VALUE_FLOOR = 0.85
 OFFER_CHIP_POOL = 14        # candidate tradeable pieces per team considered for packages
 OFFER_MAX_PIECES = 3        # at most this many players come back in one offer
 
@@ -172,35 +241,41 @@ class _Chip:
     ref: object        # pid (int) for players, PickKey (tuple) for picks
 
 
-def _team_chips(world: World, team: Team) -> List[_Chip]:
+def _team_chips(world: World, team: Team, buying: float) -> List[_Chip]:
     """The assets ``team`` would consider parting with, best value first, pool-capped.
 
-    Players (minus the franchise cornerstone) plus the team's own future picks. Picks let
+    Players plus the team's own future picks, each at what it is worth to this team. Picks let
     a contender land your veteran without gutting its rotation — the classic rebuild return.
+    The franchise player is only in play when what's being bought is worth more than he is.
     """
-    players = sorted(roster_players(team, world.players),
-                     key=lambda p: cap.trade_value(p), reverse=True)
-    cornerstone = {players[0].pid} if players else set()
-    chips = [_Chip(cap.trade_value(p), p.contract.current_salary, True, p.pid)
-             for p in players if p.pid not in cornerstone and cap.trade_value(p) > 0]
-    chips += [_Chip(cap.pick_value(world, pk), 0, False, pk.key)
+    franchise = _franchise_player(world, team)
+    chips = []
+    for p in roster_players(team, world.players):
+        worth = _player_worth(team, p)
+        if p.pid == franchise:
+            worth *= FRANCHISE_PREMIUM
+            if worth >= buying:
+                continue
+        if worth > 0:
+            chips.append(_Chip(worth, p.contract.current_salary, True, p.pid))
+    chips += [_Chip(_pick_worth(world, team, pk), 0, False, pk.key)
               for pk in world.picks_owned_by(team.tid)]
     chips.sort(key=lambda c: c.value, reverse=True)
     return chips[:OFFER_CHIP_POOL]
 
 
-def _best_package(world: World, team: Team, target_value: float, target_salary: int,
+def _best_package(world: World, team: Team, buying: float, target_salary: int,
                   user_space: int, user_size_base: int, n_targets: int
                   ) -> Optional[Tuple[List[int], List[PickKey]]]:
     """Assemble the best package ``team`` would send for the targets, or ``None``.
 
-    The package's value lands in ``[FLOOR, CEIL] * target_value``, matches salary
-    both ways, and respects both rosters' size limits. Among legal candidates we
-    return the one with the highest value to the user (fewest assets to break ties).
+    ``buying`` is what the targets are worth to ``team``. The package costs it no more than it
+    would accept in a trade, matches salary both ways, and respects both rosters' size limits.
+    Among legal candidates we return the richest one (fewest assets to break ties).
     """
-    pool = _team_chips(world, team)
+    pool = _team_chips(world, team, buying)
     ai_space = cap.cap_space(world, team)
-    lo, hi = target_value * OFFER_VALUE_FLOOR, target_value * OFFER_VALUE_CEIL
+    lo, hi = buying * OFFER_VALUE_FLOOR, buying / ACCEPT_MARGIN
 
     best: Optional[Tuple[List[int], List[PickKey]]] = None
     best_score: Optional[Tuple[float, int]] = None
@@ -249,7 +324,7 @@ def solicit_offers(world: World, pids: List[int], max_offers: int = 10) -> List[
     for team in world.team_list():
         if team.tid == user.tid or not _team_wants(world, team, targets):
             continue
-        pkg = _best_package(world, team, target_value, target_salary,
+        pkg = _best_package(world, team, _incoming_worth(world, team, targets, []), target_salary,
                             user_space, user_size_base, len(targets))
         if pkg is None:
             continue
@@ -296,7 +371,8 @@ def solicit_pick_offers(world: World, pick_key: PickKey, max_offers: int = 8
     for team in world.team_list():
         if team.tid == user.tid or not _team_wants_pick(world, team, pick):
             continue
-        pkg = _best_package(world, team, target_value, 0, user_space, user_size_base, 0)
+        pkg = _best_package(world, team, _pick_worth(world, team, pick), 0,
+                            user_space, user_size_base, 0)
         if pkg is None:
             continue
         pids_back, picks_back = pkg

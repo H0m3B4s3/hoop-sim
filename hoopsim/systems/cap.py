@@ -68,10 +68,33 @@ def market_salary(player: Player) -> int:
     return max(VETERAN_MINIMUM, int(round(base / 100_000) * 100_000))
 
 
+# A star outweighs any pile of role players, so value climbs steeply past a starter's rating.
+# Below STAR_PREMIUM_FROM the curve is flat enough that players stay comparable to draft picks.
+STAR_PREMIUM_FROM = 75.0
+STAR_PREMIUM_SCALE = 10.0
+# How much of the gap to his ceiling a young player's price already includes, by age.
+UPSIDE_PRICED_IN = ((21, 0.60), (23, 0.45), (25, 0.25))
+# Contract surplus counts per year it runs, so a long bad deal is a real liability.
+CONTRACT_YEARS_PRICED = 3
+
+
+def _projected_rating(player: Player) -> float:
+    """The rating a buyer is really paying for: where a young player is headed, not just is."""
+    upside = max(0, player.scouted_potential() - player.overall)
+    for max_age, share in UPSIDE_PRICED_IN:
+        if player.age <= max_age:
+            return player.overall + upside * share
+    return float(player.overall)
+
+
 def trade_value(player: Player) -> float:
-    """Unitless asset value blending production, age/upside, and contract surplus."""
-    ovr = player.overall
-    base = max(0.0, (ovr - 45)) ** 1.6 / 8.0
+    """Unitless asset value blending production, age/upside, and contract surplus.
+
+    Can be negative: an overpaid player on a long deal costs a team something to move.
+    """
+    rating = _projected_rating(player)
+    base = max(0.0, rating - 45) ** 1.6 / 8.0
+    base *= 1 + (max(0.0, rating - STAR_PREMIUM_FROM) / STAR_PREMIUM_SCALE) ** 2
     age = player.age
     if age <= 23:
         af = 1.18
@@ -83,10 +106,9 @@ def trade_value(player: Player) -> float:
         af = 0.85
     else:
         af = 0.65
-    pot_bonus = max(0, player.scouted_potential() - ovr) * (0.30 if age <= 25 else 0.10)
-    value = base * af + pot_bonus
-    surplus = (market_salary(player) - player.contract.current_salary) / 5_000_000.0
-    return max(0.1, value + surplus)
+    years = min(CONTRACT_YEARS_PRICED, max(1, player.contract.years_remaining))
+    surplus = (market_salary(player) - player.contract.current_salary) / 5_000_000.0 * years
+    return base * af + surplus
 
 
 def pick_value(world: World, pick) -> float:

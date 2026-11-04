@@ -93,9 +93,11 @@ late-game intentional fouling**.
   (margin + strength of schedule) with a **roster-talent prior**; the prior carries the number early
   in the season — when records are noise — and fades as games are played. Includes a projected
   win %, so you can judge buyers vs. sellers before the trade deadline.
-- **Work the front office** — propose cap-legal trades (with an AI that values players by
-  production, age, upside, and contract), sign free agents within the salary cap, and track
-  finances and the luxury tax.
+- **Work the front office** — propose cap-legal trades, sign free agents within the salary cap,
+  and track finances and the luxury tax. The trade AI prices a star well above any pile of role
+  players, pays for young upside, guards the player it's built around, and bids by where it is in
+  its cycle: rebuilders prize picks and discount veterans, contenders spend picks to win now. It
+  only offers deals it would accept itself, and a refusal tells you why.
 - **Draft & develop** — a lottery-weighted, two-round draft (interactive for your picks), rookie
   scale contracts, and an offseason where young players grow toward their potential while
   veterans decline. Each draft class has its own **shape** — most years carry only a couple of
@@ -154,7 +156,7 @@ testable and let the web UI drop in as a second front-end over the same resumabl
 pytest -q
 ```
 
-308 tests, about two to three minutes. They cover box-score reconciliation, realistic stat
+319 tests, about two to three minutes. They cover box-score reconciliation, realistic stat
 distributions, schedule/standings correctness, cap legality, trade validation, draft/development,
 injuries and conditioning, the coaching carousel, the news wire, and byte-identical save
 round-trips with reproducible RNG.
