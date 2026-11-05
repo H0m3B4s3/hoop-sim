@@ -608,10 +608,16 @@ function PlayPanel({
     return <p className="muted pad">Playoffs are on — use the Playoffs tab.</p>;
   if (summary.regular_season_complete)
     return (
-      <p className="muted pad">
-        Regular season complete — head to the Playoffs tab to start the postseason.
-      </p>
+      <div>
+        <p className="muted pad">
+          Regular season complete — head to the Playoffs tab to start the postseason.
+        </p>
+        <SaveReminder moment="The regular season is in the books." toast={toast} />
+      </div>
     );
+
+  const deadlineOpen = summary.mode === "nba" && !summary.trade_deadline_passed;
+  const atDeadline = deadlineOpen && summary.days_to_deadline === 0;
 
   return (
     <div>
@@ -628,7 +634,18 @@ function PlayPanel({
         <button disabled={busy || !!coach} onClick={() => run(() => api.advanceDay())}>
           ⏭ Advance a day
         </button>
+        {deadlineOpen && !atDeadline && (
+          <button disabled={busy || !!coach} onClick={() => run(() => api.simTo("deadline"))}>
+            ⏳ Sim to trade deadline
+          </button>
+        )}
+        <button disabled={busy || !!coach} onClick={() => run(() => api.simTo("season_end"))}>
+          🏁 Sim to season end
+        </button>
       </div>
+      <p className="muted small">
+        Sim-to stops early for a new trade offer or an injury on your roster.
+      </p>
       {coach && (
         <CoachPanel decision={coach} feed={feed} busy={submitting} onSubmit={sendOrders} />
       )}
@@ -646,6 +663,21 @@ function PlayPanel({
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+// Hosted saves vanish when the server sleeps, so prompt for an export at the season's big moments.
+function SaveReminder({ moment, toast }: { moment: string; toast: (m: string) => void }) {
+  return (
+    <div className="card saveReminder">
+      <p>
+        <b>{moment}</b> Saves on the hosted site are wiped whenever the server sleeps or updates,
+        so this is a good time to keep a copy.
+      </p>
+      <button className="primary" onClick={() => api.exportSave().catch((e) => toast(String(e)))}>
+        ⬇ Export save
+      </button>
     </div>
   );
 }
@@ -3241,6 +3273,14 @@ function PlayoffsPanel({
     if (r.complete && r.champion != null) toast("🏆 Champions crowned! Start the offseason.");
     refresh();
   };
+  const simToEnd = async () => {
+    setGame(null);
+    const r = await api.playoffsSimToEnd().catch((e) => toast(String(e)));
+    if (!r) return;
+    setData(r);
+    if (r.complete && r.champion != null) toast("🏆 Champions crowned! Start the offseason.");
+    refresh();
+  };
   if (!data) return <Loading />;
   const bracket = data.bracket;
   const isCollege = bracket?.type === "college";
@@ -3261,10 +3301,14 @@ function PlayoffsPanel({
             <button disabled={!!coach} onClick={() => advance(false)}>
               ⏩ Sim slate
             </button>
+            <button disabled={!!coach} onClick={simToEnd}>
+              🏁 Sim to the end
+            </button>
           </>
         )}
         {data.complete && <Pill>Playoffs complete</Pill>}
       </div>
+      {data.complete && <SaveReminder moment="The season is over." toast={toast} />}
       {coach && (
         <CoachPanel decision={coach} feed={feed} busy={submitting} onSubmit={sendOrders} />
       )}

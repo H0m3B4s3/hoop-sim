@@ -110,6 +110,84 @@ def test_quick_sim_finishes_the_open_game_rather_than_skipping_to_the_next():
     assert _user_games_played(world) == played + 1
 
 
+def _sim_to(client, target, limit=60):
+    """Call sim-to until it reaches its target rather than stopping early; return every response."""
+    outs = []
+    for _ in range(limit):
+        outs.append(client.post(f"/api/sim/to?target={target}").json())
+        if not outs[-1]["stopped"]:
+            return outs
+    pytest.fail(f"sim to {target} never got there")
+
+
+def test_sim_to_deadline_stops_on_deadline_day_with_trades_still_open():
+    from hoopsim.systems import trades
+    client = TestClient(app)
+    world = _career(client)
+    outs = _sim_to(client, "deadline")
+    assert world.day == trades.trade_deadline_day(world)
+    assert not trades.trade_deadline_passed(world)
+    assert outs[-1]["summary"]["days_to_deadline"] == 0
+    assert "deadline day" in outs[-1]["message"]
+    assert client.post("/api/sim/to?target=deadline").status_code == 409
+    # one more day closes the window
+    client.post("/api/sim/advance-day")
+    assert trades.trade_deadline_passed(world)
+
+
+def test_sim_to_stops_early_for_a_new_trade_offer():
+    from hoopsim.systems import cap
+    client = TestClient(app)
+    world = _career(client, seed=8)
+    user = world.user_team
+    pid = max(user.roster, key=lambda p: cap.trade_value(world.players[p]))
+    client.post("/api/block", json={"pid": pid, "on": True})
+    for _ in range(30):
+        out = client.post("/api/sim/to?target=season_end").json()
+        assert not out["season_complete"], "the blocked player never drew an offer"
+        if out["new_offers"]:
+            break
+    assert out["stopped"] and "trade offer" in out["message"]
+    assert world.trade_offers
+
+
+def test_sim_to_season_end_counts_an_open_live_game_exactly_once():
+    from hoopsim.sim import season as S
+    client = TestClient(app)
+    world = _career(client)
+    _open_live_game(client)
+    outs = _sim_to(client, "season_end")
+    assert S.regular_season_complete(world) and outs[-1]["season_complete"]
+    team = world.user_team
+    scheduled = sum(1 for g in world.schedule if not g.is_playoff and g.involves(team.tid))
+    assert team.wins + team.losses == _user_games_played(world) == scheduled
+    assert client.cookies.get("hoopsim_sid") not in _LIVE
+    assert client.post("/api/sim/to?target=season_end").status_code == 409
+
+
+def test_sim_to_rejects_unknown_targets_and_a_college_deadline():
+    client = TestClient(app)
+    _career(client)
+    assert client.post("/api/sim/to?target=forever").status_code == 400
+    college = TestClient(app)
+    state = college.post("/api/career/new",
+                         json={"league": "college", "economy": "nil", "seed": 7}).json()
+    college.post(f"/api/career/team/{state['summary']['teams'][0]['tid']}")
+    assert college.post("/api/sim/to?target=deadline").status_code == 409
+
+
+def test_playoffs_sim_to_end_crowns_a_champion():
+    from hoopsim.sim import playoffs as P
+    client = TestClient(app)
+    world = _career(client)
+    _sim_to(client, "season_end")
+    assert client.post("/api/playoffs/sim-to-end").status_code == 409     # bracket not set yet
+    client.post("/api/playoffs/start")
+    out = client.post("/api/playoffs/sim-to-end").json()
+    assert out["complete"] and out["champion"] == P.champion(world) is not None
+    assert P.playoffs_complete(world)
+
+
 def test_watch_reopens_the_open_game_with_its_decision_and_log():
     client = TestClient(app)
     world = _career(client)

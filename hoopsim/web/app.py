@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from hoopsim.config import ROSTER_MIN, SEASON_PRESETS
 from hoopsim.models.league import Game, Phase
+from hoopsim.models.news import NORMAL as NEWS_NORMAL
 from hoopsim.models.team import auto_set_lineup
 from hoopsim.models.tactics import SETTINGS
 from hoopsim.models.world import World
@@ -575,6 +576,69 @@ def sim_week(days: int = 4, sid: str = Depends(_sid)):
             "new_offers": new_offers}
 
 
+SIM_TO_TARGETS = ("deadline", "season_end")
+SIM_TO_RESULTS_SHOWN = 10
+
+
+def _news_since(world: World, marker) -> list:
+    """Wire items appended after ``marker`` (the last item seen). The wire is a ring buffer, so
+    a length check would miss items once it is full."""
+    fresh = []
+    for item in reversed(world.news):
+        if item is marker:
+            break
+        fresh.append(item)
+    return fresh
+
+
+@app.post("/api/sim/to")
+def sim_to(target: str, sid: str = Depends(_sid)):
+    """Sim day by day to a calendar target, stopping early for anything the user should see:
+    a new trade offer or a real injury on their own roster."""
+    world = _world(sid)
+    if target not in SIM_TO_TARGETS:
+        raise HTTPException(status_code=400, detail="Unknown sim target.")
+    if world.phase != Phase.REGULAR_SEASON or S.regular_season_complete(world):
+        raise HTTPException(status_code=409, detail="The regular season is over.")
+    if target == "deadline" and (world.mode != "nba"
+                                 or world.day >= trades.trade_deadline_day(world)):
+        raise HTTPException(status_code=409, detail="There is no trade deadline left to sim to.")
+    _settle_live_game(world, sid)
+    stop_day = trades.trade_deadline_day(world) if target == "deadline" else None
+    uid = world.user_team_id
+    user_games, new_offers, days, stopped = [], 0, 0, None
+    while not S.regular_season_complete(world) and (stop_day is None or world.day < stop_day):
+        marker = world.news[-1] if world.news else None
+        results, _ = S.advance_one_day(world)
+        days += 1
+        user_games += [g for g, _ in results if g.involves(uid)]
+        new_offers += trades.refresh_offers(world)
+        if new_offers:
+            stopped = "a new trade offer arrived — see the Offers tab"
+            break
+        hurt = [n for n in _news_since(world, marker)
+                if n.category == "injury" and uid in n.tids and n.importance >= NEWS_NORMAL]
+        if hurt:
+            stopped = hurt[0].headline
+            break
+    SESSIONS.autosave(sid)
+    complete = S.regular_season_complete(world)
+    span = f"{days} day{'s' if days != 1 else ''}"
+    if stopped:
+        message = f"Stopped after {span}: {stopped}."
+    elif complete:
+        message = f"Simmed {span}. The regular season is complete."
+    else:
+        message = f"Simmed {span}. It's deadline day: trades are open until you sim past today."
+    return {"results": [ser.schedule_result(world, g) for g in user_games[-SIM_TO_RESULTS_SHOWN:]],
+            "summary": ser.world_summary(world),
+            "season_complete": complete,
+            "new_offers": new_offers,
+            "days": days,
+            "stopped": stopped is not None,
+            "message": message}
+
+
 @app.post("/api/sim/advance-day")
 def advance_day(sid: str = Depends(_sid)):
     world = _world(sid)
@@ -689,6 +753,23 @@ def _college_advance(world: World, sid: str, watch: bool) -> dict:
     if watch and user_result is not None:
         out["result"] = ser.game_result_view(world, user_result)
     return out
+
+
+@app.post("/api/playoffs/sim-to-end")
+def playoffs_sim_to_end(sid: str = Depends(_sid)):
+    """Play out the rest of the postseason, slate by slate, and return the final slate."""
+    world = _world(sid)
+    if world.bracket is None:
+        raise HTTPException(status_code=409, detail="Start the playoffs first.")
+    _settle_live_game(world, sid)
+    college = world.mode == "college"
+    complete = CT.college_postseason_complete if college else P.playoffs_complete
+    advance = CT.advance_college_slate if college else P.advance_playoff_slate
+    results = []
+    while not complete(world):
+        results, _ = advance(world)
+    SESSIONS.autosave(sid)
+    return _college_slate_out(world, results) if college else _playoff_slate_out(world, results)
 
 
 # ---------------------------------------------------------------------------
