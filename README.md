@@ -97,7 +97,9 @@ late-game intentional fouling**.
   and track finances and the luxury tax. The trade AI prices a star well above any pile of role
   players, pays for young upside, guards the player it's built around, and bids by where it is in
   its cycle: rebuilders prize picks and discount veterans, contenders spend picks to win now. It
-  only offers deals it would accept itself, and a refusal tells you why.
+  only offers deals it would accept itself, and a refusal tells you why. AI clubs trade with each
+  other too: losing teams sell their veterans to contenders, busiest in the week before the
+  deadline, and every deal lands on the news wire.
 - **Draft & develop** — a lottery-weighted, two-round draft (interactive for your picks), rookie
   scale contracts, and an offseason where young players grow toward their potential while
   veterans decline. Each draft class has its own **shape** — most years carry only a couple of
@@ -156,7 +158,7 @@ testable and let the web UI drop in as a second front-end over the same resumabl
 pytest -q
 ```
 
-319 tests, about two to three minutes. They cover box-score reconciliation, realistic stat
+325 tests, about two to three minutes. They cover box-score reconciliation, realistic stat
 distributions, schedule/standings correctness, cap legality, trade validation, draft/development,
 injuries and conditioning, the coaching carousel, the news wire, and byte-identical save
 round-trips with reproducible RNG.

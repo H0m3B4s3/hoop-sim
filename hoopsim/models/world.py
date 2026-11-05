@@ -36,6 +36,7 @@ class World:
         self.draft_picks: List[DraftPick] = []       # tradeable future picks (NBA)
         self.trade_offers: List[dict] = []           # pending AI-initiated offers to the user
         self.offer_cooldowns: Dict[int, int] = {}    # pid -> earliest day a new offer may spawn
+        self.ai_trade_cooldowns: Dict[int, int] = {}  # tid -> earliest day it may deal again
         self.bracket: Optional[dict] = None          # JSON-native playoff state
 
         self.user_team_id: Optional[int] = None
@@ -218,6 +219,7 @@ class World:
             "draft_picks": [p.to_dict() for p in self.draft_picks],
             "trade_offers": list(self.trade_offers),
             "offer_cooldowns": {str(k): v for k, v in self.offer_cooldowns.items()},
+            "ai_trade_cooldowns": {str(k): v for k, v in self.ai_trade_cooldowns.items()},
             "bracket": self.bracket,
             "user_team_id": self.user_team_id,
             "season_games": self.season_games,
@@ -258,6 +260,8 @@ class World:
         w.draft_picks = [DraftPick.from_dict(pd) for pd in d.get("draft_picks", [])]
         w.trade_offers = list(d.get("trade_offers", []))
         w.offer_cooldowns = {int(k): v for k, v in d.get("offer_cooldowns", {}).items()}
+        w.ai_trade_cooldowns = {int(k): v
+                                for k, v in d.get("ai_trade_cooldowns", {}).items()}
         w.bracket = d.get("bracket")
         w.user_team_id = d.get("user_team_id")
         w.season_games = d.get("season_games", 82)

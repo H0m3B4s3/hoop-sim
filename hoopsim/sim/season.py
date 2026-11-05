@@ -10,7 +10,7 @@ from hoopsim.models.team import auto_set_lineup
 from hoopsim.models.world import World
 from hoopsim.sim.boxscore import GameResult
 from hoopsim.sim.engine import simulate_game
-from hoopsim.systems import injuries, news
+from hoopsim.systems import injuries, news, trades
 from hoopsim.systems.momentum import update_morale
 
 DayResults = List[Tuple[Game, GameResult]]
@@ -162,6 +162,7 @@ def advance_one_day(world: World, *, watch_user: bool = False,
         if is_user:
             user_result = res
     _heal_injuries(world)
+    trades.run_ai_trades(world)
     world.day += 1
     return results, user_result
 
@@ -180,4 +181,7 @@ def start_season(world: World) -> None:
     generate_schedule(world)
     world.bracket = None
     world.day = 0
+    # Cooldowns are keyed by day number, which restarts each season.
+    world.offer_cooldowns = {}
+    world.ai_trade_cooldowns = {}
     world.phase = Phase.REGULAR_SEASON

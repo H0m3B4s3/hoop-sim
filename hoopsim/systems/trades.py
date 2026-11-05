@@ -265,13 +265,14 @@ def _team_chips(world: World, team: Team, buying: float) -> List[_Chip]:
 
 
 def _best_package(world: World, team: Team, buying: float, target_salary: int,
-                  user_space: int, user_size_base: int, n_targets: int
+                  partner_space: int, partner_size_base: int, n_targets: int
                   ) -> Optional[Tuple[List[int], List[PickKey]]]:
     """Assemble the best package ``team`` would send for the targets, or ``None``.
 
     ``buying`` is what the targets are worth to ``team``. The package costs it no more than it
     would accept in a trade, matches salary both ways, and respects both rosters' size limits.
-    Among legal candidates we return the richest one (fewest assets to break ties).
+    Among legal candidates we return the richest one (fewest assets to break ties). The partner
+    is whoever owns the targets: the user, or another AI club in a league-run deal.
     """
     pool = _team_chips(world, team, buying)
     ai_space = cap.cap_space(world, team)
@@ -286,11 +287,11 @@ def _best_package(world: World, team: Team, buying: float, target_salary: int,
                 continue
             n_players = sum(1 for c in combo if c.is_player)
             ai_size = len(team.roster) - n_players + n_targets
-            user_size = user_size_base + n_players
-            if not (ROSTER_FLOOR_AFTER_TRADE <= ai_size <= ROSTER_MAX) or user_size > ROSTER_MAX:
+            partner_size = partner_size_base + n_players
+            if not (ROSTER_FLOOR_AFTER_TRADE <= ai_size <= ROSTER_MAX) or partner_size > ROSTER_MAX:
                 continue
             sal = sum(c.salary for c in combo)
-            if not cap.trade_matching_ok(user_space, target_salary, sal):
+            if not cap.trade_matching_ok(partner_space, target_salary, sal):
                 continue
             if not cap.trade_matching_ok(ai_space, sal, target_salary):
                 continue
@@ -517,6 +518,75 @@ def decline_offer(world: World, offer_id: int) -> bool:
     _cooldown(world, o["user_sends"])
     world.trade_offers = [x for x in world.trade_offers if x["id"] != offer_id]
     return True
+
+
+# ---------------------------------------------------------------------------
+# League-run trades — AI clubs deal with each other
+# ---------------------------------------------------------------------------
+# Sellers move their trade-block veterans to contenders, mostly in the run-up to the deadline.
+# Both sides must clear their own ACCEPT_MARGIN; the deal exists because a rebuilder discounts
+# veterans and prizes picks while a contender does the opposite.
+AI_TRADE_OPENS_FRACTION = 0.2       # records mean little before a fifth of the season is played
+AI_TRADE_DAILY_CHANCE = 0.15
+# The run-up to the deadline is the busy season: the final week of an 82-game schedule, scaled.
+AI_TRADE_DEADLINE_RUSH_FRACTION = 0.085
+AI_TRADE_DEADLINE_CHANCE = 0.6
+AI_TRADE_SUITORS = 3                # the seller takes one of its best few offers
+# One league-run deal per club per season, so a contender never flips the veteran it just bought.
+
+
+def _ai_ready(world: World, team: Team) -> bool:
+    return (team.tid != world.user_team_id
+            and world.ai_trade_cooldowns.get(team.tid, 0) <= world.day)
+
+
+def _ai_deal_for(world: World, seller: Team, pid: int) -> Optional[TradeOffer]:
+    """A deal for one of ``seller``'s players that it and some contender would both sign off on."""
+    salary = world.players[pid].contract.current_salary
+    seller_space = cap.cap_space(world, seller)
+    deals = []
+    for buyer in world.team_list():
+        if (buyer.tid == seller.tid or not _ai_ready(world, buyer) or not _contending(buyer)
+                or not _team_wants(world, buyer, [pid])):
+            continue
+        pkg = _best_package(world, buyer, _incoming_worth(world, buyer, [pid], []), salary,
+                            seller_space, len(seller.roster) - 1, 1)
+        if pkg is None:
+            continue
+        offer = TradeOffer(seller.tid, buyer.tid, [pid], pkg[0], [], pkg[1])
+        if ai_evaluates(world, offer, seller.tid)[0] and ai_evaluates(world, offer, buyer.tid)[0]:
+            deals.append((_incoming_worth(world, seller, pkg[0], pkg[1]), offer))
+    if not deals:
+        return None
+    deals.sort(key=lambda d: d[0], reverse=True)
+    return world.rng.choice(deals[:AI_TRADE_SUITORS])[1]
+
+
+def run_ai_trades(world: World) -> int:
+    """Give the league a chance to make one AI-to-AI trade today. Returns trades made (0 or 1).
+
+    Call once per regular-season day. Never touches the user's team.
+    """
+    if (world.mode != "nba" or world.phase != Phase.REGULAR_SEASON
+            or trade_deadline_passed(world)
+            or world.day < round(world.season_games * AI_TRADE_OPENS_FRACTION)):
+        return 0
+    rush = max(1, round(world.season_games * AI_TRADE_DEADLINE_RUSH_FRACTION))
+    late = trade_deadline_day(world) - world.day < rush
+    if not world.rng.chance(AI_TRADE_DEADLINE_CHANCE if late else AI_TRADE_DAILY_CHANCE):
+        return 0
+    sellers = [t for t in world.team_list() if _ai_ready(world, t) and team_trade_block(world, t)]
+    if not sellers:
+        return 0
+    seller = world.rng.choice(sellers)
+    for pid in team_trade_block(world, seller):
+        offer = _ai_deal_for(world, seller, pid)
+        if offer is not None:
+            execute_trade(world, offer)
+            for tid in (offer.a, offer.b):
+                world.ai_trade_cooldowns[tid] = trade_deadline_day(world) + 1
+            return 1
+    return 0
 
 
 def execute_trade(world: World, offer: TradeOffer) -> None:

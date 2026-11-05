@@ -132,10 +132,12 @@ def streak(world: World, team) -> None:
 def trade(world: World, a, b, a_out: Sequence, b_out: Sequence,
           a_picks: int = 0, b_picks: int = 0) -> None:
     def side(players, picks):
-        names = ", ".join(p.name for p in players) or "cash"
+        parts = [p.name for p in players]
         if picks:
-            names += f" and {picks} pick{'s' if picks != 1 else ''}"
-        return names
+            parts.append(f"{picks} pick{'s' if picks != 1 else ''}")
+        if not parts:
+            return "cash"
+        return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
     headline = f"{a.full_name} trade {side(a_out, a_picks)} to {b.abbrev}"
     detail = f"{b.full_name} send {side(b_out, b_picks)} the other way."
     star = max([p.overall for p in list(a_out) + list(b_out)] or [0])
