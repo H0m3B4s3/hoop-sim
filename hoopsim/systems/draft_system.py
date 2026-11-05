@@ -20,9 +20,16 @@ PROSPECTS = 70
 # down year produces a #1 who is merely solid. POT for the prospect ranked ``i`` (0-based) is
 #     top - depth * (CLIFF*(1 - e**(-i/CLIFF_TAU)) + TAIL*i) + noise
 # i.e. a sharp early drop that saturates, plus a gentle linear tail for the back of the board.
-_POT_CLIFF = 11.0       # magnitude of the early talent cliff (top picks → mid-70s ceilings)
-_POT_CLIFF_TAU = 2.0    # how quickly the cliff bites (smaller = steeper)
+#
+# Tuned against a 20-season audit so the draft sustains the league's top end (~50 players at 80+,
+# ~18 at 85+, ~5 at 90+) instead of letting it drain once the launch cohort retires: a high #1
+# ceiling with a steep cliff adds true stars without flooding the league with 80s.
+_POT_CLIFF = 14.0       # magnitude of the early talent cliff (top picks → mid-70s ceilings)
+_POT_CLIFF_TAU = 2.5    # how quickly the cliff bites (smaller = steeper)
 _POT_TAIL = 0.13        # slow linear decay across the rest of the board
+_CLASS_TOP_MEAN = 89.0  # the #1 prospect's potential in a typical year
+_CLASS_TOP_SD = 3.2
+_CLASS_TOP_MIN, _CLASS_TOP_MAX = 77.0, 93.0
 
 
 def _class_profile(rng) -> tuple:
@@ -32,7 +39,7 @@ def _class_profile(rng) -> tuple:
     weak. ``depth`` scales the whole decay curve: < 1 stretches talent deep into the board,
     > 1 collapses it onto the very top picks.
     """
-    top = max(77.0, min(90.0, rng.gauss(84.0, 3.2)))
+    top = max(_CLASS_TOP_MIN, min(_CLASS_TOP_MAX, rng.gauss(_CLASS_TOP_MEAN, _CLASS_TOP_SD)))
     depth = max(0.82, min(1.4, rng.gauss(1.0, 0.22)))
     return top, depth
 
