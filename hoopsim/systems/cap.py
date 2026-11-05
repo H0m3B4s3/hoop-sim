@@ -156,22 +156,35 @@ def can_extend(world: World, team: Team, pid: int) -> Tuple[bool, str]:
 def extension_offer(world: World, player, *, for_user: bool = False) -> Tuple[int, int]:
     """A reasonable (salary, added years) the team would offer to extend a player. The user's ask
     is scaled by difficulty; AI re-signings always pay the plain market rate."""
-    from hoopsim.systems import difficulty
+    from hoopsim.systems import contract_mood, difficulty
     market = market_salary(player)
     if for_user:
+        mood = contract_mood.assess(world, player)
+        market = int(round(market * (mood["ask_factor"] or 1.0) / 100_000) * 100_000)
         market = difficulty.user_price(world, market)
     salary = min(market, max_salary(player.experience, world.salary_cap))
     add_years = max(1, min(MAX_CONTRACT_YEARS - player.contract.years_remaining, 4))
     return salary, add_years
 
 
-def extend_contract(world: World, team: Team, pid: int, salary: int, add_years: int
-                    ) -> Tuple[bool, str]:
-    """Re-sign / extend an own player (Bird rights — allowed over the cap)."""
+def extend_contract(world: World, team: Team, pid: int, salary: int, add_years: int, *,
+                    for_user: bool = False) -> Tuple[bool, str]:
+    """Re-sign / extend an own player (Bird rights — allowed over the cap).
+
+    For the user the player must be willing (see :mod:`contract_mood`) and the salary must meet
+    his ask; AI re-signings skip both."""
     ok, reason = can_extend(world, team, pid)
     if not ok:
         return False, reason
     player = world.players[pid]
+    if for_user:
+        from hoopsim.systems import contract_mood
+        mood = contract_mood.assess(world, player)
+        if mood["level"] == contract_mood.TESTING_FA:
+            return False, contract_mood.describe(player.short_name, mood)
+        ask = extension_offer(world, player, for_user=True)[0]
+        if salary < ask:
+            return False, f"{player.short_name} wants about ${ask / 1_000_000:.1f}M per year."
     salary = max(VETERAN_MINIMUM, salary)        # a contract can't be below the minimum
     max_sal = max_salary(player.experience, world.salary_cap)
     if salary > max_sal:
@@ -181,7 +194,7 @@ def extend_contract(world: World, team: Team, pid: int, salary: int, add_years: 
         return False, "No additional years available."
     player.contract.salaries.extend([salary] * add_years)
     player.contract.guaranteed.extend([True] * add_years)
-    return True, f"Extended {add_years} year(s) at {salary // 1_000_000}M."
+    return True, f"Extended {add_years} year(s) at ${salary / 1_000_000:.1f}M."
 
 
 def grow_cap(world: World, rate: float) -> None:

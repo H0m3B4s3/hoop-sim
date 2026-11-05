@@ -883,6 +883,27 @@ def sign(body: SignBody, sid: str = Depends(_sid)):
     return {"signed": ok, "reason": why, "summary": ser.world_summary(world)}
 
 
+@app.get("/api/extend/preview")
+def extend_preview(pid: int, sid: str = Depends(_sid)):
+    """What extending this player would take: his stance, the reasons, and his ask."""
+    from hoopsim.systems import contract_mood
+    world = _world(sid)
+    team = _user_team(world)
+    p = world.players.get(pid)
+    if p is None or pid not in team.roster:
+        raise HTTPException(status_code=404, detail="That player is not on your roster.")
+    eligible, why = cap.can_extend(world, team, pid)
+    mood = contract_mood.assess(world, p)
+    salary, add_years = cap.extension_offer(world, p, for_user=True)
+    return {"pid": pid, "name": p.name, "eligible": eligible, "reason": why,
+            "willing": mood["level"] != contract_mood.TESTING_FA,
+            "level": mood["level"], "label": mood["label"], "reasons": mood["reasons"],
+            "summary": contract_mood.describe(p.short_name, mood),
+            "salary": salary, "add_years": add_years, "market": cap.market_salary(p),
+            "current_salary": p.contract.current_salary,
+            "years_remaining": p.contract.years_remaining}
+
+
 @app.post("/api/extend")
 def extend(body: ExtendBody, sid: str = Depends(_sid)):
     world = _world(sid)
@@ -893,7 +914,7 @@ def extend(body: ExtendBody, sid: str = Depends(_sid)):
     salary, add_years = cap.extension_offer(world, p, for_user=True)
     salary = body.salary if body.salary is not None else salary
     add_years = body.add_years if body.add_years is not None else add_years
-    ok, why = cap.extend_contract(world, team, body.pid, salary, add_years)
+    ok, why = cap.extend_contract(world, team, body.pid, salary, add_years, for_user=True)
     if ok:
         SESSIONS.autosave(sid)
     return {"extended": ok, "reason": why, "summary": ser.world_summary(world)}

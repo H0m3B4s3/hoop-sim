@@ -1553,3 +1553,13 @@ select:focus-visible {
 .small {
   font-size: 0.82rem;
 }
+.extendMood {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border-left: 3px solid var(--accent-2);
+  background: var(--panel-2);
+  margin-bottom: 12px;
+}
+.extendMood.eager { border-left-color: var(--good); }
+.extendMood.wants_more { border-left-color: var(--accent); }
+.extendMood.testing_fa { border-left-color: var(--bad); }
