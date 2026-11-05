@@ -284,6 +284,19 @@ span.clickable:hover {
   margin-bottom: 16px;
   box-shadow: var(--shadow-soft);
 }
+.saveReminder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+}
+.saveReminder p {
+  margin: 0;
+  flex: 1 1 260px;
+}
 .setup {
   max-width: 420px;
   width: 100%;

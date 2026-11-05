@@ -132,10 +132,12 @@ export const api = {
   coachOrders: (orders: any) => post<any>("/sim/coach", orders),
   simWeek: (days = 4) => post<any>(`/sim/week?days=${days}`),
   advanceDay: () => post<any>("/sim/advance-day"),
+  simTo: (target: "deadline" | "season_end") => post<any>(`/sim/to?target=${target}`),
 
   playoffs: () => get<any>("/playoffs"),
   playoffsStart: () => post<any>("/playoffs/start"),
   playoffsAdvance: (watch: boolean) => post<any>(`/playoffs/advance?watch=${watch}`),
+  playoffsSimToEnd: () => post<any>("/playoffs/sim-to-end"),
 
   validateTrade: (b: any) => post<any>("/trade/validate", b),
   executeTrade: (b: any) => post<any>("/trade/execute", b),

@@ -123,8 +123,10 @@ late-game intentional fouling**.
 Preseason → Regular Season → Play-In → Playoffs → Draft → Free Agency → Offseason → (next year)
 ```
 
-You advance at your own pace: watch or quick-sim your next game, simulate a week, then handle the
-postseason and offseason when they arrive.
+You advance at your own pace: watch or quick-sim your next game, simulate a week, or in the web
+app sim straight to the trade deadline or the end of the season. Sim-to stops early when a trade
+offer arrives or one of your players is hurt, and the playoffs can be simmed to the end. The web
+app also reminds you to export your save when the regular season and the playoffs finish.
 
 ## Project layout
 
@@ -158,7 +160,7 @@ testable and let the web UI drop in as a second front-end over the same resumabl
 pytest -q
 ```
 
-325 tests, about two to three minutes. They cover box-score reconciliation, realistic stat
+330 tests, about two to three minutes. They cover box-score reconciliation, realistic stat
 distributions, schedule/standings correctness, cap legality, trade validation, draft/development,
 injuries and conditioning, the coaching carousel, the news wire, and byte-identical save
 round-trips with reproducible RNG.
