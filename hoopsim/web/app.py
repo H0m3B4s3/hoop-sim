@@ -299,16 +299,19 @@ def power(sid: str = Depends(_sid)):
 
 
 @app.get("/api/fog")
-def fog_get():
+def fog_get(sid: str = Depends(_sid)):
     from hoopsim.systems import scouting as SC
-    return {"enabled": SC.fog_enabled()}
+    return {"enabled": SC.fog_enabled(_world(sid))}
 
 
 @app.post("/api/fog")
-def fog_set(body: FogBody):
+def fog_set(body: FogBody, sid: str = Depends(_sid)):
+    """Fog belongs to this career only; other sessions on the same server are unaffected."""
     from hoopsim.systems import scouting as SC
-    SC.set_fog(body.enabled)
-    return {"enabled": SC.fog_enabled()}
+    world = _world(sid)
+    world.fog_of_war = body.enabled
+    SESSIONS.autosave(sid)
+    return {"enabled": SC.fog_enabled(world)}
 
 
 @app.post("/api/difficulty")

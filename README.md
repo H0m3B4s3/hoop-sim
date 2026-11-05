@@ -115,7 +115,8 @@ late-game intentional fouling**.
 - **Scout under fog of war** — player **potential** is hidden behind a confidence band and a letter
   grade (e.g. `B+ (78–86)`) that tightens as a player proves himself; an unproven prospect's
   ceiling is a guess, a settled veteran's is known. Toggle the fog on/off (🌫 / 👁 in the top bar,
-  or `config.FOG_OF_WAR`) to inspect the exact numbers.
+  or `config.FOG_OF_WAR` for the default) to inspect the exact numbers; the setting is saved with
+  each career and only affects your own game.
 - **Save & load** — multiple named save slots plus autosave, with fully reproducible simulations
   (the RNG state is part of the save). In the web app you can also **export** a career to a file
   and **import** it later. On the hosted site that file is the only lasting copy, because server
@@ -165,7 +166,7 @@ testable and let the web UI drop in as a second front-end over the same resumabl
 pytest -q
 ```
 
-340 tests, about two to three minutes. They cover box-score reconciliation, realistic stat
+342 tests, about two to three minutes. They cover box-score reconciliation, realistic stat
 distributions, schedule/standings correctness, cap legality, trade validation, draft/development,
 injuries and conditioning, the coaching carousel, the news wire, and byte-identical save
 round-trips with reproducible RNG.

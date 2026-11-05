@@ -69,7 +69,7 @@ POTENTIAL_FLOOR = 40
 
 # Fog of war over player potential: when True, the UI shows a confidence band + letter grade for
 # unproven players instead of the raw ceiling. Flip to False to inspect the exact numbers (e.g.
-# when checking draft-class distributions). User-toggleable at runtime via systems.scouting.
+# when checking draft-class distributions). Each career can override it (``World.fog_of_war``).
 FOG_OF_WAR = True
 
 # Front-office difficulty: how hard AI teams and players bargain with the *user* (never with each

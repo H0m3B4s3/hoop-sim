@@ -165,7 +165,7 @@ def player_row(world: World, p: Player, *, is_starter: bool = False) -> dict:
     """A roster/list row (mirrors ui.widgets.roster_table). Raw numbers; UI formats them."""
     s = p.season
     team = world.find_team(p.team_id) if p.team_id is not None else None
-    pv = SC.pot_view(p)
+    pv = SC.pot_view(p, fog=SC.fog_enabled(world))
     return {
         "pid": p.pid,
         "jersey": p.jersey,

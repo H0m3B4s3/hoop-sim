@@ -280,6 +280,20 @@ def test_trade_block_is_aging_vets_on_expiring_deals():
             assert 0 < p.contract.years_remaining <= TRADE_BLOCK_MAX_YEARS
 
 
+def test_fog_toggle_only_changes_the_session_that_flipped_it():
+    alice, bob = TestClient(app), TestClient(app)
+    _career(alice, seed=3)
+    _career(bob, seed=3)
+    assert alice.post("/api/fog", json={"enabled": False}).json()["enabled"] is False
+    assert alice.get("/api/fog").json()["enabled"] is False
+    assert bob.get("/api/fog").json()["enabled"] is True
+    # what each of them sees for the same prospect differs accordingly
+    a_rows = alice.get("/api/scouting").json()["players"]
+    b_rows = bob.get("/api/scouting").json()["players"]
+    young = next(r for r in b_rows if not r["pot_known"])
+    assert next(r for r in a_rows if r["pid"] == young["pid"])["pot_known"] is True
+
+
 def test_api_scouting_and_trade_block_endpoints():
     client = TestClient(app)
     state = client.post("/api/career/new",
