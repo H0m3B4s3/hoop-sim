@@ -16,7 +16,7 @@ from fastapi import Cookie, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from hoopsim.config import ROSTER_MIN, SEASON_PRESETS
+from hoopsim.config import DEFAULT_DIFFICULTY, DIFFICULTY_LEVELS, ROSTER_MIN, SEASON_PRESETS
 from hoopsim.models.league import Game, Phase
 from hoopsim.models.news import NORMAL as NEWS_NORMAL
 from hoopsim.models.team import auto_set_lineup
@@ -72,6 +72,11 @@ class NewCareer(BaseModel):
     preset: str = "Standard"            # NBA season length
     economy: str = "nil"               # college economy: "scholarship" | "nil"
     seed: Optional[int] = None
+    difficulty: str = DEFAULT_DIFFICULTY
+
+
+class DifficultyBody(BaseModel):
+    level: str
 
 
 class SlotBody(BaseModel):
@@ -202,6 +207,8 @@ def career_new(body: NewCareer, sid: str = Depends(_sid)):
         preset = body.preset if body.preset in SEASON_PRESETS else "Standard"
         from hoopsim.gen.leaguegen import build_world
         world = build_world(seed=seed, season_preset=preset)
+    if body.difficulty in DIFFICULTY_LEVELS:
+        world.difficulty = body.difficulty
     SESSIONS.set(sid, world)
     _LIVE.pop(sid, None)
     return {"seed": seed, "needs_team": True, "summary": ser.world_summary(world)}
@@ -302,6 +309,17 @@ def fog_set(body: FogBody):
     from hoopsim.systems import scouting as SC
     SC.set_fog(body.enabled)
     return {"enabled": SC.fog_enabled()}
+
+
+@app.post("/api/difficulty")
+def difficulty_set(body: DifficultyBody, sid: str = Depends(_sid)):
+    """Change how hard the league bargains with you. Takes effect on the next offer you make or see."""
+    world = _world(sid)
+    if body.level not in DIFFICULTY_LEVELS:
+        raise HTTPException(status_code=400, detail="Unknown difficulty.")
+    world.difficulty = body.level
+    SESSIONS.autosave(sid)
+    return {"summary": ser.world_summary(world)}
 
 
 @app.get("/api/leaders")
@@ -852,7 +870,7 @@ def extend(body: ExtendBody, sid: str = Depends(_sid)):
     p = world.players.get(body.pid)
     if p is None:
         raise HTTPException(status_code=404, detail="Unknown player.")
-    salary, add_years = cap.extension_offer(world, p)
+    salary, add_years = cap.extension_offer(world, p, for_user=True)
     salary = body.salary if body.salary is not None else salary
     add_years = body.add_years if body.add_years is not None else add_years
     ok, why = cap.extend_contract(world, team, body.pid, salary, add_years)

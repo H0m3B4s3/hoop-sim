@@ -8,7 +8,7 @@ from hoopsim.models.contract import flat_contract
 from hoopsim.models.player import Player
 from hoopsim.models.team import Team, auto_set_lineup
 from hoopsim.models.world import World
-from hoopsim.systems import cap
+from hoopsim.systems import cap, difficulty
 
 TARGET_ROSTER = 14
 
@@ -90,15 +90,18 @@ def _quality(player: Player) -> float:
     return max(0.0, min(1.0, (player.overall - 65) / 25.0))
 
 
-def required_salary(world: World, player: Player, years: int) -> int:
+def required_salary(world: World, player: Player, years: int, *, for_user: bool = False) -> int:
     """The salary it takes to sign this free agent *at a given contract length*.
 
     Term and money trade off. Offering more years than the player prefers is security they'll take
     a per-year discount for — strongly for older, lesser free agents (who crave a guaranteed job),
     barely at all for young stars. Offering fewer years than they want makes them hold out for a
-    raise. At the preferred length this is just their market ask (:func:`wave_market_salary`).
+    raise. At the preferred length this is just their market ask (:func:`wave_market_salary`),
+    scaled by difficulty when it is the user asking.
     """
     target = wave_market_salary(world, player)
+    if for_user:
+        target = difficulty.user_price(world, target)
     pref = contract_years_for(player)
     years = max(1, min(MAX_CONTRACT_YEARS, years))
     delta = years - pref
@@ -120,15 +123,19 @@ def offer_for(world: World, team: Team, player: Player) -> Tuple[int, int]:
     (that legality is enforced in :func:`sign_free_agent`). The user can negotiate term against
     money from here via :func:`required_salary`.
     """
-    return wave_market_salary(world, player), contract_years_for(player)
+    ask = wave_market_salary(world, player)
+    if team.tid == world.user_team_id:
+        ask = difficulty.user_price(world, ask)
+    return ask, contract_years_for(player)
 
 
-def evaluate_offer(world: World, player: Player, salary: int, years: int) -> Tuple[bool, str]:
+def evaluate_offer(world: World, player: Player, salary: int, years: int, *,
+                   for_user: bool = False) -> Tuple[bool, str]:
     """Whether the free agent accepts an offer of ``salary`` over ``years`` (willingness only —
     cap-legality is checked separately in :func:`sign_free_agent`)."""
     if years < 1 or years > MAX_CONTRACT_YEARS:
         return False, f"Contracts run 1–{MAX_CONTRACT_YEARS} years."
-    req = required_salary(world, player, years)
+    req = required_salary(world, player, years, for_user=for_user)
     if salary < req:
         pref = contract_years_for(player)
         hint = "" if years >= pref else " — or offer more years for less per season"
@@ -143,7 +150,8 @@ def sign_free_agent(world: World, team: Team, pid: int, salary: int, years: int
     player = world.players[pid]
     if player.team_id is not None:
         return False, "Player is not a free agent."
-    accepts, why = evaluate_offer(world, player, salary, years)
+    accepts, why = evaluate_offer(world, player, salary, years,
+                                  for_user=team.tid == world.user_team_id)
     if not accepts:
         return False, why
     ok, reason = cap.can_sign(world, team, salary)
