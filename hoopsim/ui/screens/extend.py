@@ -48,13 +48,20 @@ def _extend(world: World, team, player) -> None:
         console.print(f"[bad]{reason}[/bad]")
         pause()
         return
+    from hoopsim.systems import contract_mood
+    mood = contract_mood.assess(world, player)
+    style = "bad" if mood["level"] == contract_mood.TESTING_FA else "accent"
+    console.print(f"[{style}]{contract_mood.describe(player.short_name, mood)}[/{style}]")
+    if mood["level"] == contract_mood.TESTING_FA:
+        pause()
+        return
     sal, years = cap.extension_offer(world, player, for_user=True)
     max_sal = cap.max_salary(player.experience, world.salary_cap)
-    console.print(f"[dim]{player.name}: market ~{money(sal)}, max {money(max_sal)}.[/dim]")
+    console.print(f"[dim]{player.name}: asking ~{money(sal)}, max {money(max_sal)}.[/dim]")
     salary = ask_int("Annual salary ($)", default=sal)
     add_years = ask_int("Additional years", default=years)
     if not confirm(f"Extend {player.name} for {money(salary)} × {add_years}y?", default=True):
         return
-    ok, msg = cap.extend_contract(world, team, player.pid, salary, add_years)
+    ok, msg = cap.extend_contract(world, team, player.pid, salary, add_years, for_user=True)
     console.print(f"[good]{msg}[/good]" if ok else f"[bad]{msg}[/bad]")
     pause()

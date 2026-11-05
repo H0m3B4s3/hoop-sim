@@ -88,7 +88,11 @@ def test_league_run_trades_ignore_difficulty():
     assert deals["easy"] == deals["normal"] == deals["hard"]
 
 
-def test_free_agents_and_extensions_ask_the_user_more_on_hard():
+def test_free_agents_and_extensions_ask_the_user_more_on_hard(monkeypatch):
+    from hoopsim.systems import contract_mood
+    # hold the player's stance neutral so only difficulty moves the extension price
+    monkeypatch.setattr(contract_mood, "assess", lambda world, player: {
+        "level": contract_mood.OPEN, "label": "", "score": 0.0, "reasons": [], "ask_factor": 1.0})
     asks, ext, ai_ext = {}, {}, set()
     for lvl in LEVELS:
         w = _world(level=lvl)

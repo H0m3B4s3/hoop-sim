@@ -182,6 +182,7 @@ export const api = {
   sign: (pid: number, salary?: number, years?: number) =>
     post<any>("/sign", { pid, salary, years }),
   extend: (pid: number) => post<any>("/extend", { pid }),
+  extendPreview: (pid: number) => get<any>(`/extend/preview?pid=${pid}`),
   waive: (pid: number) => post<any>("/waive", { pid }),
   setBlock: (pid: number, on: boolean) => post<any>("/block", { pid, on }),
   offers: () => get<{ offers: Row[] }>("/offers"),

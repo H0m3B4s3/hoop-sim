@@ -108,6 +108,10 @@ late-game intentional fouling**.
   Beat it and confidence climbs; miss it and the seat warms up. The first season is a honeymoon,
   but after that a GM whose confidence drops below 20 is fired and has to take a job with one of
   the league's strugglers, or start over.
+- **Re-signing isn't automatic** — before an extension a player weighs whether you're winning,
+  whether he gets the minutes his talent earns, and how long he's been with you. An eager player
+  gives a hometown discount, an unhappy one wants a raise, and some won't extend at all and plan to
+  test free agency; the Extend button shows where he stands and why before you commit.
 - **Draft & develop** — a lottery-weighted, two-round draft (interactive for your picks), rookie
   scale contracts, and an offseason where young players grow toward their potential while
   veterans decline. Each draft class has its own **shape** — most years carry only a couple of
@@ -171,7 +175,7 @@ testable and let the web UI drop in as a second front-end over the same resumabl
 pytest -q
 ```
 
-352 tests, about two to three minutes. They cover box-score reconciliation, realistic stat
+358 tests, about two to three minutes. They cover box-score reconciliation, realistic stat
 distributions, schedule/standings correctness, cap legality, trade validation, draft/development,
 injuries and conditioning, the coaching carousel, the news wire, and byte-identical save
 round-trips with reproducible RNG.
