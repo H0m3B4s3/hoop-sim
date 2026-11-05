@@ -15,6 +15,7 @@ import { ScoutingPanel } from "./screens/Scouting";
 import { Setup, TeamSelect } from "./screens/Setup";
 import { InjuryReport, StaffPanel } from "./screens/Staff";
 import { OffersPanel, SolicitPanel, TradePanel } from "./screens/Trade";
+import { JobOffers } from "./screens/Owner";
 import "./index.css";
 
 type View = "setup" | "team" | "hub";
@@ -46,7 +47,15 @@ export default function App() {
       {view === "team" && summary && (
         <TeamSelect summary={summary} onPick={loadState} toast={toast} />
       )}
-      {view === "hub" && summary && (
+      {view === "hub" && summary && summary.owner?.fired && (
+        <JobOffers
+          summary={summary}
+          onHired={setSummary}
+          onNewCareer={() => setView("setup")}
+          toast={toast}
+        />
+      )}
+      {view === "hub" && summary && !summary.owner?.fired && (
         <Hub summary={summary} setSummary={setSummary} toast={toast} onQuit={() => setView("setup")} />
       )}
       {toastNode}

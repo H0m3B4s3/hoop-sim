@@ -103,6 +103,11 @@ late-game intentional fouling**.
   Hard, chosen at career start and changeable on the Finances tab) sets how hard rivals bargain in
   trades and what free agents and extension candidates ask you for; it never changes how AI teams
   deal with each other.
+- **Answer to an owner** — each season the owner sets a goal from where your roster ranks (a
+  contender must go deep, a rebuild only has to stay competitive) with an expected win total.
+  Beat it and confidence climbs; miss it and the seat warms up. The first season is a honeymoon,
+  but after that a GM whose confidence drops below 20 is fired and has to take a job with one of
+  the league's strugglers, or start over.
 - **Draft & develop** — a lottery-weighted, two-round draft (interactive for your picks), rookie
   scale contracts, and an offseason where young players grow toward their potential while
   veterans decline. Each draft class has its own **shape** — most years carry only a couple of
@@ -166,7 +171,7 @@ testable and let the web UI drop in as a second front-end over the same resumabl
 pytest -q
 ```
 
-342 tests, about two to three minutes. They cover box-score reconciliation, realistic stat
+352 tests, about two to three minutes. They cover box-score reconciliation, realistic stat
 distributions, schedule/standings correctness, cap legality, trade validation, draft/development,
 injuries and conditioning, the coaching carousel, the news wire, and byte-identical save
 round-trips with reproducible RNG.

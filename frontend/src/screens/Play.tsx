@@ -4,6 +4,7 @@ import { useTeamText } from "../theme";
 import { SaveReminder } from "../components/common";
 import { BoxScore, CoachPanel } from "../components/game";
 import { useLiveCoach } from "../components/useLiveCoach";
+import { OwnerCard } from "../components/owner";
 
 // ---------------------------------------------------------------------------
 // Play panel — sim controls
@@ -84,6 +85,7 @@ export function PlayPanel({
 
   return (
     <div>
+      {summary.owner && <OwnerCard owner={summary.owner} />}
       <div className="toolbar">
         <button className="primary" disabled={busy || !!coach} onClick={watchGame}>
           ▶ Watch &amp; coach next game

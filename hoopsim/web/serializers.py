@@ -146,6 +146,8 @@ def world_summary(world: World) -> dict:
         out["trade_deadline_passed"] = trades.trade_deadline_passed(world)
         out["days_to_deadline"] = max(0, deadline - world.day)
         out["open_offers"] = len(world.trade_offers)
+        from hoopsim.systems import owner
+        out["owner"] = owner.view(world)
     return out
 
 

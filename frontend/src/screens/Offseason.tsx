@@ -5,6 +5,7 @@ import { Loading, OVR, PotCell } from "../components/common";
 import { posLabel } from "../components/format";
 import { FreeAgentsPanel } from "./Finances";
 import { DepthChartPanel } from "./Roster";
+import { OwnerReviewCard } from "../components/owner";
 
 // Resume the offseason from authoritative backend state so the wizard survives tab switches —
 // its progress must never live only in this component, or re-entering re-runs the offseason.
@@ -95,74 +96,78 @@ export function OffseasonPanel({
         </button>
       </div>
     );
+  const review = summary.owner?.last_review;
   if (step === "draft")
     return (
-      <div className="card">
-        <h3>NBA Draft {board ? `— pick #${board.pick}` : ""}</h3>
-        {board?.recent?.length > 0 && (
-          <div className="muted small">
-            Since your last pick:{" "}
-            {board.recent.map((r: any) => `#${r.pick} ${r.team} ${r.player}`).join(" · ")}
-          </div>
-        )}
-        {board?.my_picks?.length > 0 && (
-          <DraftShop picks={board.my_picks} toast={toast} onTrade={() => { refresh(); loadBoard(); }} />
-        )}
-        {board && (
-          <>
-            <div className="toolbar">
-              <button className="primary" onClick={() => pick(null)}>
-                Auto-pick best available
-              </button>
+      <>
+        {review && review.year === summary.season_year && <OwnerReviewCard review={review} />}
+        <div className="card">
+          <h3>NBA Draft {board ? `— pick #${board.pick}` : ""}</h3>
+          {board?.recent?.length > 0 && (
+            <div className="muted small">
+              Since your last pick:{" "}
+              {board.recent.map((r: any) => `#${r.pick} ${r.team} ${r.player}`).join(" · ")}
             </div>
-            <table className="dt">
-              <thead>
-                <tr>
-                  <th>Sel</th>
-                  <th>Prospect</th>
-                  <th>Pos</th>
-                  <th>Age</th>
-                  <th>OVR</th>
-                  <th>POT</th>
-                  <th>PPG</th>
-                  <th>RPG</th>
-                  <th>APG</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {board.board.map((p: Row, i: number) => (
-                  <tr key={p.pid}>
-                    <td>{i + 1}</td>
-                    <td>
-                      {p.name}{" "}
-                      <span className="muted">
-                        {p.archetype}
-                        {p.pre_draft?.level ? ` · ${p.pre_draft.level}` : ""}
-                      </span>
-                    </td>
-                    <td>{posLabel(p)}</td>
-                    <td>{p.age}</td>
-                    <td>{OVR(p.overall)}</td>
-                    <td><PotCell row={p} /></td>
-                    <td>{p.pre_draft?.ppg ?? "—"}</td>
-                    <td>{p.pre_draft?.rpg ?? "—"}</td>
-                    <td>{p.pre_draft?.apg ?? "—"}</td>
-                    <td>
-                      <button className="mini" onClick={() => pick(p.pid)}>
-                        Draft
-                      </button>
-                    </td>
+          )}
+          {board?.my_picks?.length > 0 && (
+            <DraftShop picks={board.my_picks} toast={toast} onTrade={() => { refresh(); loadBoard(); }} />
+          )}
+          {board && (
+            <>
+              <div className="toolbar">
+                <button className="primary" onClick={() => pick(null)}>
+                  Auto-pick best available
+                </button>
+              </div>
+              <table className="dt">
+                <thead>
+                  <tr>
+                    <th>Sel</th>
+                    <th>Prospect</th>
+                    <th>Pos</th>
+                    <th>Age</th>
+                    <th>OVR</th>
+                    <th>POT</th>
+                    <th>PPG</th>
+                    <th>RPG</th>
+                    <th>APG</th>
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </>
-        )}
-        {picks.length > 0 && (
-          <p className="muted">Your picks: {picks.map((p) => `#${p.pick} ${p.name}`).join(", ")}</p>
-        )}
-      </div>
+                </thead>
+                <tbody>
+                  {board.board.map((p: Row, i: number) => (
+                    <tr key={p.pid}>
+                      <td>{i + 1}</td>
+                      <td>
+                        {p.name}{" "}
+                        <span className="muted">
+                          {p.archetype}
+                          {p.pre_draft?.level ? ` · ${p.pre_draft.level}` : ""}
+                        </span>
+                      </td>
+                      <td>{posLabel(p)}</td>
+                      <td>{p.age}</td>
+                      <td>{OVR(p.overall)}</td>
+                      <td><PotCell row={p} /></td>
+                      <td>{p.pre_draft?.ppg ?? "—"}</td>
+                      <td>{p.pre_draft?.rpg ?? "—"}</td>
+                      <td>{p.pre_draft?.apg ?? "—"}</td>
+                      <td>
+                        <button className="mini" onClick={() => pick(p.pid)}>
+                          Draft
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+          {picks.length > 0 && (
+            <p className="muted">Your picks: {picks.map((p) => `#${p.pick} ${p.name}`).join(", ")}</p>
+          )}
+        </div>
+      </>
     );
   if (step === "fa")
     return (

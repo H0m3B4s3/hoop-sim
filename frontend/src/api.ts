@@ -59,6 +59,32 @@ export interface TeamBrief {
   strength_stars?: number;  // 1–5 league-relative strength rank
 }
 
+export interface OwnerReview {
+  year: number;
+  record: string;
+  result: string;
+  goal: string;
+  expected_wins: number;
+  met: boolean;
+  before: number;
+  delta: number;
+  confidence: number;
+  fired: boolean;
+}
+
+export interface OwnerView {
+  confidence: number;
+  standing: string;
+  seasons: number;
+  honeymoon: boolean;
+  fired: boolean;
+  offers: number[];
+  mandate: { year: number; rank: number; label: string; expected_wins: number } | null;
+  last_review: OwnerReview | null;
+  pace?: "ahead" | "on track" | "behind";
+  pace_wins?: number;
+}
+
 export interface Summary {
   season_year: number;
   seed?: number | null;
@@ -80,6 +106,7 @@ export interface Summary {
   trade_deadline_passed?: boolean;
   days_to_deadline?: number;
   open_offers?: number;
+  owner?: OwnerView | null;
   user_team?: TeamBrief;
   record?: string;
   payroll?: number;
@@ -140,6 +167,7 @@ export const api = {
   simWeek: (days = 4) => post<any>(`/sim/week?days=${days}`),
   advanceDay: () => post<any>("/sim/advance-day"),
   setDifficulty: (level: string) => post<{ summary: Summary }>("/difficulty", { level }),
+  takeJob: (tid: number) => post<Summary>("/owner/take-job", { tid }),
   simTo: (target: "deadline" | "season_end") => post<any>(`/sim/to?target=${target}`),
 
   playoffs: () => get<any>("/playoffs"),

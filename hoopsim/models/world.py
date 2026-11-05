@@ -63,6 +63,7 @@ class World:
         self.college_economy: str = DEFAULT_COLLEGE_ECONOMY   # "scholarship" | "nil"
         self.difficulty: str = DEFAULT_DIFFICULTY    # "easy" | "normal" | "hard" (user deals only)
         self.fog_of_war: Optional[bool] = None       # None = config.FOG_OF_WAR (display only)
+        self.owner: Optional[dict] = None            # the user's job: mandate, confidence (NBA)
         self.other_teams: Dict[int, Team] = {}
         self.recruits: List[int] = []
         self.pipeline: Optional[dict] = None         # JSON-native college->NBA draft results
@@ -232,6 +233,7 @@ class World:
             "college_economy": self.college_economy,
             "difficulty": self.difficulty,
             "fog_of_war": self.fog_of_war,
+            "owner": self.owner,
             "other_teams": {str(t): team.to_dict() for t, team in self.other_teams.items()},
             "recruits": list(self.recruits),
             "pipeline": self.pipeline,
@@ -276,6 +278,7 @@ class World:
         w.college_economy = d.get("college_economy", DEFAULT_COLLEGE_ECONOMY)
         w.difficulty = d.get("difficulty", DEFAULT_DIFFICULTY)
         w.fog_of_war = d.get("fog_of_war")
+        w.owner = d.get("owner")
         w.other_teams = {int(t): Team.from_dict(td) for t, td in d.get("other_teams", {}).items()}
         w.recruits = list(d.get("recruits", []))
         w.pipeline = d.get("pipeline")
