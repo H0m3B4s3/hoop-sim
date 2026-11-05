@@ -6,14 +6,7 @@ from hoopsim.systems import draft_system as D
 from hoopsim.systems import scouting as SC
 
 
-import pytest
-
-
-@pytest.fixture(autouse=True)
-def _fog_on():
-    SC.set_fog(True)
-    yield
-    SC.set_fog(None)
+from hoopsim.models.world import World
 
 
 def _prospect(seed=3):
@@ -25,12 +18,22 @@ def _prospect(seed=3):
 
 def test_toggle_off_reveals_exact_number():
     p = _prospect()
-    SC.set_fog(False)
-    v = SC.pot_view(p)
+    v = SC.pot_view(p, fog=False)
     assert v.known and v.low == v.high == v.value == p.scouted_potential()
-    assert "–" not in SC.pot_band_str(p)
-    SC.set_fog(True)
-    assert "–" in SC.pot_band_str(p)          # fog back on → banded again
+    assert "–" not in SC.pot_band_str(p, fog=False)
+    assert "–" in SC.pot_band_str(p, fog=True)          # fog back on → banded again
+
+
+def test_fog_is_a_per_career_setting_that_survives_a_save():
+    w = build_world(seed=3)
+    assert SC.fog_enabled(w)                            # config default
+    w.fog_of_war = False
+    other = build_world(seed=3)
+    assert not SC.fog_enabled(w) and SC.fog_enabled(other)
+    assert not SC.fog_enabled(World.from_dict(w.to_dict()))
+    d = other.to_dict()
+    d.pop("fog_of_war")
+    assert World.from_dict(d).fog_of_war is None        # older saves fall back to the default
 
 
 def test_prospect_band_is_wide_and_hides_the_number():

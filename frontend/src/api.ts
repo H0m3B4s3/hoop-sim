@@ -69,6 +69,7 @@ export interface Summary {
   date: string;
   mode: string;
   college_economy: string;
+  difficulty?: string;
   user_team_id: number | null;
   salary_cap: number;
   luxury_tax_line: number;
@@ -92,7 +93,13 @@ export type Row = Record<string, any>;
 
 export const api = {
   state: () => get<any>("/state"),
-  newCareer: (b: { league: string; preset?: string; economy?: string; seed?: number }) =>
+  newCareer: (b: {
+    league: string;
+    preset?: string;
+    economy?: string;
+    seed?: number;
+    difficulty?: string;
+  }) =>
     post<any>("/career/new", b),
   chooseTeam: (tid: number) => post<Summary>(`/career/team/${tid}`),
   saves: () => get<{ saves: string[] }>("/saves"),
@@ -132,6 +139,7 @@ export const api = {
   coachOrders: (orders: any) => post<any>("/sim/coach", orders),
   simWeek: (days = 4) => post<any>(`/sim/week?days=${days}`),
   advanceDay: () => post<any>("/sim/advance-day"),
+  setDifficulty: (level: string) => post<{ summary: Summary }>("/difficulty", { level }),
   simTo: (target: "deadline" | "season_end") => post<any>(`/sim/to?target=${target}`),
 
   playoffs: () => get<any>("/playoffs"),

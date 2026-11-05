@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from hoopsim.config import (DEFAULT_COLLEGE_ECONOMY, FIRST_APRON, LUXURY_TAX_LINE, SALARY_CAP,
-                          SCHEMA_VERSION, VETERAN_MINIMUM)
+from hoopsim.config import (DEFAULT_COLLEGE_ECONOMY, DEFAULT_DIFFICULTY, FIRST_APRON,
+                            LUXURY_TAX_LINE, SALARY_CAP, SCHEMA_VERSION, VETERAN_MINIMUM)
 from hoopsim.models.coach import Coach
 from hoopsim.models.contract import Contract
 from hoopsim.models.draft import DraftClass, DraftPick
@@ -61,6 +61,8 @@ class World:
         # the shared ``players`` map). ``recruits`` are unsigned high-school prospect pids.
         self.mode: str = "nba"                       # "nba" | "college"
         self.college_economy: str = DEFAULT_COLLEGE_ECONOMY   # "scholarship" | "nil"
+        self.difficulty: str = DEFAULT_DIFFICULTY    # "easy" | "normal" | "hard" (user deals only)
+        self.fog_of_war: Optional[bool] = None       # None = config.FOG_OF_WAR (display only)
         self.other_teams: Dict[int, Team] = {}
         self.recruits: List[int] = []
         self.pipeline: Optional[dict] = None         # JSON-native college->NBA draft results
@@ -228,6 +230,8 @@ class World:
             "first_apron": self.first_apron,
             "mode": self.mode,
             "college_economy": self.college_economy,
+            "difficulty": self.difficulty,
+            "fog_of_war": self.fog_of_war,
             "other_teams": {str(t): team.to_dict() for t, team in self.other_teams.items()},
             "recruits": list(self.recruits),
             "pipeline": self.pipeline,
@@ -270,6 +274,8 @@ class World:
         w.first_apron = d.get("first_apron", FIRST_APRON)
         w.mode = d.get("mode", "nba")
         w.college_economy = d.get("college_economy", DEFAULT_COLLEGE_ECONOMY)
+        w.difficulty = d.get("difficulty", DEFAULT_DIFFICULTY)
+        w.fog_of_war = d.get("fog_of_war")
         w.other_teams = {int(t): Team.from_dict(td) for t, td in d.get("other_teams", {}).items()}
         w.recruits = list(d.get("recruits", []))
         w.pipeline = d.get("pipeline")

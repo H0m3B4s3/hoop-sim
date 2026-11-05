@@ -69,8 +69,19 @@ POTENTIAL_FLOOR = 40
 
 # Fog of war over player potential: when True, the UI shows a confidence band + letter grade for
 # unproven players instead of the raw ceiling. Flip to False to inspect the exact numbers (e.g.
-# when checking draft-class distributions). User-toggleable at runtime via systems.scouting.
+# when checking draft-class distributions). Each career can override it (``World.fog_of_war``).
 FOG_OF_WAR = True
+
+# Front-office difficulty: how hard AI teams and players bargain with the *user* (never with each
+# other). ``trade_margin`` is added to the AI's normal trade acceptance margin; ``price`` scales
+# what free agents and extension candidates ask the user for. Easy keeps the margin just above
+# fair value, so selling a player and buying him straight back is still refused.
+DIFFICULTY_LEVELS = {
+    "easy": {"trade_margin": -0.02, "price": 0.92},
+    "normal": {"trade_margin": 0.0, "price": 1.0},
+    "hard": {"trade_margin": 0.07, "price": 1.10},
+}
+DEFAULT_DIFFICULTY = "normal"
 
 # ---------------------------------------------------------------------------
 # Salary cap & finances (simplified, faithful in spirit; whole dollars)

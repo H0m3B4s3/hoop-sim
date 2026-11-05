@@ -49,6 +49,7 @@ function Setup({ onReady, toast }: { onReady: () => void; toast: (m: string) => 
   const [league, setLeague] = useState("nba");
   const [preset, setPreset] = useState("Standard");
   const [economy, setEconomy] = useState("nil");
+  const [difficulty, setDifficulty] = useState("normal");
   const [seed, setSeed] = useState("");
   const [saves, setSaves] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -69,7 +70,7 @@ function Setup({ onReady, toast }: { onReady: () => void; toast: (m: string) => 
         toast("Seed must be a number.");
         return;
       }
-      await api.newCareer({ league, preset, economy, seed: parsed });
+      await api.newCareer({ league, preset, economy, seed: parsed, difficulty });
       onReady();
     } catch (e) {
       toast(String(e));
@@ -128,6 +129,9 @@ function Setup({ onReady, toast }: { onReady: () => void; toast: (m: string) => 
               30 games (fast)
             </Seg>
           </div>
+        ) : null}
+        {league === "nba" ? (
+          <DifficultyPicker value={difficulty} onChange={setDifficulty} />
         ) : (
           <div className="segrow">
             <Seg active={economy === "nil"} onClick={() => setEconomy("nil")}>
@@ -371,6 +375,7 @@ function Hub({
             <FinancesPanel
               onPlayer={setOpenPid}
               mode={summary.mode}
+              difficulty={summary.difficulty ?? "normal"}
               refresh={refresh}
               toast={toast}
             />
@@ -2150,11 +2155,13 @@ function PowerPanel() {
 function FinancesPanel({
   onPlayer,
   mode,
+  difficulty,
   refresh,
   toast,
 }: {
   onPlayer: (pid: number) => void;
   mode: string;
+  difficulty: string;
   refresh: (s?: Summary) => void;
   toast: (m: string) => void;
 }) {
@@ -2214,6 +2221,19 @@ function FinancesPanel({
           onRowClick={(r) => onPlayer((r as Row).pid)}
         />
       </div>
+      {mode !== "college" && (
+        <div className="card">
+          <DifficultyPicker
+            value={difficulty}
+            onChange={(level) =>
+              api
+                .setDifficulty(level)
+                .then((r) => refresh(r.summary))
+                .catch((e) => toast(String(e)))
+            }
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -4344,6 +4364,29 @@ function PlayerModal({
 // ---------------------------------------------------------------------------
 // Small bits
 // ---------------------------------------------------------------------------
+const DIFFICULTY_HINTS: Record<string, string> = {
+  easy: "Rivals take nearly any fair trade, and free agents and extensions ask 8% less.",
+  normal: "Rivals want a little extra to deal with you, and players ask their market price.",
+  hard: "Rivals drive a hard bargain in trades, and players ask 10% more than market.",
+};
+
+// How hard the league bargains with you. Never changes how AI teams deal with each other.
+function DifficultyPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="difficulty">
+      <span className="muted small">Front-office difficulty</span>
+      <div className="segrow">
+        {(["easy", "normal", "hard"] as const).map((lvl) => (
+          <Seg key={lvl} active={value === lvl} onClick={() => onChange(lvl)}>
+            {lvl[0].toUpperCase() + lvl.slice(1)}
+          </Seg>
+        ))}
+      </div>
+      <span className="muted small">{DIFFICULTY_HINTS[value]}</span>
+    </div>
+  );
+}
+
 function Seg({
   active,
   onClick,

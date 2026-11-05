@@ -48,7 +48,7 @@ def _extend(world: World, team, player) -> None:
         console.print(f"[bad]{reason}[/bad]")
         pause()
         return
-    sal, years = cap.extension_offer(world, player)
+    sal, years = cap.extension_offer(world, player, for_user=True)
     max_sal = cap.max_salary(player.experience, world.salary_cap)
     console.print(f"[dim]{player.name}: market ~{money(sal)}, max {money(max_sal)}.[/dim]")
     salary = ask_int("Annual salary ($)", default=sal)

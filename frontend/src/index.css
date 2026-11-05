@@ -297,6 +297,15 @@ span.clickable:hover {
   margin: 0;
   flex: 1 1 260px;
 }
+.difficulty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0;
+}
+.difficulty .segrow {
+  margin: 0;
+}
 .setup {
   max-width: 420px;
   width: 100%;

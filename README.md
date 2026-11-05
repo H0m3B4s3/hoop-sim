@@ -99,7 +99,10 @@ late-game intentional fouling**.
   its cycle: rebuilders prize picks and discount veterans, contenders spend picks to win now. It
   only offers deals it would accept itself, and a refusal tells you why. AI clubs trade with each
   other too: losing teams sell their veterans to contenders, busiest in the week before the
-  deadline, and every deal lands on the news wire.
+  deadline, and every deal lands on the news wire. A **front-office difficulty** (Easy / Normal /
+  Hard, chosen at career start and changeable on the Finances tab) sets how hard rivals bargain in
+  trades and what free agents and extension candidates ask you for; it never changes how AI teams
+  deal with each other.
 - **Draft & develop** — a lottery-weighted, two-round draft (interactive for your picks), rookie
   scale contracts, and an offseason where young players grow toward their potential while
   veterans decline. Each draft class has its own **shape** — most years carry only a couple of
@@ -112,7 +115,8 @@ late-game intentional fouling**.
 - **Scout under fog of war** — player **potential** is hidden behind a confidence band and a letter
   grade (e.g. `B+ (78–86)`) that tightens as a player proves himself; an unproven prospect's
   ceiling is a guess, a settled veteran's is known. Toggle the fog on/off (🌫 / 👁 in the top bar,
-  or `config.FOG_OF_WAR`) to inspect the exact numbers.
+  or `config.FOG_OF_WAR` for the default) to inspect the exact numbers; the setting is saved with
+  each career and only affects your own game.
 - **Save & load** — multiple named save slots plus autosave, with fully reproducible simulations
   (the RNG state is part of the save). In the web app you can also **export** a career to a file
   and **import** it later. On the hosted site that file is the only lasting copy, because server
@@ -162,7 +166,7 @@ testable and let the web UI drop in as a second front-end over the same resumabl
 pytest -q
 ```
 
-332 tests, about two to three minutes. They cover box-score reconciliation, realistic stat
+342 tests, about two to three minutes. They cover box-score reconciliation, realistic stat
 distributions, schedule/standings correctness, cap legality, trade validation, draft/development,
 injuries and conditioning, the coaching carousel, the news wire, and byte-identical save
 round-trips with reproducible RNG.

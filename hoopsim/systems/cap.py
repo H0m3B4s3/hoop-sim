@@ -153,9 +153,14 @@ def can_extend(world: World, team: Team, pid: int) -> Tuple[bool, str]:
     return True, "Eligible to extend."
 
 
-def extension_offer(world: World, player) -> Tuple[int, int]:
-    """A reasonable (salary, added years) the team would offer to extend a player."""
-    salary = min(market_salary(player), max_salary(player.experience, world.salary_cap))
+def extension_offer(world: World, player, *, for_user: bool = False) -> Tuple[int, int]:
+    """A reasonable (salary, added years) the team would offer to extend a player. The user's ask
+    is scaled by difficulty; AI re-signings always pay the plain market rate."""
+    from hoopsim.systems import difficulty
+    market = market_salary(player)
+    if for_user:
+        market = difficulty.user_price(world, market)
+    salary = min(market, max_salary(player.experience, world.salary_cap))
     add_years = max(1, min(MAX_CONTRACT_YEARS - player.contract.years_remaining, 4))
     return salary, add_years
 

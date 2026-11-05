@@ -11,23 +11,18 @@ Internals (AI valuations, the draft board sort) keep using :meth:`Player.scouted
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 
 from hoopsim import config
 from hoopsim.config import RATING_MAX
 
-# Runtime override of config.FOG_OF_WAR. ``None`` defers to the config default; set via
-# :func:`set_fog` so the user can flip fog off to inspect raw ceilings and back on for play.
-_FOG_OVERRIDE = None
 
-
-def fog_enabled() -> bool:
-    return config.FOG_OF_WAR if _FOG_OVERRIDE is None else _FOG_OVERRIDE
-
-
-def set_fog(enabled) -> None:
-    """Turn fog on/off at runtime; pass ``None`` to fall back to the config default."""
-    global _FOG_OVERRIDE
-    _FOG_OVERRIDE = enabled
+def fog_enabled(world=None) -> bool:
+    """Whether this career hides exact ceilings. Each career carries its own setting
+    (``world.fog_of_war``; ``None`` means the config default), so one player flipping fog off on a
+    shared server never changes what anyone else sees."""
+    setting = getattr(world, "fog_of_war", None)
+    return config.FOG_OF_WAR if setting is None else setting
 
 # Half-width of the potential band by how established a player is. Prospects are the foggiest;
 # once a player has a few pro seasons under his belt his ceiling is essentially known.
@@ -86,13 +81,14 @@ def potential_grade(value: int) -> str:
     return "D"
 
 
-def pot_view(player, scout_level: int = 0) -> PotentialView:
+def pot_view(player, scout_level: int = 0, fog: Optional[bool] = None) -> PotentialView:
     """Fogged potential for display: a band + grade, with the raw number only once it's settled.
 
     With fog disabled the band collapses to the exact ceiling so the raw numbers are visible.
+    Pass ``fog=fog_enabled(world)`` for the viewing career; ``None`` uses the config default.
     """
     est = player.scouted_potential()
-    if not fog_enabled():
+    if not (config.FOG_OF_WAR if fog is None else fog):
         return PotentialView(grade=potential_grade(est), low=est, high=est, known=True, value=est)
     unc = pot_uncertainty(player, scout_level)
     floor = player.overall
@@ -107,15 +103,15 @@ def pot_view(player, scout_level: int = 0) -> PotentialView:
     )
 
 
-def pot_band_str(player) -> str:
+def pot_band_str(player, fog: Optional[bool] = None) -> str:
     """Compact human string: ``"82"`` when known, else a banded ``"78–86"``."""
-    v = pot_view(player)
+    v = pot_view(player, fog=fog)
     if v.known or v.low == v.high:
         return str(v.value)
     return f"{v.low}–{v.high}"
 
 
-def pot_display(player) -> str:
+def pot_display(player, fog: Optional[bool] = None) -> str:
     """Grade + band, e.g. ``"A- (81–87)"`` or ``"B (78)"`` for a settled veteran."""
-    v = pot_view(player)
-    return f"{v.grade} ({pot_band_str(player)})"
+    v = pot_view(player, fog=fog)
+    return f"{v.grade} ({pot_band_str(player, fog)})"

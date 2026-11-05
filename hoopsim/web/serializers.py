@@ -118,6 +118,7 @@ def world_summary(world: World) -> dict:
         "date": game_date(world, world.day),
         "mode": world.mode,
         "college_economy": world.college_economy,
+        "difficulty": world.difficulty,
         "user_team_id": world.user_team_id,
         "salary_cap": world.salary_cap,
         "luxury_tax_line": world.luxury_tax_line,
@@ -164,7 +165,7 @@ def player_row(world: World, p: Player, *, is_starter: bool = False) -> dict:
     """A roster/list row (mirrors ui.widgets.roster_table). Raw numbers; UI formats them."""
     s = p.season
     team = world.find_team(p.team_id) if p.team_id is not None else None
-    pv = SC.pot_view(p)
+    pv = SC.pot_view(p, fog=SC.fog_enabled(world))
     return {
         "pid": p.pid,
         "jersey": p.jersey,
@@ -843,7 +844,8 @@ def free_agents_view(world: World) -> dict:
     from hoopsim.config import MAX_CONTRACT_YEARS
     rows = []
     for p in fas:
-        ask = freeagency.wave_market_salary(world, p)
+        ask = (freeagency.offer_for(world, team, p)[0] if team
+               else freeagency.wave_market_salary(world, p))
         can_sign, reason = (cap.can_sign(world, team, ask) if team else (False, ""))
         row = player_row(world, p)
         row["ask"] = ask
@@ -851,7 +853,7 @@ def free_agents_view(world: World) -> dict:
         row["sign_reason"] = reason
         row["preferred_years"] = freeagency.contract_years_for(p)
         # Salary the player requires at each contract length — lets the offer UI trade term vs money.
-        row["required_by_years"] = {str(y): freeagency.required_salary(world, p, y)
+        row["required_by_years"] = {str(y): freeagency.required_salary(world, p, y, for_user=True)
                                     for y in range(1, MAX_CONTRACT_YEARS + 1)}
         rows.append(row)
     return {"free_agents": rows, "wave": fa_wave_view(world), "max_years": MAX_CONTRACT_YEARS}

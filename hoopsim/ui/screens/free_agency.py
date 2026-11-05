@@ -96,7 +96,7 @@ def _fa_table(world: World, team, players, start: int) -> Table:
     table.add_column("Asking", justify="right")
     table.add_column("Sign?", justify="left")
     for i, p in enumerate(players, start=1):
-        salary = freeagency.wave_market_salary(world, p)
+        salary = freeagency.offer_for(world, team, p)[0]
         ok, _ = cap.can_sign(world, team, salary)
         pos = p.position + (f"/{p.secondary_position}" if p.secondary_position else "")
         table.add_row(str(i), p.name, pos, str(p.age),
@@ -114,13 +114,13 @@ def _attempt_sign(world: World, team, player) -> None:
     terms.add_column("Years", justify="right")
     terms.add_column("Salary/yr", justify="right")
     for y in range(1, MAX_CONTRACT_YEARS + 1):
-        req = freeagency.required_salary(world, player, y)
+        req = freeagency.required_salary(world, player, y, for_user=True)
         mark = "  [accent]← prefers[/accent]" if y == pref else ""
         terms.add_row(str(y), f"{money(req)}{mark}")
     console.print(terms)
 
     years = ask_int("Contract years", default=pref, choices=list(range(1, MAX_CONTRACT_YEARS + 1)))
-    req = freeagency.required_salary(world, player, years)
+    req = freeagency.required_salary(world, player, years, for_user=True)
     salary_m = ask_int("Salary per year ($M)", default=max(1, round(req / 1_000_000)))
     salary = salary_m * 1_000_000
     console.print(f"Offer to [accent]{player.name}[/accent]: "

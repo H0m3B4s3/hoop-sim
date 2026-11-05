@@ -49,8 +49,9 @@ def _board_table(world: World, dc) -> Table:
     for i, pid in enumerate(remaining, start=1):
         p = world.players[pid]
         s = p.pre_draft or {}
-        v = SC.pot_view(p)
-        pot = f"[label]{v.grade}[/label] [dim]{SC.pot_band_str(p)}[/dim]"
+        fog = SC.fog_enabled(world)
+        v = SC.pot_view(p, fog=fog)
+        pot = f"[label]{v.grade}[/label] [dim]{SC.pot_band_str(p, fog)}[/dim]"
         table.add_row(str(i), f"{p.name} [dim]{p.archetype}[/dim]", p.position, str(p.age),
                       f"[{ovr_style(p.overall)}]{p.overall}[/]", pot,
                       str(s.get("ppg", "-")), str(s.get("rpg", "-")), str(s.get("apg", "-")))
@@ -75,7 +76,7 @@ def _user_pick(world: World, dc, recent, user_picks) -> None:
                        key=lambda pid: D.prospect_rank(world.players[pid]), reverse=True)[:_BOARD]
     options = [(str(pid),
                 f"{world.players[pid].name} [dim]{world.players[pid].position} · "
-                f"OVR {world.players[pid].overall} · {SC.pot_display(world.players[pid])}"
+                f"OVR {world.players[pid].overall} · {SC.pot_display(world.players[pid], SC.fog_enabled(world))}"
                 f"[/dim]") for pid in remaining]
     options.append(("auto", "[dim]Auto-pick best available[/dim]"))
     cur_year = dc.year
@@ -97,7 +98,7 @@ def _user_pick(world: World, dc, recent, user_picks) -> None:
     p = world.players[pid]
     console.print(Panel(f"[good]With pick #{pick_no}, you select {p.name}[/good]\n"
                         f"[dim]{p.position} · {p.archetype} · OVR {p.overall} · "
-                        f"POT {SC.pot_display(p)}[/dim]", border_style="good"))
+                        f"POT {SC.pot_display(p, SC.fog_enabled(world))}[/dim]", border_style="good"))
     pause()
 
 
@@ -169,6 +170,6 @@ def _draft_recap(world: World, user_picks) -> None:
     for pick_no, pid in user_picks:
         p = world.players[pid]
         table.add_row(f"#{pick_no}", p.name, p.position, str(p.age),
-                      f"[{ovr_style(p.overall)}]{p.overall}[/]", SC.pot_display(p))
+                      f"[{ovr_style(p.overall)}]{p.overall}[/]", SC.pot_display(p, SC.fog_enabled(world)))
     console.print(table)
     pause()

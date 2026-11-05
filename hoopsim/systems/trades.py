@@ -9,7 +9,7 @@ from hoopsim.config import ROSTER_MAX, TRADE_DEADLINE_FRACTION
 from hoopsim.models.league import Phase
 from hoopsim.models.team import Team, auto_set_lineup, roster_players
 from hoopsim.models.world import World
-from hoopsim.systems import cap
+from hoopsim.systems import cap, difficulty
 
 ROSTER_FLOOR_AFTER_TRADE = 12
 
@@ -157,6 +157,12 @@ def _outgoing_worth(world: World, team: Team, pids: List[int], picks: List[PickK
     return total + _picks_worth(world, team, picks)
 
 
+def accept_margin(world: World, with_user: bool) -> float:
+    """How much better a deal must look before an AI club says yes. Difficulty only moves the bar
+    for deals with the user; clubs dealing with each other always use the plain margin."""
+    return ACCEPT_MARGIN + (difficulty.trade_margin_bonus(world) if with_user else 0.0)
+
+
 def ai_evaluates(world: World, offer: TradeOffer, ai_tid: int) -> Tuple[bool, str]:
     """Decide whether the AI team ``ai_tid`` accepts the offer."""
     legal, reason = validate_trade(world, offer)
@@ -171,9 +177,10 @@ def ai_evaluates(world: World, offer: TradeOffer, ai_tid: int) -> Tuple[bool, st
     team = world.teams[ai_tid]
     v_in = _incoming_worth(world, team, in_pids, in_picks)
     v_out = _outgoing_worth(world, team, out_pids, out_picks)
-    if v_in >= v_out * ACCEPT_MARGIN:
+    margin = accept_margin(world, world.user_team_id in (offer.a, offer.b))
+    if v_in >= v_out * margin:
         return True, "The deal improves our team."
-    if v_in >= v_out * CLOSE_MARGIN:
+    if v_in >= v_out * (margin - (ACCEPT_MARGIN - CLOSE_MARGIN)):
         return False, "We'd want a bit more value to do this."
     if _franchise_player(world, team) in out_pids:
         return False, "We're building around him. It would take a franchise-changing offer."
@@ -265,8 +272,8 @@ def _team_chips(world: World, team: Team, buying: float) -> List[_Chip]:
 
 
 def _best_package(world: World, team: Team, buying: float, target_salary: int,
-                  partner_space: int, partner_size_base: int, n_targets: int
-                  ) -> Optional[Tuple[List[int], List[PickKey]]]:
+                  partner_space: int, partner_size_base: int, n_targets: int,
+                  margin: float = ACCEPT_MARGIN) -> Optional[Tuple[List[int], List[PickKey]]]:
     """Assemble the best package ``team`` would send for the targets, or ``None``.
 
     ``buying`` is what the targets are worth to ``team``. The package costs it no more than it
@@ -276,7 +283,7 @@ def _best_package(world: World, team: Team, buying: float, target_salary: int,
     """
     pool = _team_chips(world, team, buying)
     ai_space = cap.cap_space(world, team)
-    lo, hi = buying * OFFER_VALUE_FLOOR, buying / ACCEPT_MARGIN
+    lo, hi = buying * OFFER_VALUE_FLOOR, buying / margin
 
     best: Optional[Tuple[List[int], List[PickKey]]] = None
     best_score: Optional[Tuple[float, int]] = None
@@ -326,7 +333,7 @@ def solicit_offers(world: World, pids: List[int], max_offers: int = 10) -> List[
         if team.tid == user.tid or not _team_wants(world, team, targets):
             continue
         pkg = _best_package(world, team, _incoming_worth(world, team, targets, []), target_salary,
-                            user_space, user_size_base, len(targets))
+                            user_space, user_size_base, len(targets), accept_margin(world, True))
         if pkg is None:
             continue
         pids_back, picks_back = pkg
@@ -373,7 +380,7 @@ def solicit_pick_offers(world: World, pick_key: PickKey, max_offers: int = 8
         if team.tid == user.tid or not _team_wants_pick(world, team, pick):
             continue
         pkg = _best_package(world, team, _pick_worth(world, team, pick), 0,
-                            user_space, user_size_base, 0)
+                            user_space, user_size_base, 0, accept_margin(world, True))
         if pkg is None:
             continue
         pids_back, picks_back = pkg
