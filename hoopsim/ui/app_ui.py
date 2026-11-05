@@ -108,6 +108,8 @@ def _new_nba_career(seed: int) -> Optional[World]:
         return None
     world.user_team_id = tid
     S.start_season(world)
+    from hoopsim.systems import owner
+    owner.begin_season(world)
     store.autosave(world)
     clear()
     console.print(Panel(f"You are now the GM of the [bold {world.teams[tid].color}]"
@@ -508,6 +510,7 @@ def _run_offseason(world: World) -> None:
         pause("Press Enter to begin the offseason")
     with console.status("[accent]Player development & expiring contracts…[/accent]"):
         summary = offseason.pre_draft(world, champ)
+    _owner_review(world, summary.get("owner_review"))
 
     # 1) Draft (interactive)
     from hoopsim.ui.screens.draft import draft_screen
@@ -527,6 +530,32 @@ def _run_offseason(world: World) -> None:
         f"Re-signed by their teams: {summary.get('resigned', 0)} · "
         f"Players who reached free agency: {summary['new_fas']}[/dim]",
         title="[good]New Season[/good]", border_style="good"))
+    pause()
+
+
+def _owner_review(world: World, review) -> None:
+    """Show the owner's season verdict; if he fired the user, pick the next job."""
+    if not review:
+        return
+    from hoopsim.systems import owner
+    clear()
+    sign = "+" if review["delta"] >= 0 else ""
+    verdict = "[good]Goal met[/good]" if review["met"] else "[bad]Goal missed[/bad]"
+    console.print(Panel(
+        f"Goal: {review['goal']} (about {review['expected_wins']} wins)\n"
+        f"Result: {review['record']} · {review['result']} · {verdict}\n"
+        f"Owner confidence: {review['before']} → {review['confidence']} ({sign}{review['delta']}) · "
+        f"{owner.standing(review['confidence'])}",
+        title="[title]Owner's Review[/title]", border_style="accent"))
+    if not review["fired"]:
+        pause()
+        return
+    console.print("[bad]The owner has fired you.[/bad] These teams want to talk:")
+    offers = world.owner["offers"]
+    pick = choose("Take a job", [(tid, f"{world.teams[tid].full_name} ({world.teams[tid].record_str})")
+                                 for tid in offers], allow_back=False)
+    owner.take_job(world, pick)
+    console.print(f"[good]You are now the GM of the {world.teams[pick].full_name}.[/good]")
     pause()
 
 

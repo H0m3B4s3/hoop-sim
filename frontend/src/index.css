@@ -297,6 +297,83 @@ span.clickable:hover {
   margin: 0;
   flex: 1 1 260px;
 }
+.ownerHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.ownerHead h3 {
+  margin: 2px 0 4px;
+}
+.ownerConfidence {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 200px;
+}
+.confidence {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.confidenceBar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--panel-3);
+  overflow: hidden;
+}
+.confidenceFill {
+  height: 100%;
+  border-radius: 4px;
+}
+.confidenceFill.good { background: var(--good); }
+.confidenceFill.ok { background: var(--accent-2); }
+.confidenceFill.warn { background: var(--accent); }
+.confidenceFill.bad { background: var(--bad); }
+.confidenceLabel {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+.confidenceLabel.good { color: var(--good); }
+.confidenceLabel.ok { color: var(--accent-2); }
+.confidenceLabel.warn { color: var(--accent); }
+.confidenceLabel.bad { color: var(--bad); }
+.ownerReview {
+  border-left: 3px solid var(--good);
+}
+.ownerReview.missed {
+  border-left-color: var(--bad);
+}
+.ownerReview h3 {
+  margin: 2px 0 6px;
+}
+.ownerReview p {
+  margin: 4px 0;
+}
+.jobOffers h1 {
+  margin-top: 0;
+}
+.offerList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.jobOffer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
 .difficulty {
   display: flex;
   flex-direction: column;

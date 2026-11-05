@@ -150,6 +150,9 @@ def fill_rosters(world: World) -> None:
 
 def pre_draft(world: World, champion_tid) -> dict:
     """Archive the year, develop players, expire contracts, age and retire. (Pre-draft.)"""
+    from hoopsim.systems import owner
+    # The owner judges the season on the roster and bracket as they finished, before anything moves.
+    review = owner.review_season(world)
     milestones = archive_season(world, champion_tid)
     # Emit milestones to the news wire
     from hoopsim.systems import news as news_module
@@ -162,14 +165,24 @@ def pre_draft(world: World, champion_tid) -> dict:
     # development runs — so a team that hired a development coach gets him for this offseason's
     # growth rather than having to wait a full year for the hire to mean anything.
     carousel.record_coach_season(world)
-    coaching = carousel.run_carousel(world)
-    development.develop_all(world)
-    resigned = freeagency.run_retention(world)["resigned"]   # AI keeps its own before FA opens
+    # A GM the owner just fired no longer runs the team: the AI handles its bench and its expiring
+    # contracts this offseason, exactly as it would for any other club. The user picks a new job
+    # (owner.take_job) before the draft.
+    fired_from = world.user_team_id if review and review["fired"] else None
+    if fired_from is not None:
+        world.user_team_id = None
+    try:
+        coaching = carousel.run_carousel(world)
+        development.develop_all(world)
+        resigned = freeagency.run_retention(world)["resigned"]   # AI keeps its own before FA opens
+    finally:
+        if fired_from is not None:
+            world.user_team_id = fired_from
     new_fas = expire_contracts(world)
     ar = age_and_retire(world)
     return {"new_fas": len(new_fas), "retired": len(ar["retired"]), "resigned": resigned,
             "inducted": ar["inducted"], "milestones": milestones,
-            "coaching": coaching}
+            "coaching": coaching, "owner_review": review}
 
 
 def cull_free_agents(world: World, keep: int = 80) -> int:
@@ -200,6 +213,8 @@ def post_offseason(world: World) -> None:
     from hoopsim.systems.momentum import offseason_reset
     offseason_reset(world)          # rust chemistry, drift morale toward baseline for the new year
     start_season(world)
+    from hoopsim.systems import owner
+    owner.begin_season(world)       # the owner sets this season's goal from the new roster
 
 
 def run_offseason(world: World, champion_tid) -> dict:

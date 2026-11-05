@@ -29,7 +29,7 @@ from hoopsim.sim import season as S
 from hoopsim.sim.coach import Coach, CoachOrders
 from hoopsim.sim.engine import GameSim
 from hoopsim.systems import (cap, carousel, college_offseason as CO, collegefin, draft_system as D,
-                           freeagency, offseason, recruiting, trades)
+                           freeagency, offseason, owner, recruiting, trades)
 from hoopsim.web import serializers as ser
 from hoopsim.web.session import SESSIONS
 
@@ -221,6 +221,23 @@ def career_team(tid: int, sid: str = Depends(_sid)):
         raise HTTPException(status_code=404, detail="Unknown team.")
     world.user_team_id = tid
     S.start_season(world)
+    owner.begin_season(world)
+    SESSIONS.autosave(sid)
+    return ser.world_summary(world)
+
+
+class TakeJobBody(BaseModel):
+    tid: int
+
+
+@app.post("/api/owner/take-job")
+def owner_take_job(body: TakeJobBody, sid: str = Depends(_sid)):
+    """After a firing, accept one of the job offers. The old team reverts to AI control."""
+    world = _world(sid)
+    try:
+        owner.take_job(world, body.tid)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     SESSIONS.autosave(sid)
     return ser.world_summary(world)
 
