@@ -104,7 +104,9 @@ late-game intentional fouling**.
   scale contracts, and an offseason where young players grow toward their potential while
   veterans decline. Each draft class has its own **shape** — most years carry only a couple of
   genuine top prospects atop a steep cliff, with the occasional loaded class that runs deep and
-  the occasional down year where even the #1 pick is merely solid. Prospects show a **pre-draft
+  the occasional down year where even the #1 pick is merely solid. Launch rosters and the draft are
+  tuned to the same talent level, so the league keeps roughly 45-55 players at 80+ and a handful at
+  90+ across a 20-season career instead of thinning out as the opening stars retire. Prospects show a **pre-draft
   stat line** (college/international per-game production) alongside their archetype, and you can
   **shop your picks for offers right from the draft room** — no tabbing out to the trade screen.
 - **Scout under fog of war** — player **potential** is hidden behind a confidence band and a letter
@@ -160,7 +162,7 @@ testable and let the web UI drop in as a second front-end over the same resumabl
 pytest -q
 ```
 
-330 tests, about two to three minutes. They cover box-score reconciliation, realistic stat
+332 tests, about two to three minutes. They cover box-score reconciliation, realistic stat
 distributions, schedule/standings correctness, cap legality, trade validation, draft/development,
 injuries and conditioning, the coaching carousel, the news wire, and byte-identical save
 round-trips with reproducible RNG.

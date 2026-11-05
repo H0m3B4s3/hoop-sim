@@ -21,8 +21,13 @@ from hoopsim.sim import ratings as R
 
 _TEAMS_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "teams.json")
 
-# Talent curve: target overall per roster slot (best -> worst) for a 14-man roster.
-_ROSTER_CURVE = [86, 81, 78, 75, 73, 71, 69, 67, 65, 63, 61, 60, 58, 57]
+# Talent curve: target overall per roster slot (best -> worst) for a 14-man roster. The top end is
+# matched to what the draft sustains (~45 players at 80+, ~20 at 85+, ~6 at 90+ league-wide), so a
+# fresh league doesn't open with a star glut that drains away once the launch cohort retires.
+_ROSTER_CURVE = [83, 77, 74, 72, 71, 70, 69, 67, 65, 63, 61, 60, 58, 57]
+# Launch rosters keep this share of each player's generated upside. Without it a fresh league holds
+# more unrealized ceiling than a settled one, and its star count balloons over the first five years.
+_LAUNCH_UPSIDE_SHARE = 0.75
 _NUM_FREE_AGENTS = 70
 
 # Light roster-building guardrails: every team carries at least this many of each primary
@@ -95,6 +100,7 @@ def _build_roster(world: World, team: Team, names: NameGenerator) -> None:
         target = int(max(50, min(95, round(base + team_strength + noise + star_bonus))))
         p = make_player(world.rng, world.new_pid(), names,
                         position=positions[slot], target_overall=target)
+        p.potential = p.overall + round((p.potential - p.overall) * _LAUNCH_UPSIDE_SHARE)
         p.team_id = team.tid
         p.jersey = _unique_jersey(rng, used_jerseys)
         players.append(p)
