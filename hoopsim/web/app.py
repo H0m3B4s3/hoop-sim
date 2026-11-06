@@ -342,6 +342,13 @@ def difficulty_set(body: DifficultyBody, sid: str = Depends(_sid)):
     return {"summary": ser.world_summary(world)}
 
 
+@app.get("/api/home")
+def home(sid: str = Depends(_sid)):
+    """The Home screen: inbox of what needs attention, standing, results and team news."""
+    from hoopsim.web.home import home_view
+    return home_view(_world(sid))
+
+
 @app.get("/api/leaders")
 def leaders(sid: str = Depends(_sid)):
     return ser.leaders_view(_world(sid))

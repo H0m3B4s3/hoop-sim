@@ -161,6 +161,7 @@ export const api = {
     return get<any>(`/news${qs ? "?" + qs : ""}`);
   },
   player: (pid: number) => get<any>(`/players/${pid}`),
+  home: () => get<any>("/home"),
 
   simGame: (watch: boolean) => post<any>(`/sim/game?watch=${watch}`),
   coachOrders: (orders: any) => post<any>("/sim/coach", orders),

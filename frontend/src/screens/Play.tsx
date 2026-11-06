@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { api, type Row, type Summary } from "../api";
-import { useTeamText } from "../theme";
+import { api, type Summary } from "../api";
 import { SaveReminder } from "../components/common";
 import { BoxScore, CoachPanel } from "../components/game";
 import { useLiveCoach } from "../components/useLiveCoach";
 import { OwnerCard } from "../components/owner";
+import { HomeBoard } from "../components/home";
 
 // ---------------------------------------------------------------------------
 // Play panel — sim controls
@@ -13,16 +13,18 @@ export function PlayPanel({
   summary,
   refresh,
   toast,
+  onNavigate,
+  onPlayer,
 }: {
   summary: Summary;
   refresh: (s?: Summary) => void;
   toast: (m: string) => void;
+  onNavigate: (tab: string) => void;
+  onPlayer: (pid: number) => void;
 }) {
-  const [results, setResults] = useState<Row[]>([]);
   const [game, setGame] = useState<any | null>(null);
   const [busy, setBusy] = useState(false);
   const phase = summary.phase;
-  const teamText = useTeamText();
 
   const { coach, feed, submitting, begin, sendOrders } = useLiveCoach(refresh, toast, (r) => {
     setGame(r.result);
@@ -35,7 +37,6 @@ export function PlayPanel({
     try {
       const r = await fn();
       if (r.summary) refresh(r.summary);
-      if (r.results) setResults(r.results);
       if (r.result) setGame(r.result);
       if (r.season_complete)
         toast("Regular season complete — check Standings, then start the playoffs.");
@@ -66,10 +67,21 @@ export function PlayPanel({
     }
   };
 
+  const board = <HomeBoard summary={summary} onNavigate={onNavigate} onPlayer={onPlayer} />;
   if (["draft", "free_agency", "offseason"].includes(phase))
-    return <p className="muted pad">It's the offseason — use the Offseason tab.</p>;
+    return (
+      <div>
+        <p className="muted pad">It's the offseason — use the Offseason tab.</p>
+        {board}
+      </div>
+    );
   if (phase === "playoffs" || phase === "play_in")
-    return <p className="muted pad">Playoffs are on — use the Playoffs tab.</p>;
+    return (
+      <div>
+        <p className="muted pad">Playoffs are on — use the Playoffs tab.</p>
+        {board}
+      </div>
+    );
   if (summary.regular_season_complete)
     return (
       <div>
@@ -77,6 +89,7 @@ export function PlayPanel({
           Regular season complete — head to the Playoffs tab to start the postseason.
         </p>
         <SaveReminder moment="The regular season is in the books." toast={toast} />
+        {board}
       </div>
     );
 
@@ -115,19 +128,7 @@ export function PlayPanel({
         <CoachPanel decision={coach} feed={feed} busy={submitting} onSubmit={sendOrders} />
       )}
       {game && <BoxScore result={game} onClose={() => setGame(null)} />}
-      {results.length > 0 && (
-        <div className="card">
-          <h3>Recent results</h3>
-          <ul className="results">
-            {results.map((g) => (
-              <li key={g.gid}>
-                <b style={{ color: teamText(g.away.color) }}>{g.away.abbrev}</b> {g.away_score} @{" "}
-                <b style={{ color: teamText(g.home.color) }}>{g.home.abbrev}</b> {g.home_score}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {board}
     </div>
   );
 }
