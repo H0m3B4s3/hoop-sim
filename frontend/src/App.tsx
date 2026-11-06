@@ -67,7 +67,7 @@ export default function App() {
 // Hub
 // ---------------------------------------------------------------------------
 const NAV: { key: string; label: string }[] = [
-  { key: "play", label: "Play" },
+  { key: "play", label: "Home" },
   { key: "news", label: "League News" },
   { key: "roster", label: "Roster" },
   { key: "depth", label: "Depth Chart" },
@@ -148,7 +148,15 @@ function Hub({
           ))}
         </nav>
         <main className="content">
-          {tab === "play" && <PlayPanel summary={summary} refresh={refresh} toast={toast} />}
+          {tab === "play" && (
+            <PlayPanel
+              summary={summary}
+              refresh={refresh}
+              toast={toast}
+              onNavigate={setTab}
+              onPlayer={setOpenPid}
+            />
+          )}
           {tab === "news" && <NewsFeed />}
           {tab === "roster" && (
             <RosterPanel

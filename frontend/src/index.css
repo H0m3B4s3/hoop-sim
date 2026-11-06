@@ -1563,3 +1563,64 @@ select:focus-visible {
 .extendMood.eager { border-left-color: var(--good); }
 .extendMood.wants_more { border-left-color: var(--accent); }
 .extendMood.testing_fa { border-left-color: var(--bad); }
+.homeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+.homeGrid .card {
+  margin-bottom: 0;
+}
+.homeGrid h3 {
+  margin-top: 0;
+}
+.homeGrid ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.homeGrid li {
+  padding: 4px 0;
+}
+.inbox {
+  grid-column: 1 / -1;
+}
+.inbox li .sev {
+  display: inline-block;
+  width: 1.2em;
+}
+.inbox li.urgent .sev,
+.inbox li.urgent button {
+  color: var(--bad);
+}
+.inbox li.action .sev {
+  color: var(--accent);
+}
+.inbox li.info .sev {
+  color: var(--muted);
+}
+button.linkish {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+button.linkish:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.homeGrid .win {
+  color: var(--good);
+  font-weight: 600;
+}
+.homeGrid .loss {
+  color: var(--bad);
+  font-weight: 600;
+}
+.teamNews li .small {
+  display: block;
+}

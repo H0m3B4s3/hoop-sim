@@ -108,6 +108,11 @@ late-game intentional fouling**.
   Beat it and confidence climbs; miss it and the seat warms up. The first season is a honeymoon,
   but after that a GM whose confidence drops below 20 is fired and has to take a job with one of
   the league's strugglers, or start over.
+- **A Home screen with an inbox** — the first tab collects what needs you, most urgent first, each
+  item a link to the tab that handles it: trade offers about to expire, the approaching deadline,
+  injured rotation players, key contracts running out (and whether the player plans to leave),
+  roster-size problems, the luxury tax and owner pressure. Below it: the next game, your conference
+  rank, power rank and streak, recent results, top performers and your team's news.
 - **Re-signing isn't automatic** — before an extension a player weighs whether you're winning,
   whether he gets the minutes his talent earns, and how long he's been with you. An eager player
   gives a hometown discount, an unhappy one wants a raise, and some won't extend at all and plan to
@@ -175,7 +180,7 @@ testable and let the web UI drop in as a second front-end over the same resumabl
 pytest -q
 ```
 
-358 tests, about two to three minutes. They cover box-score reconciliation, realistic stat
+364 tests, about two to three minutes. They cover box-score reconciliation, realistic stat
 distributions, schedule/standings correctness, cap legality, trade validation, draft/development,
 injuries and conditioning, the coaching carousel, the news wire, and byte-identical save
 round-trips with reproducible RNG.
